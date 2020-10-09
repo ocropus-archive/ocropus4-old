@@ -1,0 +1,43 @@
+#!/bin/bash
+library=$1
+shift
+
+help() {
+cat <<EOF
+Usage: $0 [COMMAND] [--help] ...
+
+COMMAND:
+
+    - recex -- extract training data for recognition
+    - segex -- extract training data for segmentation
+    - rec[ognition] -- recognize text lines
+    - seg[mentation] -- segment page images
+    - nlbin -- nonlinear image binarizer
+
+EOF
+}
+
+if test -d ./venv; then
+    source ./venv/bin/activate
+fi
+
+case $library in
+nlbin)
+    python3 -m ocrlib.nlbin "$@"
+    ;;
+segex)
+    python3 -m ocrlib.segex "$@"
+    ;;
+recex)
+    python3 -m ocrlib.recex "$@"
+    ;;
+seg*)
+    python3 -m ocrlib.segmentation "$@"
+    ;;
+rec*)
+    python3 -m ocrlib.recognition "$@"
+    ;;
+*)
+    help
+    ;;
+esac

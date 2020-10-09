@@ -1,0 +1,10 @@
+#!/bin/bash
+
+set -e
+set -x
+
+test -d venv || python3 -m virtualenv venv
+
+source venv/bin/activate
+
+pip3 install -r requirements.txt

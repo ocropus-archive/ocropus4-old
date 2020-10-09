@@ -1,0 +1,110 @@
+#!/usr/bin/python3
+# coding: utf-8
+
+#%%
+
+#from matplotlib.pylab import *
+import sys, os, re, glob
+import bs4
+from bs4 import BeautifulSoup
+from lxml import etree
+import scipy.ndimage as ndi
+import webdataset as wds
+from webdataset import WebDataset
+from webdataset.writer import TarWriter
+import itertools as itt
+import io
+
+from numpy import *
+
+import argparse
+description = """
+Convert hOCR output and images into segmentation images.
+"""
+parser = argparse.ArgumentParser()
+parser.add_argument("-c", "--count", type=int, default=999999999)
+parser.add_argument("--keys", default="png;jpg;jpeg hocr")
+parser.add_argument("--min-w", type=float, default=10)
+parser.add_argument("--min-h", type=float, default=10)
+parser.add_argument("--max-w", type=float, default=1000)
+parser.add_argument("--max-h", type=float, default=1000)
+parser.add_argument("--min-w-to-h", type=float, default=2.0)
+parser.add_argument("--min-len", type=int, default=2)
+parser.add_argument("--include", default=r"(?i)[0-9a-z]{2,}")
+parser.add_argument("--exclude", default=r"(?i)[^0-9a-z]{5,}")
+parser.add_argument("input")
+parser.add_argument("output")
+args = parser.parse_args()
+
+def get_text(node):
+    textnodes = node.xpath('.//text()')
+    s = ''.join([text for text in textnodes])
+    return re.sub(r'\s+', ' ', s)
+
+
+def get_prop(node, name):
+    title = node.get("title")
+    props = title.split(';')
+    for prop in props:
+        (key, args) = prop.split(None, 1)
+        args = args.strip('"')
+        if key == name:
+            return args
+    return None
+
+def target_for_page(image, hocr):
+    htmlparser = etree.HTMLParser()
+    doc = etree.parse(io.BytesIO(hocr), htmlparser)
+    pages = list(doc.xpath('//*[@class="ocr_page"]'))
+    assert len(pages)==1
+    page = pages[0]
+    h, w = image.shape[:2]
+    _, _, w1, h1 = [int(x) for x in get_prop(page, 'bbox').split()]
+    if h1!=h or w1!=w:
+        print(f"image and page dimensions differ ({h}, {w}) != ({h1}, {w1})")
+    target = zeros((h, w), dtype="uint8")
+    #print(page.get("title"))
+    bboxes = []
+    for word in page.xpath("//*[@class='ocrx_word']"):
+        text = get_text(word)
+        if len(text) < args.min_len: continue
+        if not re.search(args.include, text): continue
+        if re.search(args.exclude, text): continue
+        x0, y0, x1, y1 = [int(x) for x in get_prop(word, 'bbox').split()]
+        bw, bh = x1-x0, y1-y0
+        if bw<args.min_w or bw>args.max_w: continue
+        if bh<args.min_h or bh>args.max_h: continue
+        if float(bw) / float(bh) < args.min_w_to_h: continue
+        bboxes.append([int(x) for x in get_prop(word, 'bbox').split()])
+    for x0, y0, x1, y1 in bboxes:
+        xc, yc = int(mean([x0, x1])), int(mean([y0, y1]))
+        a = int(bh*0.4)
+        target[y0-a:y1+a, x0-a:x1+a] = 1
+    for x0, y0, x1, y1 in bboxes:
+        xc, yc = int(mean([x0, x1])), int(mean([y0, y1]))
+        b = int(-bh*0.05)
+        target[y0-b:y1+b, x0-b:x1+b] = 0
+    for x0, y0, x1, y1 in bboxes:
+        xc, yc = int(mean([x0, x1])), int(mean([y0, y1]))
+        c = int(bh*0.2)
+        d = int(bh*0.3)
+        target[yc-c:yc+c, x0+d:x1-d] = 2
+    return target
+
+#%%
+
+book = WebDataset(args.input, extensions="__key__ "+args.keys)
+sink = TarWriter(args.output)
+count = 0
+for key, image, hocr in book:
+    if count >= args.count: break
+    print(key, file=sys.stderr, flush=True)
+    target = target_for_page(image, hocr)
+    sample = {
+        "__key__": key,
+        "page.png": image,
+        "seg.png": target
+    }
+    sink.write(sample)
+    count += 1
+sink.close()

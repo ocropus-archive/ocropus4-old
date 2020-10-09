@@ -1,0 +1,17 @@
+*.egg-info
+*.orig
+*.pyc
+.*
+OLD
+_*
+build
+data
+dist
+docker
+outputs
+shards
+t
+temp
+venv
+*.sqlite3
+uw3

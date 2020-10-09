@@ -1,0 +1,18 @@
+braceexpand
+bs4
+click
+editdistance
+lxml
+matplotlib
+scikit-image
+scipy
+torch
+torchvision
+typer
+humanhash3
+tabulate
+-e git+git://github.com/tmbdev/webdataset.git#egg=webdataset
+-e git+git://github.com/NVlabs/ocrodeg.git#egg=ocrodeg
+-e git+git://github.com/NVlabs/tensorcom.git#egg=tensorcom
+-e git+git://github.com/tmbdev/tarproc.git#egg=tarproc
+-e git+git://github.com/tmbdev/torchmore.git#egg=torchmore

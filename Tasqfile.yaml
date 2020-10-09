@@ -1,0 +1,98 @@
+config:
+  trace_params: True
+
+params:
+  image: "ocropus4"
+  maxcount: 100
+  testvolume: http://storage.googleapis.com/lpr-g1000-tess/Volume_0252.tgz
+
+include:
+  - cluster.yaml
+
+tasks:
+
+  docker:
+    - doc: build a dockerfile
+    - interactive: |
+        set -x
+        ddir=/tmp/docker$$
+        docker build -t {{ image }}-base - < Dockerfile-base &&
+        mkdir $ddir &&
+        hg clone . $ddir/ocropus4 &&
+        cp Dockerfile $ddir &&
+        docker build --no-cache -t {{ image }} $ddir &&
+        docker tag {{ image }} tmbdev/{{ image }} &&
+        docker push tmbdev/{{ image }}
+        rm -rf $ddir
+
+  test:
+    - doc: run some test scripts
+    - interactive: |
+        set -x
+        mkdir -p temp
+        cat > temp/script.sh <<EOF
+        cd /work
+        source venv/bin/activate
+        curl -s -S -L {{ testvolume }} |
+        ocropus4 recex hocr2rec --maxcount={{ maxcount }} - --output /temp/_rec.tar --dictionary /usr/share/dict/words &&
+        curl -s -S -L {{ testvolume }} |
+        ocropus4 segex hocr2seg --maxcount={{ maxcount }} - --output /temp/_seg.tar &&
+        echo SUCCESS
+        EOF
+        docker run -ti -v $(pwd)/temp:/temp -w /work tmbdev/{{ image }} /bin/bash /temp/script.sh
+
+  g1000-words:
+    - doc: extract recognition data from G1000
+    - shell: gsutil -m rm -f gs://lpr-g1000-temp/g1000-words-*.tar
+    - with_braceexpand: "{0000..0999}"
+      tasks:
+      - kubectl_apply: "recex-{{ item }}"
+        spec: "{{ template('ocrjob') }}"
+        params:
+          script: |
+            set -ex; cd /work; source venv/bin/activate
+            shard="{{ item }}"
+            input="gs://lpr-g1000-tess/Volume_$shard.tgz"
+            output="gs://lpr-g1000-temp/g1000-words-$shard.tar"
+            gsutil cat $input |
+            ocropus4 recex hocr2rec - --output - --dictionary /usr/share/dict/words |
+            gsutil cp - $output
+
+  g1000-seg:
+    - doc: extract recognition data from G1000
+    - shell: gsutil -m rm -f gs://lpr-g1000-temp/g1000-seg-*.tar
+    - with_braceexpand: "{0000..0999}"
+      tasks:
+      - kubectl_apply: "segex-{{ item }}"
+        spec: "{{ template('ocrjob') }}"
+        params:
+          script: |
+            set -ex; cd /work; source venv/bin/activate
+            shard="{{ item }}"
+            input="gs://lpr-g1000-tess/Volume_$shard.tgz"
+            output="gs://lpr-g1000-temp/g1000-seg-$shard.tar"
+            gsutil cat $input |
+            ocropus4 segex hocr2seg - --output - |
+            gsutil cp - $output
+
+  all:
+    - task: g1000-words
+    - task: g1000-seg
+
+
+templates:
+
+  ocrjob: |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: {{ id }}
+    spec:
+      template:
+        spec:
+          containers:
+          - name: main
+            image: tmbdev/{{ image }}
+            command: ["/bin/bash", "-c", {{ script | yamlquote }}]
+          restartPolicy: Never
+      backoffLimit: 4

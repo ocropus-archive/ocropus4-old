@@ -1,0 +1,27 @@
+#!/bin/bash
+
+die() {
+    echo ">>> $* <<<" 1>&2
+    exit 255
+}
+
+image=icdar2019_notebook
+
+test -r /etc/passwd || die "can't read /etc/passwd"
+test -r /etc/group || die "can't read /etc/group"
+
+docker build -t $image - < Dockerfile || die "docker build failed"
+
+docker run \
+        --runtime=${DOCKER_NOTEBOOK_RUNTIME:-nvidia} \
+        --network host \
+        -v /etc/passwd:/etc/passwd \
+        -v /etc/group:/etc/group \
+        -v $HOME:$HOME \
+        -v `pwd`:`pwd` \
+        ${opts:-${DOCKER_NOTEBOOK_OPTS}} \
+        -w `pwd` \
+        -u $(id -u):$(id -g) \
+        -i \
+        -t "$image" \
+        "$@"

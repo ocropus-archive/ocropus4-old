@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+
+#%%
+
+from matplotlib import *
+from matplotlib.pylab import *
+from numpy import *
+
+import sys, os, re, glob
+import bs4
+from bs4 import BeautifulSoup
+from lxml import etree
+import scipy.ndimage as ndi
+from webdataset import WebDataset
+from webdataset.writer import TarWriter
+import itertools as itt
+import io
+import scipy.ndimage as ndi
+
+#%%
+
+debug = ("ipykernel" in sys.argv[0])
+
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument("-c", "--count", type=int, default=9999999999)
+parser.add_argument("-T", "--threshold", type=float, default=20)
+parser.add_argument("-r", "--patchsize", type=int, default=256)
+parser.add_argument("-n", "--patches-per-image", type=int, default=50)
+parser.add_argument("--trials", type=int, default=500)
+parser.add_argument("--margin", type=float, default=0.2)
+parser.add_argument("-D", "--display-for", type=float, default=0)
+parser.add_argument("input")
+parser.add_argument("output")
+
+if debug:
+    args = parser.parse_args("/data19/cocotext/coco-detect-train-000000.tar out.tar --display-for 1 -c 1".split())
+    print(args)
+else:
+    args = parser.parse_args()
+
+#%%
+
+def mrot(a):
+    """Make a rotation matrix."""
+    return array([[cos(a), -sin(a)], [sin(a), cos(a)]])
+
+def eye23(m):
+    """2D to 3D matrix"""
+    result = eye(3)
+    result[:2, :2] = m
+    return result
+
+def off23(d):
+    """2D to 3D offset"""
+    result = zeros(3)
+    result[:2] = d
+    return result
+
+def make_affine(src, dst):
+    """Compute affine transformation from src to dst points."""
+    dst0 = dst - mean(dst, 0)[None, :]
+    src0 = src - mean(src, 0)[None, :]
+    H = dot(dst0.T, src0)
+    U, S, V = svd(H)
+    m = dot(V.T, U)
+    d = dot(m, mean(dst, 0)) - mean(src, 0)
+    #print(d)
+    return m, d
+
+def get_patches(dst, src, images):
+    h, w = dst
+    m, d = make_affine(src, dst)
+    result = []
+    for image in images:
+        if image.ndim==2:
+            patch = ndi.affine_transform(image, m, offset=-d, output_shape=(h, w))
+        elif image.ndim==3:
+            patch = ndi.affine_transform(image, eye23(m), offset=-off23(d), output_shape=(h, w, 3))
+        result.append(patch)
+
+def interesting_patches(sensor, threshold, images, r=256, n=50, trials=500, margin=0.1, jitter=5):
+    h, w = sensor.shape[:2]
+    count = 0
+    for i in range(trials):
+        if count >= n: break
+        y = randint(0, h-r-1)
+        x = randint(0, w-r-1)
+        rx, ry = int(uniform(0.8, 1.2)*r), int(uniform(0.8, 1.2)*r)
+        if margin < 1.0:
+            dx, dy = int(rx*margin, ry*margin)
+        else:
+            dx, dy = int(margin), int(margin)
+        patch = sensor[y+dy:y+ry-dy, x+dx:x+rx-dx]
+        if sum(patch)<threshold: continue
+        rect = [y, x, y+ry, x+rx]
+        rect = [c+randint(-jitter, jitter) for c in rect]
+        patches = get_patches((r, r), rect, images)
+        yield i, (x,y), patches
+        count += 1
+
+
+src = WebDataset(args.input,
+                 extensions="__key__ page.png seg.png",
+                 decoder="rgb8")
+dst = TarWriter(args.output)
+
+if debug:
+    print(next(iter(src)))
+
+count = 0
+for key, page, seg in src:
+    seg = seg[:,:,0]
+    interesting = list(interesting_patches(seg, args.threshold,
+                                           [page, seg],
+                                           r=args.patchsize,
+                                           n=args.patches_per_image))
+    print(key, len(interesting), file=sys.stderr)
+    for i, coords, patches in interesting:
+        dst.write({
+            "__key__": key+"/%06d"%i,
+            "patch.png": patches[0],
+            "seg.png": patches[1]
+        })
+        if debug or args.display_for > 0:
+            clf()
+            subplot(121); imshow(patches[0])
+            subplot(122); imshow(patches[1], vmax=2)
+            if not debug: ginput(1, args.display_for)
+    count += 1
+    if count >= args.count: break
+
+dst.close()
+
+# %%

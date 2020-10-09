@@ -1,0 +1,4 @@
+image: gcr.io/research-191823/simple
+memory: 8G
+app: shuffle
+subdomain: shuffle

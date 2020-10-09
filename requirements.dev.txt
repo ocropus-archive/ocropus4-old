@@ -1,0 +1,5 @@
+autopep8
+coverage
+isort
+pytest-cov
+tk

@@ -1,0 +1,15 @@
+#!/bin/bash
+
+in=$1
+shift
+out=$1
+shift
+
+test -e $out && {
+    echo "$out: exists"
+    exit 1
+}
+
+tarproc $tarproc -I 'sample.png|sample.hocr' -c "
+    tesseract --dpi 300 --oem 1 sample.png sample hocr $@
+" $in -o $out

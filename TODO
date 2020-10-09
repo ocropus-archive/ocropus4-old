@@ -1,0 +1,23 @@
+- add augmentation to ocroline, ocroseg
+- morphology for blockseg
+
+- detect bad word output from posterior probabilities
+- lines2blocks (align line-based page recognition w/ground truth, json based)
+- line2word with bi and trigrams
+- ground truth alignment (n-gram, whole line)
+- page frame / noise removal
+- union-find for line segmentation
+- text generation and degradation
+- implement rotation, skew, and scale detection
+- rename ocroline->ocrotext
+- word-based training on UW3
+- simple optional global word size normalization and centering
+- batched word recognition (for speed)
+- set up full training pipeline in Docker container (continuous training and regression)
+- words2lines (align word-based page recognition w/ground truth, json based)
+- words2lines -- special output for math, formulas (anything containing {}\): return <<ANY>>
+
+DONE:
+
+- line2words (recognize line image and split on space)
+- optional line normalizer

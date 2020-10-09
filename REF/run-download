@@ -1,0 +1,41 @@
+#!/bin/bash
+
+set -x
+set -e
+
+mkdir -p ./data
+cd ./data
+
+cat <<EOF |
+digits-test.tar
+digits-training.tar
+seg-000000.tar
+seg-000001.tar
+seg-000002.tar
+seg-000003.tar
+seg-000004.tar
+seg-000005.tar
+seg-000006.tar
+seg-000007.tar
+seg-000008.tar
+seg-000009.tar
+seg-000010.tar
+seg-000011.tar
+seg-000012.tar
+seg-000013.tar
+seg-000014.tar
+seg-000015.tar
+seg-000016.tar
+seg-000017.tar
+seg-000018.tar
+seg-000019.tar
+words-hard-test.tar
+words-hard-training.tar
+words-simple-test.tar
+words-simple-training.tar
+EOF
+while read fname; do
+    test -f $fname && continue
+    curl http://storage.googleapis.com/lpr-icdar2019/data/$fname > _temp &&
+    mv _temp $fname
+done

@@ -1,0 +1,4 @@
+echo $# "$*"
+export GOPEN_GS='gsutil cat {}'
+tarpcat -s 10000 -p $# "$@" | 
+tarsplit -n 1000000 -s 10e9 -o cdip-words-$(date +%s) -C 'gsutil cp {basename} gs://lpr-temp'
