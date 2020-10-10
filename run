@@ -25,6 +25,17 @@ cmd_cleanlogs() { # clean up log files
 }
 
 
+cmd_download() {
+    mkdir -p trained
+    gsutil rsync -r gs://ocropus4-trained/ ./trained/.
+}
+
+
+cmd_upload() {
+    gsutil rsync -r ./trained/. gs://ocropus4-trained/
+}
+
+
 cmd_info() {
     test -d venv || python3 -m venv venv
     source venv/bin/activate
