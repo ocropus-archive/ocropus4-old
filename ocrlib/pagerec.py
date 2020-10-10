@@ -10,7 +10,6 @@ import functools
 import matplotlib.pyplot as plt
 import yaml
 import json
-import unionfind
 
 import webdataset as wds
 
@@ -127,7 +126,7 @@ class WordRecognizer:
         print(f"# loading recognizer {fname}", file=sys.stderr)
         self.recognizer = ocroline.LineRec()
         self.recognizer.load_from_save(fname)
-        self.recognizer.activate(False)    
+        self.recognizer.activate(False)
 
     def run_recognizers(self, image):
         print("# segmenting", file=sys.stderr)
@@ -254,22 +253,6 @@ def trivial_grouper(objects):
     return list(groups.values()), extra
 
 
-def uf_grouper(objects):
-    for obj in objects:
-        labels = list(obj["labels"])
-        for label in labels[1:]:
-            uf.union(labels[0], label)
-    for obj in objects:
-        obj["group"] = uf.find(list(obj["labels"])[0])
-    groups = {}
-    for obj in objects:
-        groups.setdefault(obj["group"], []).append(obj)
-    extra = groups[-1]
-    del groups[-1]
-    return list(groups.values()), extra
-    
-
-
 class PageRecognizer:
     """A full page recognizer. This calls WordRecognizer for a list
     of raw words on the page, then uses a line segmenter just for
@@ -283,19 +266,18 @@ class PageRecognizer:
     def __init__(self):
         self.wordrec = WordRecognizer()
         self.lineseg = ocroseg.LineSegmenter()
-        
-        
+
     def load_config(self, conf):
         conf = get_config(conf)
         self.wordrec.load_config(conf)
         self.wordrec.lineseg = None  # just for testing
-        
+
         fname = conf["models"]["lineseg"]
         print(f"# loading line segmenter {fname}", file=sys.stderr)
         self.lineseg.load_from_save(fname)
         self.lineseg.activate(False)
         self.lineseg_type = "line"
-        
+
         fname = conf["models"].get("blockseg")
         self.bseg = None
         if fname is not None:
@@ -303,8 +285,8 @@ class PageRecognizer:
             self.bseg = ocroseg.Segmenter()
             self.bseg.load_from_save(fname)
             self.bseg.activate(False)
-            self.bseg_type = "blocK" 
-        
+            self.bseg_type = "blocK"
+
     def recognize_page(self, image, return_segments=False, do_topsort=True):
 
         words = self.wordrec.recognize_words(image, return_segments=return_segments)
@@ -319,14 +301,14 @@ class PageRecognizer:
             self.bseg.activate(True)
             self.bseg.segment(image)
             self.bseg.activate(False)
-            
+
         # line segmentation
 
         labels, n = ndi.label(self.lineseg.segments)
         for word in words:
             y0, y1, x0, x1 = word["box"]
             word["labels"] = set(np.unique(labels[y0:y1, x0:x1])) - set([0])
-        lines, extra = trivial_grouper(words) 
+        lines, extra = trivial_grouper(words)
         extra = [l for l in extra if l["output"] != ""]
         lines = [
             dict(id=k, words=sortwords(line), box=linebbox(line))

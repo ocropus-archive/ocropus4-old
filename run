@@ -25,14 +25,20 @@ cmd_cleanlogs() { # clean up log files
 }
 
 
+cmd_download_uw3() {
+    mkdir -p uw3
+    gsutil -m rsync -r gs://lpr-uw3/* uw3/.
+}
+
+
 cmd_download() {
     mkdir -p trained
-    gsutil rsync -r gs://ocropus4-trained/ ./trained/.
+    gsutil -m rsync -r gs://ocropus4-trained/ ./trained/.
 }
 
 
 cmd_upload() {
-    gsutil rsync -r ./trained/. gs://ocropus4-trained/
+    gsutil -m rsync -r ./trained/. gs://ocropus4-trained/
 }
 
 
