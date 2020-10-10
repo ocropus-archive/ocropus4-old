@@ -59,6 +59,7 @@ cmd_venv() { # set up a virtualenv
     source venv/bin/activate
     pip3 install -U pip
     pip3 install -U -r requirements.txt
+    pip3 install -U -r requirements.dev.txt
     # python3 -m bash_kernel.install
     pip3 install -U neovim
     pip3 install -U jupyterlab
@@ -245,34 +246,6 @@ cmd_lab() { # run jupyter lab in the environment
     cmd_venv > venv.log
     source venv/bin/activate
     jupyter lab "$@"
-}
-
-cmd_build() {
-    set -x
-    ddir=/tmp/docker$$
-    docker build -t $image-base - < Dockerfile-base &&
-    mkdir $ddir &&
-    hg clone . $ddir/ocropus4 &&
-    cp Dockerfile $ddir &&
-    docker build --no-cache -t $image $ddir &&
-    docker tag $image $remimage &&
-    docker push $remimage
-    rm -rf $ddir
-}
-
-
-cmd_test() {
-    set -x
-    mkdir -p temp
-    cat > temp/script.sh <<EOF
-cd /work
-source venv/bin/activate
-curl -s -S -L http://storage.googleapis.com/lpr-g1000-tess/Volume_0003.tgz |
-ocropus4 recex hocr2rec --maxcount=1000 - --output /temp/_rec.tar --dictionary /usr/share/dict/words
-curl -s -S -L http://storage.googleapis.com/lpr-g1000-tess/Volume_0003.tgz |
-ocropus4 segex hocr2seg --maxcount=1000 - --output /temp/_seg.tar
-EOF
-    docker run -ti -v $(pwd)/temp:/temp -w /work tmbdev/$image /bin/bash /temp/script.sh
 }
 
 cmd_help() { # help message
