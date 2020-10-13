@@ -1,17 +1,20 @@
 import os
 import random as pyrand
-from typing import List
 from functools import partial
+from math import cos, exp, log, sin
+from typing import List
 
-from math import exp, log, cos, sin
 import matplotlib.pyplot as plt
 import numpy as np
+import ocrodeg
 import scipy.ndimage as ndi
 import torch
+import torch.nn.functional as F
 import typer
+from torch import nn, optim
 from torch.utils.data import DataLoader
+from torchmore import flex, layers
 from webdataset import Dataset
-import ocrodeg
 
 from . import slog
 
@@ -147,6 +150,76 @@ def load_model(fname):
     return mod, src
 
 
+class GlobalAvgPool2d(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return F.adaptive_avg_pool2d(x, (1, 1))[:, :, 0, 0]
+
+
+def make_model_rot():
+    r = 3
+    B, D, H, W = (1, 128), (1, 512), 256, 256
+    model = nn.Sequential(
+        layers.CheckSizes(B, D, H, W),
+        flex.Conv2d(8, r, padding=r // 2),
+        flex.BatchNorm2d(),
+        nn.ReLU(),
+        nn.MaxPool2d(2),
+        flex.Conv2d(16, r, padding=r // 2),
+        flex.BatchNorm2d(),
+        nn.ReLU(),
+        nn.MaxPool2d(2),
+        flex.Conv2d(32, r, padding=r // 2),
+        flex.BatchNorm2d(),
+        nn.ReLU(),
+        nn.MaxPool2d(2),
+        flex.Conv2d(64, r, padding=r // 2),
+        flex.BatchNorm2d(),
+        nn.ReLU(),
+        GlobalAvgPool2d(),
+        flex.Linear(64),
+        nn.BatchNorm1d(64),
+        nn.ReLU(),
+        flex.Linear(4),
+        layers.CheckSizes(B, 4),
+    )
+    flex.shape_inference(model, (1, 1, 256, 256))
+    return model
+
+
+@app.command()
+def train_rot(
+    urls: List[str],
+    lr: float = 1e-1,
+    nepochs: int = 100,
+    num_workers: int = 8,
+    replicate: int = 1,
+    bs: int = 64,
+):
+    model = make_model_rot()
+    model.cuda()
+    print(model)
+    urls = urls * replicate
+    training = make_loader(urls, shuffle=10000, num_workers=num_workers, batch_size=bs)
+    criterion = nn.CrossEntropyLoss().cuda()
+    optimizer = optim.SGD(model.parameters(), lr=lr)
+    count = 0
+    losses = []
+    for epoch in range(nepochs):
+        for patches, targets in training:
+            patches = patches.type(torch.float).unsqueeze(1).cuda()
+            optimizer.zero_grad()
+            outputs = model(patches)
+            loss = criterion(outputs, targets.cuda())
+            loss.backward()
+            optimizer.step()
+            count += len(patches)
+            losses.append(float(loss))
+            print(epoch, count, np.mean(losses[-50:]), end="\r", flush=True)
+
+
 @app.command()
 def show_rot(urls: List[str]):
     """Show training samples for page rotation"""
@@ -163,7 +236,9 @@ def show_rot(urls: List[str]):
 @app.command()
 def show_skew(urls: List[str], abins: int = 20, sbins: int = 20):
     """Show training samples for skew"""
-    training = make_loader(urls, pipe=partial(skew_pipe, abins=abins, sbins=sbins), shuffle=5000)
+    training = make_loader(
+        urls, pipe=partial(skew_pipe, abins=abins, sbins=sbins), shuffle=5000
+    )
     plt.ion()
     for patches, abin, sbin in training:
         plt.imshow(patches[0].numpy())
