@@ -104,33 +104,29 @@ def binned(x, r, n):
     return np.clip(int(n * float(x + r) / 2.0 / r), 0, n)
 
 
-def rot_pipe(source, shape=(256, 256), spacing=64):
+def rot_pipe(source, shape=(256, 256), alpha=0.1, scale=3.0):
     for (page,) in source:
         if np.mean(page) > 0.5:
             page = 1.0 - page
         for patch, params in get_patches(
             page,
             shape=shape,
-            spacing=spacing,
             flip=True,
             degrade=True,
-            alpha=0.1,
-            scale=3.0,
+            alpha=(-alpha, alpha),
+            scale=(1.0 / scale, scale),
         ):
             r, _, _, _ = params
             yield torch.tensor(patch), r
 
 
-def skew_pipe(
-    source, shape=(256, 256), spacing=64, alpha=0.1, scale=3.0, abins=20, sbins=20
-):
+def skew_pipe(source, shape=(256, 256), alpha=0.1, scale=3.0, abins=20, sbins=20):
     for (page,) in source:
         if np.mean(page) > 0.5:
             page = 1.0 - page
         for patch, params in get_patches(
             page,
             shape=shape,
-            spacing=spacing,
             flip=False,
             alpha=(-alpha, alpha),
             scale=(1.0 / scale, scale),
@@ -237,7 +233,6 @@ def make_model_skew(abuckets, size=256, r=5, nf=8, r2=5, nf2=4):
         nn.ReLU(),
         layers.Reshape(0, [1, 2, 3]),
         nn.Linear(nf2 * W * H, 128),
-        layers.Info(),
         nn.BatchNorm1d(128),
         nn.ReLU(),
         nn.Linear(128, abuckets),
@@ -397,26 +392,28 @@ def train_skew(
     urls: List[str],
     nepochs: int = 100,
     num_workers: int = 8,
-    arange: float = 0.1,
-    abins: int = 31,
+    maxval: float = 0.1,
+    bins: int = 31,
     replicate: int = 1,
     bs: int = 64,
     prefix: str = "skew",
-    lrfun="0.3**(3+n//5000000)",
+    lrfun: str = "0.3**(3+n//5000000)",
+    do_scale: bool = False,
 ):
+    """Trains either skew (=small rotation) or scale models."""
     logger = slog.Logger(prefix=prefix)
     logger.sysinfo()
     logger.json("args", sys.argv)
-    model = make_model_skew(abins)
+    model = make_model_skew(bins)
     model.cuda()
     print(model)
     urls = urls * replicate
+    if do_scale:
+        pipe = partial(skew_pipe, sbins=bins, scale=maxval)
+    else:
+        pipe = partial(skew_pipe, abins=bins, alpha=maxval)
     training = make_loader(
-        urls,
-        shuffle=10000,
-        num_workers=num_workers,
-        batch_size=bs,
-        pipe=partial(skew_pipe, abins=abins, alpha=arange),
+        urls, shuffle=10000, num_workers=num_workers, batch_size=bs, pipe=pipe,
     )
     criterion = nn.CrossEntropyLoss().cuda()
     lrfun = eval(f"lambda n: {lrfun}")
@@ -426,7 +423,8 @@ def train_skew(
     losses = []
     last = time.time()
     for epoch in range(nepochs):
-        for patches, targets, _ in training:
+        for patches, angles, scales in training:
+            targets = angles if not do_scale else scales
             patches = patches.type(torch.float).unsqueeze(1).cuda()
             optimizer.zero_grad()
             outputs = model(patches)
@@ -456,15 +454,46 @@ def train_skew(
                     msrc="",
                     mstate=model.state_dict(),
                     ostate=optimizer.state_dict(),
-                    arange=arange,
-                    abins=abins,
                 )
+                if do_scale:
+                    state["srange"] = maxval
+                    state["sbins"] = bins
+                else:
+                    state["arange"] = maxval
+                    state["abins"] = bins
                 avgloss = np.mean(losses[-100:])
                 logger.save("model", state, scalar=avgloss, step=count)
                 last = time.time()
             if lrfun(count) != lr:
                 lr = lrfun(count)
                 optimizer = optim.SGD(model.parameters(), lr=lr)
+
+
+@app.command()
+def train_scale(
+    urls: List[str],
+    nepochs: int = 100,
+    num_workers: int = 8,
+    maxval: float = 3.0,
+    bins: int = 31,
+    replicate: int = 1,
+    bs: int = 64,
+    prefix: str = "scale",
+    lrfun: str = "0.3**(3+n//5000000)",
+    do_scale: bool = False,
+):
+    return train_skew(
+        urls,
+        nepochs=nepochs,
+        num_workers=num_workers,
+        maxval=maxval,
+        bins=bins,
+        replicate=replicate,
+        bs=bs,
+        prefix=prefix,
+        lrfun=lrfun,
+        do_scale=True,
+    )
 
 
 @app.command()
