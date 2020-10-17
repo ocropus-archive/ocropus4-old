@@ -368,3 +368,25 @@ def interesting_patches(
         patches = get_affine_patches(dst, src, images)
         yield i, (x, y), patches
         count += 1
+
+
+def load_from_log(fname):
+    pass
+
+def load_from_save(fname):
+    result = torch.load(fname)
+    print(f"# loaded {fname}", file=sys.stderr)
+    self.charset = result.get("charset", self.charset)
+    self.dewarp_to = result.get("dewarp_to", -1)
+    if self.dewarp_to > 0:
+        self.dewarper = lineest.CenterNormalizer(target_height=self.dewarp_to)
+    else:
+        self.dewarper = None
+    mod = slog.load_module("model", result["msrc"])
+    model = mod.make_model(96)
+    model.load_state_dict(result["mstate"])
+    model.eval()
+    self.mod = mod
+    self.model = model
+    model.cuda()
+

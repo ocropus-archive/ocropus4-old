@@ -64,6 +64,8 @@ cmd_venv() { # set up a virtualenv
     test -d venv || python3 -m venv venv
     source venv/bin/activate
     pip3 install -U pip
+    pip3 install numpy
+    pip3 install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cu102/torch_nightly.html
     pip3 install -U -r requirements.txt
     pip3 install -U -r requirements.dev.txt
     # python3 -m bash_kernel.install

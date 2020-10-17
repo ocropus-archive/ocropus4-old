@@ -327,22 +327,30 @@ def val2model(fname):
 
 
 @app.command()
-def info(fnames: List[str]):
+def info(fnames: List[str], verbose: bool = False):
     fnames = sorted(fnames)
     result = []
     for fname in fnames:
         try:
             con = sqlite3.connect(fname)
             args = list(con.execute("select json from log where key='args'"))
+            if len(args) == 0:
+                result.append((fname, None, None, None, None, None))
+                continue
             json = jsonlib.loads(args[0][0])
             models = list(
                 con.execute(
                     "select step, scalar from log where key='model' order by scalar"
                 )
             )
-            maxstep = list(
+            maxsteps = list(
                 con.execute("select step from log order by step desc limit 1")
-            )[0][0]
+            )
+            if len(maxsteps) == 0:
+                continue
+            maxstep = maxsteps[0][0]
+            if verbose:
+                print("nmodels", len(models), "maxstep", maxstep)
             step, scalar = (None, None) if len(models) == 0 else models[0]
             if maxstep is not None:
                 maxstep = int(maxstep)
@@ -350,10 +358,11 @@ def info(fnames: List[str]):
                 step = int(step)
             if scalar is None:
                 step = None
-            result.append((fname, json.get("mdef"), maxstep, len(models), step, scalar))
+            mdef = json.get("mdef") if isinstance(json, dict) else None
+            result.append((fname, mdef, maxstep, len(models), step, scalar))
             con.close()
             del con
-        except Exception:
+        except ValueError as e:
             result.append((fname, None, None, None, None, None))
     headers = "file model steps #saves best_step best_cost".split()
     print(tabulate(result, headers=headers))

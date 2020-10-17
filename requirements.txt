@@ -6,8 +6,8 @@ lxml
 matplotlib
 scikit-image
 scipy
-torch
-torchvision
+#torch
+#torchvision
 typer
 humanhash3
 tabulate
