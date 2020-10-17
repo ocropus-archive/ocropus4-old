@@ -33,12 +33,12 @@ cmd_download_uw3() {
 
 cmd_download() {
     mkdir -p trained
-    gsutil -m rsync -r gs://ocropus4-trained/ ./trained/.
+    gsutil -m rsync -r gs://ocropus4-trained/ ./models/
 }
 
 
 cmd_upload() {
-    gsutil -m rsync -r ./trained/. gs://ocropus4-trained/
+    gsutil -m rsync -r ./models/ gs://ocropus4-trained/
 }
 
 
