@@ -80,10 +80,11 @@ def train_epoch(model, src, lr, show=0):
         )
         if show > 0 and index % show == 0:
             plt.ion()
+            plt.clf()
             plt.subplot(121)
-            plt.imshow(inputs[0, 0].cpu())
+            plt.imshow(inputs[0, 0].detach().cpu())
             plt.subplot(122)
-            plt.imshow(outputs[0].cpu())
+            plt.imshow(outputs[0, 0].detach().cpu())
             plt.ginput(1, 0.001)
         index += 1
 
@@ -145,10 +146,11 @@ def binarize(
             sink.write(sample)
             if show > 0 and index % show == 0:
                 plt.ion()
+                plt.clf()
                 plt.subplot(121)
-                plt.imshow(image[0, 0].cpu())
+                plt.imshow(image[0, 0].detach().cpu())
                 plt.subplot(122)
-                plt.imshow(result[0].cpu())
+                plt.imshow(result[0, 0].detach().cpu())
                 plt.ginput(1, 0.001)
 
 
