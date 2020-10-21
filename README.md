@@ -1,15 +1,34 @@
 # OCRopus4
 
-This is a very preliminary version of OCRopus 4. Status is:
+This is a very preliminary version of OCRopus 4. Components are:
+
+- ocrobin -- binarization (hardcoded binarizer is also available)
+- ocrorot -- orientation, skew, and scale estimation
+- ocroseg -- word, line, and block segmentation of pages
+- ocrotest -- text recognition from words and lines
+
+Status is:
 
 - DL training and recognition for text recognition and page layout analysis are working
 - training fully works on the UW3 dataset
 - we have large datasets extracted from the Tobacco corpus and Google 1000 Books
-- the hardcoded binarizer is available
+
+Warnings:
+
+- **The models are very preliminary and have only been trained on UW3.**
+- **The code needs to be refactored and cleaned up.**
+
+# Getting Started
+
+To Be Written
 
 # Other Comments
 
-- OCRopus4 provides both command line interfaces and Python APIs. 
+- OCRopus4 provides both command line interfaces and Python APIs.
+    - command line APIs are provided by `Typer`
+    - command invocation generally looks like this:
+        - `python3 -m ocrlib.ocroseg train ...`
+        - that is, commands are simply part of the library files
 - All the computations are carried out in PyTorch.
 - OCRopus4 uses some extra external and internal libraries:
     - `typer` for command line interfaces
@@ -61,3 +80,4 @@ This is a very preliminary version of OCRopus 4. Status is:
     - build -- 
     - test -- 
     - help -- help message
+- `./train` -- miscellaneous training scripts
