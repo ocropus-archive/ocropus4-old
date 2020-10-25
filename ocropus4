@@ -32,10 +32,13 @@ recex)
     python3 -m ocrlib.recex "$@"
     ;;
 seg*)
-    python3 -m ocrlib.segmentation "$@"
+    python3 -m ocrlib.ocroseg "$@"
     ;;
 rec*)
-    python3 -m ocrlib.recognition "$@"
+    python3 -m ocrlib.ocroline "$@"
+    ;;
+bin*)
+    python3 -m ocrlib.ocrobin "$@"
     ;;
 *)
     help

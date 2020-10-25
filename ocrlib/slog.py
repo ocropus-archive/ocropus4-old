@@ -362,6 +362,10 @@ def info(fnames: List[str], verbose: bool = False):
             result.append((fname, mdef, maxstep, len(models), step, scalar))
             con.close()
             del con
+        except sqlite3.DatabaseError as exn:
+            print(fname, ": database error")
+            print(exn)
+            sys.exit(1)
         except ValueError as e:
             result.append((fname, None, None, None, None, None))
     headers = "file model steps #saves best_step best_cost".split()

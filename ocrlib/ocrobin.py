@@ -90,6 +90,34 @@ def train_epoch(model, src, lr, show=0):
 
 
 @app.command()
+def generate(
+    input: str,
+    output: str = None,
+    ngen: int = 1,
+    extensions: str = "png;jpg;jpeg;page.png;page.jpg;image.png;image.jpg",
+):
+    """Given binary image training data, generate artificial binarization data using ocrogen."""
+    ds = wds.Dataset(input).decode("l").rename(__key__="__key__", image=extensions)
+    sink = wds.TarWriter(output)
+    for i, sample in enumerate(ds):
+        key = sample["__key__"]
+        print(i, key)
+        for v in range(ngen):
+            page = normalize(sample["image"])
+            if np.mean(page) < 0.5:
+                page = 1.0 - page
+            p = pyrand.uniform(0.0, 1.0)
+            if p < 0.5:
+                degraded = ocrodeg.printlike_multiscale(page, blotches=1e-6)
+            else:
+                degraded = ocrodeg.printlike_fibrous(page, blotches=1e-6)
+            degraded = normalize(degraded)
+            result = {"__key__": f"{key}/{v}", "png": degraded, "bin.png": page}
+            sink.write(result)
+    sink.close()
+
+
+@app.command()
 def train(
     fnames: List[str],
     inputs: str = "png",
@@ -101,7 +129,9 @@ def train(
     num_epochs: int = 100,
 ):
     ds = (
-        wds.Dataset(fnames)
+        wds.Dataset(
+            fnames, handler=wds.warn_and_continue, tarhandler=wds.warn_and_continue
+        )
         .decode("torchrgb")
         .to_tuple(inputs, outputs)
         .pipe(tiles)
@@ -123,23 +153,25 @@ def binarize(
     fname: str,
     output: str = None,
     model: str = None,
-    iext="png",
-    oext="bin.png",
-    keep=True,
-    show=0,
+    iext: str = "png",
+    oext: str = "bin.png",
+    keep: bool = True,
+    show: int = 0,
 ):
-    src = wds.Dataset(input).decode("torch_rgb")
-    with open(fname, "rb") as stream:
+    src = wds.Dataset(fname).decode("rgb")
+    with open(model, "rb") as stream:
         obj = torch.load(stream)
     model = make_model_lstm()
     model.load_state_dict(obj["mstate"])
+    model.cuda()
     model.eval()
     with wds.TarWriter(output) as sink:
         for index, sample in enumerate(src):
-            print(f"{sample['__key__']}        ", end="\r", flush=True)
+            print(f"{sample['__key__']}")
             image = sample.get(iext)
-            image = image.unsqueeze(0).mean(1, keepdim=True).cuda()
-            result = model(image)[0].cpu()
+            inputs = torch.tensor(np.mean(image, 2)).unsqueeze(0).unsqueeze(0).cuda()
+            outputs = model(inputs)[0, 0]
+            result = outputs.detach().cpu().numpy() + 0.0
             if not keep:
                 del sample[iext]
             sample[oext] = result
@@ -148,37 +180,12 @@ def binarize(
                 plt.ion()
                 plt.clf()
                 plt.subplot(121)
-                plt.imshow(image[0, 0].detach().cpu())
+                plt.imshow(image)
                 plt.subplot(122)
-                plt.imshow(result[0, 0].detach().cpu())
+                plt.imshow(result)
                 plt.ginput(1, 0.001)
-
-
-@app.command()
-def generate(
-    input: str,
-    output: str = None,
-    ngen: int = 1,
-    extensions: str = "png;jpg;jpeg;page.png;page.jpg;image.png;image.jpg",
-):
-    ds = wds.Dataset(input).decode("l").rename(__key__="__key__", image=extensions)
-    sink = wds.TarWriter(output)
-    for i, sample in enumerate(ds):
-        key = sample["__key__"]
-        print(i, key)
-        for v in range(ngen):
-            page = normalize(sample["image"])
-            if np.mean(page) < 0.5:
-                page = 1.0 - page
-            p = pyrand.uniform(0.0, 1.0)
-            if p < 0.5:
-                degraded = ocrodeg.printlike_multiscale(page, blotches=1e-6)
-            else:
-                degraded = ocrodeg.printlike_fibrous(page, blotches=1e-6)
-            degraded = normalize(degraded)
-            result = {"__key__": f"{key}/{v}", "png": degraded, "bin.png": page}
-            sink.write(result)
-    sink.close()
+            if show > 0:
+                plt.ginput(1, 0.001)
 
 
 @app.command()
