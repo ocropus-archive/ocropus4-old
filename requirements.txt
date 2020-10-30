@@ -11,7 +11,7 @@ scipy
 typer
 humanhash3
 tabulate
--e git+git://github.com/tmbdev/webdataset.git#egg=webdataset
+-e git+git://github.com/tmbdev/webdataset.git@dev#egg=webdataset
 -e git+git://github.com/NVlabs/ocrodeg.git#egg=ocrodeg
 -e git+git://github.com/NVlabs/tensorcom.git#egg=tensorcom
 -e git+git://github.com/tmbdev/tarproc.git#egg=tarproc

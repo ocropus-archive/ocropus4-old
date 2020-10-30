@@ -1,5 +1,6 @@
 import random as pyrand
 from typing import List
+import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -43,10 +44,6 @@ def make_model_lstm():
     return model
 
 
-model = make_model_lstm()
-model.cuda()
-
-
 def tiles(src, r=256):
     for inputs, targets in src:
         assert inputs.shape == targets.shape
@@ -59,34 +56,106 @@ def tiles(src, r=256):
                 )
 
 
-def train_epoch(model, src, lr, show=0):
-    model.count = getattr(model, "count", 0)
-    model.losses = getattr(model, "losses", [])
-    optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=0.0)
-    criterion = nn.MSELoss().cuda()
-    index = 0
-    for inputs, targets in src:
+class BinTrainer:
+    def __init__(
+        self,
+        model,
+        *,
+        lr=1e-3,
+        savedir=True,
+    ):
+        super().__init__()
+        self.count = 0
+        self.losses = []
+        self.last_lr = -1
+        self.set_lr(lr)
+        self.criterion = nn.MSELoss().cuda()
+
+    def to(self, device="cpu"):
+        self.device = device
+        self.model.to(device)
+        self.criterion.to(device)
+        self.optimizer.to(device)
+
+    def load_from_save(self, fname, args={}):
+        print(f"[loading {fname}]", file=sys.stderr)
+        with open(fname, "rb") as stream:
+            obj = torch.load(stream)
+        self.model = make_model_lstm(**args)
+        self.model.load_state_dict(obj["mstate"])
+        self.model.eval()
+
+    def set_lr(self, lr, momentum=0.9):
+        if lr == self.last_lr:
+            return
+        self.optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=0.9, weight_decay=0.0)
+        self.last_lr = lr
+
+    def train_batch(self, inputs, targets):
+        assert inputs.ndim == 4
+        assert targets.ndim == 4
+        assert len(inputs) == len(targets)
         inputs = inputs.mean(1, keepdim=True)
         targets = targets.mean(1, keepdim=True)
-        optimizer.zero_grad()
-        outputs = model(inputs.cuda())
-        loss = criterion(outputs, targets.cuda())
+        self.optimizer.zero_grad()
+        outputs = self.model(inputs.to(self.device))
+        loss = self.criterion(outputs, targets.to(self.device))
         loss.backward()
-        optimizer.step()
-        model.count += len(inputs)
-        model.losses.append(float(loss))
-        print(
-            f"{model.count:8d} {np.mean(model.losses[-50:]):.3f}", end="\r", flush=True
-        )
-        if show > 0 and index % show == 0:
-            plt.ion()
-            plt.clf()
-            plt.subplot(121)
-            plt.imshow(inputs[0, 0].detach().cpu())
-            plt.subplot(122)
-            plt.imshow(outputs[0, 0].detach().cpu())
-            plt.ginput(1, 0.001)
-        index += 1
+        self.optimizer.step()
+        self.count += len(inputs)
+        self.losses.append(float(loss))
+        self.last = (inputs.detach().cpu(), targets.detach().cpu(), outputs.detach().cpu())
+
+    def train_epoch(self, loader, show=-1):
+        count = 0
+        for inputs, targets in loader:
+            self.train_batch(inputs, targets)
+            print(f"{self.count:10d} {np.mean(self.losses[-10:]):.5f}", end="\r", file=sys.stderr)
+            if show > 0 and count % show == 0:
+                self.show_batch()
+            count += 1
+
+    def show_batch(self):
+        inputs, targets, outputs = self.last
+        plt.ion()
+        plt.clf()
+        plt.subplot(121)
+        plt.imshow(inputs[0, 0].detach().cpu())
+        plt.subplot(122)
+        plt.imshow(outputs[0, 0].detach().cpu())
+        plt.ginput(1, 0.001)
+
+    def predict_batch(self, inputs):
+        pass
+
+
+class Binarizer:
+    def __init__(self, fname=None):
+        if fname is not None:
+            self.load_from_save(fname)
+
+    def load_from_save(self, fname, args={}):
+        print(f"[loading {fname}]", file=sys.stderr)
+        with open(fname, "rb") as stream:
+            obj = torch.load(stream)
+        self.model = make_model_lstm(**args)
+        self.model.load_state_dict(obj["mstate"])
+        self.model.eval()
+
+    def activate(self, yes=True):
+        if yes:
+            self.model.cuda()
+        else:
+            self.model.cpu()
+
+    def binarize(self, image, nocheck=False, unzoom=True):
+        self.activate(True)
+        if image.ndim == 3:
+            image = np.mean(image, 2)
+        inputs = torch.tensor(image).unsqueeze(0).unsqueeze(0).cuda()
+        outputs = self.model(inputs)[0, 0]
+        result = np.array(outputs.detach().cpu().numpy(), dtype=np.float)
+        return result
 
 
 @app.command()
@@ -141,8 +210,10 @@ def train(
     logger = slog.Logger(prefix="bin")
     model = make_model_lstm()
     model.cuda()
+    trainer = BinTrainer(model, lr=lr, show=show)
+    trainer.to("cuda")
     for epoch in range(num_epochs):
-        train_epoch(model, dl, lr=lr, show=show)
+        trainer.train_epoch(dl, show=show)
         print(f"\nepoch {epoch} loss {np.mean(model.losses[-500:])}")
         obj = dict(mstate=model.state_dict())
         logger.save_model(obj, step=model.count, scalar=np.mean(model.losses[-100:]))
@@ -159,19 +230,12 @@ def binarize(
     show: int = 0,
 ):
     src = wds.Dataset(fname).decode("rgb")
-    with open(model, "rb") as stream:
-        obj = torch.load(stream)
-    model = make_model_lstm()
-    model.load_state_dict(obj["mstate"])
-    model.cuda()
-    model.eval()
+    binarizer = Binarizer(model)
     with wds.TarWriter(output) as sink:
         for index, sample in enumerate(src):
             print(f"{sample['__key__']}")
             image = sample.get(iext)
-            inputs = torch.tensor(np.mean(image, 2)).unsqueeze(0).unsqueeze(0).cuda()
-            outputs = model(inputs)[0, 0]
-            result = outputs.detach().cpu().numpy() + 0.0
+            result = binarizer.binarize(image)
             if not keep:
                 del sample[iext]
             sample[oext] = result
