@@ -19,6 +19,12 @@ activate() {
 
 test -d ./uw3 || die "must download 'uw3' directory with 'run' command first"
 
+cmd_bin() {
+    activate
+    python3 -m ocrlib.ocrobin train uw3/uw3-binsim-{000..002}.tar --replicate=8 --num-workers=16
+}
+
+
 cmd_rot() {
     activate
     python3 -m ocrlib.ocrorot train-rot uw3/uw3-lineseg-markers.tar --replicate=16 --num-workers=16

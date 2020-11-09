@@ -10,9 +10,9 @@ import webdataset as wds
 import torch
 from torch import nn, optim
 from torch.utils import data
-from torchmore import layers
 
 from . import slog
+from . import loading
 
 
 app = typer.Typer()
@@ -31,7 +31,11 @@ def normalize(a):
     return a
 
 
-def make_model_lstm():
+default_model = """
+from torch import nn
+from torchmore import layers
+
+def make_model():
     r = 3
     model = nn.Sequential(
         nn.Conv2d(1, 8, r, padding=r // 2),
@@ -42,6 +46,7 @@ def make_model_lstm():
         nn.Sigmoid(),
     )
     return model
+"""
 
 
 def tiles(src, r=256):
@@ -56,34 +61,40 @@ def tiles(src, r=256):
                 )
 
 
+def nothing(trainer):
+    pass
+
+
 class BinTrainer:
     def __init__(
         self,
-        model,
-        *,
+        model=None,
         lr=1e-3,
         savedir=True,
     ):
         super().__init__()
+        self.model = model
         self.count = 0
         self.losses = []
         self.last_lr = -1
         self.set_lr(lr)
         self.criterion = nn.MSELoss().cuda()
+        self.every_batch = nothing
+        self.maxcount = 1e21
+
+    def load(self, mname=""):
+        if mname == "":
+            mname = default_model
+        self.model = loading.load_or_make_model(mname)
+
+    def save(self, mname):
+        loading.save_model(self.model, mname)
 
     def to(self, device="cpu"):
         self.device = device
         self.model.to(device)
         self.criterion.to(device)
-        self.optimizer.to(device)
-
-    def load_from_save(self, fname, args={}):
-        print(f"[loading {fname}]", file=sys.stderr)
-        with open(fname, "rb") as stream:
-            obj = torch.load(stream)
-        self.model = make_model_lstm(**args)
-        self.model.load_state_dict(obj["mstate"])
-        self.model.eval()
+        # self.optimizer.to(device)
 
     def set_lr(self, lr, momentum=0.9):
         if lr == self.last_lr:
@@ -105,6 +116,7 @@ class BinTrainer:
         self.count += len(inputs)
         self.losses.append(float(loss))
         self.last = (inputs.detach().cpu(), targets.detach().cpu(), outputs.detach().cpu())
+        self.every_batch(self)
 
     def train_epoch(self, loader, show=-1):
         count = 0
@@ -114,6 +126,8 @@ class BinTrainer:
             if show > 0 and count % show == 0:
                 self.show_batch()
             count += 1
+            if self.count >= self.maxcount:
+                return
 
     def show_batch(self):
         inputs, targets, outputs = self.last
@@ -134,13 +148,8 @@ class Binarizer:
         if fname is not None:
             self.load_from_save(fname)
 
-    def load_from_save(self, fname, args={}):
-        print(f"[loading {fname}]", file=sys.stderr)
-        with open(fname, "rb") as stream:
-            obj = torch.load(stream)
-        self.model = make_model_lstm(**args)
-        self.model.load_state_dict(obj["mstate"])
-        self.model.eval()
+    def load_from_save(self, fname, args=[], kw={}):
+        self.model = loading.load_or_make_model(fname, *args, **kw)
 
     def activate(self, yes=True):
         if yes:
@@ -192,31 +201,37 @@ def train(
     inputs: str = "png",
     outputs: str = "bin.png",
     num_workers: int = 4,
+    mname: str = "",
     bs: int = 32,
     lr: float = 1e-4,
     show: int = 0,
     num_epochs: int = 100,
+    maxcount: float = 1e21,
+    prefix: str = "bin",
+    replicate: int = 1,
 ):
+    fnames = fnames * replicate
     ds = (
-        wds.Dataset(
-            fnames, handler=wds.warn_and_continue, tarhandler=wds.warn_and_continue
-        )
+        wds.WebDataset(fnames, handler=wds.warn_and_continue)
         .decode("torchrgb")
         .to_tuple(inputs, outputs)
         .pipe(tiles)
         .shuffle(5000)
     )
     dl = data.DataLoader(ds, num_workers=num_workers, batch_size=bs)
-    logger = slog.Logger(prefix="bin")
-    model = make_model_lstm()
+    logger = slog.Logger(prefix=prefix)
+    if mname == "":
+        mname = default_model
+    model = loading.load_or_make_model(mname)
     model.cuda()
-    trainer = BinTrainer(model, lr=lr, show=show)
+    trainer = BinTrainer(model, lr=lr)
     trainer.to("cuda")
+    trainer.maxcount = maxcount
     for epoch in range(num_epochs):
         trainer.train_epoch(dl, show=show)
-        print(f"\nepoch {epoch} loss {np.mean(model.losses[-500:])}")
+        print(f"\nepoch {epoch} loss {np.mean(trainer.losses[-500:])}")
         obj = dict(mstate=model.state_dict())
-        logger.save_model(obj, step=model.count, scalar=np.mean(model.losses[-100:]))
+        logger.save_smodel(obj, step=trainer.count, scalar=np.mean(trainer.losses[-100:]))
 
 
 @app.command()

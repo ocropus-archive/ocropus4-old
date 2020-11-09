@@ -164,6 +164,9 @@ class Logger:
     def save_model(self, obj, key="model", step=None, **kw):
         self.insert(key, obj=obj, dumps=torch_dumps, step=step, **kw)
 
+    def save_smodel(self, obj, key="model", step=None, **kw):
+        self.insert(key, obj=obj, dumps=loading.dump_model, step=step, **kw)
+
     def load_last(self, key="model"):
         result = list(
             self.con.execute(
