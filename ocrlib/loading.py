@@ -59,7 +59,6 @@ def make_model(src, *args, fun_name="make_model", **kw):
 
 def save_model(model, fname):
     """Save a PyTorch model (parameters and source code) to a file."""
-    assert isinstance(fname, str)
     state = dict(msrc=model.msrc_, margs=model.margs_, mstate=model.state_dict())
     torch.save(state, fname)
 

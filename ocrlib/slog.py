@@ -14,6 +14,8 @@ from tabulate import tabulate
 
 import torch
 
+from . import loading
+
 app = typer.Typer()
 
 schema = """

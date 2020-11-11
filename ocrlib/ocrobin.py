@@ -230,8 +230,8 @@ def train(
     for epoch in range(num_epochs):
         trainer.train_epoch(dl, show=show)
         print(f"\nepoch {epoch} loss {np.mean(trainer.losses[-500:])}")
-        obj = dict(mstate=model.state_dict())
-        logger.save_smodel(obj, step=trainer.count, scalar=np.mean(trainer.losses[-100:]))
+        # obj = dict(mstate=model.state_dict())
+        logger.save_smodel(model, step=trainer.count, scalar=np.mean(trainer.losses[-100:]))
 
 
 @app.command()
