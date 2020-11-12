@@ -170,22 +170,20 @@ class Logger:
         self.insert(key, obj=obj, dumps=loading.dump_model, step=step, **kw)
 
     def load_last(self, key="model"):
-        result = list(
-            self.con.execute(
-                f"select obj from log where key='{key}' order by logtime desc limit 1"
-            )
-        )
-        assert len(result) > 0, "no results"
-        return torch_loads(result[0][0])
+        obj, step = self.con.execute(
+            f"select obj, step from log where key='{key}' order by logtime desc limit 1"
+        ).fetchone()
+        state = torch_loads(obj)
+        state["step"] = step
+        return state
 
     def load_best(self, key="model"):
-        result = list(
-            self.con.execute(
-                f"select obj from log where key='{key}' order by scalar limit 1"
-            )
-        )
-        assert len(result) > 0, "no results"
-        return torch_loads(result[0][0])
+        obj, step = self.con.execute(
+            f"select obj, step from log where key='{key}' order by scalar limit 1"
+        ).fetchone()
+        state = torch_loads(obj)
+        state["step"] = step
+        return state
 
     def sysinfo(self):
         cmd = "hostname; uname"
@@ -371,7 +369,7 @@ def info(fnames: List[str], verbose: bool = False):
             print(fname, ": database error")
             print(exn)
             sys.exit(1)
-        except ValueError as e:
+        except ValueError:
             result.append((fname, None, None, None, None, None))
     headers = "file model steps #saves best_step best_cost".split()
     print(tabulate(result, headers=headers))

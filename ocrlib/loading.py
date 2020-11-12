@@ -57,9 +57,11 @@ def make_model(src, *args, fun_name="make_model", **kw):
     return model
 
 
-def save_model(model, fname):
+def save_model(model, fname, step=None):
     """Save a PyTorch model (parameters and source code) to a file."""
-    state = dict(msrc=model.msrc_, margs=model.margs_, mstate=model.state_dict())
+    if step is None:
+        step = getattr(model, "step_", 0)
+    state = dict(msrc=model.msrc_, margs=model.margs_, mstate=model.state_dict(), step=step)
     torch.save(state, fname)
 
 
@@ -70,13 +72,28 @@ def dump_model(model):
     return buf.getbuffer()
 
 
-def load_or_make_model(fname, *args, fun_name="make_model", **kw):
+def load_or_make_model(fname, *args, load_best=False, fun_name="make_model", **kw):
     """Load a model from ".pth" file or instantiate it from a ".py" file."""
-    if fname.endswith(".pth"):
+    if fname.endswith(".sqlite3"):
+        from . import slog
+        logger = slog.Logger(fname)
+        if load_best:
+            state = logger.load_best()
+        else:
+            state = logger.load_last()
+        args, kw = state.get("margs", ([], {}))
+        model = make_model(state["msrc"], *args, fun_name=fun_name, **kw)
+        model.load_state_dict(state["mstate"])
+        model.step_ = state.get("step", 0)
+        return model
+    elif fname.endswith(".pth"):
         state = torch.load(fname)
         args, kw = state.get("margs", ([], {}))
         model = make_model(state["msrc"], *args, fun_name=fun_name, **kw)
         model.load_state_dict(state["mstate"])
+        model.step_ = state.get("step", 0)
         return model
     else:
-        return make_model(fname, *args, **kw)
+        model = make_model(fname, *args, **kw)
+        model.step_ = 0
+        return model

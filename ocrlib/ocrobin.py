@@ -225,6 +225,7 @@ def train(
     model = loading.load_or_make_model(mname)
     model.cuda()
     trainer = BinTrainer(model, lr=lr)
+    trainer.count = int(getattr(model, "step_", 0))
     trainer.to("cuda")
     trainer.maxcount = maxcount
     for epoch in range(num_epochs):
