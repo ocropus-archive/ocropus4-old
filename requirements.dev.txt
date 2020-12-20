@@ -3,3 +3,11 @@ coverage
 isort
 pytest-cov
 tk
+
+bash_kernel
+sos
+sos-pbs
+sos-rq
+sos-notebook
+sos-bash
+sos-python
