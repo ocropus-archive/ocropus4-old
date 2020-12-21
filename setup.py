@@ -6,7 +6,7 @@
 #
 
 import sys
-from distutils import setup
+from distutils.core import setup
 
 if sys.version_info < (3, 6):
     sys.exit("Python versions less than 3.6 are not supported")
