@@ -15,6 +15,7 @@ COMMAND:
     - nlbin -- nonlinear image binarizer
 
 EOF
+type python3
 }
 
 if test -d ./venv; then
