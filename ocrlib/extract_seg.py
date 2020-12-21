@@ -210,9 +210,8 @@ def hocr2seg(
                 if hocr is None:
                     print(key, "hocr is None", file=sys.stderr)
                     continue
-            else:
-                assert page is not None, key
-                assert hocr is not None, key
+            assert page is not None, key
+            assert hocr is not None, key
             print("#", key, count, maxcount, file=sys.stderr)
             assert isinstance(page, np.ndarray), (key, type(page))
             assert isinstance(hocr, bytes), (key, type(hocr))
