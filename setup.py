@@ -37,7 +37,7 @@ print(PREREQS)
 #ocrodeg@git+git://github.com/NVlabs/ocrodeg.git
 
 setuptools.setup(
-    name="tarproc",
+    name="ocropus4",
     version=VERSION,
     description="OCRopus 4",
     long_description=open("README.md").read(),
