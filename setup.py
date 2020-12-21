@@ -6,7 +6,7 @@
 #
 
 import sys
-import setuptools
+from distutils import setup
 
 if sys.version_info < (3, 6):
     sys.exit("Python versions less than 3.6 are not supported")
@@ -36,7 +36,7 @@ torchmore@git+git://github.com/tmbdev/torchmore.git
 print(PREREQS)
 #ocrodeg@git+git://github.com/NVlabs/ocrodeg.git
 
-setuptools.setup(
+setup(
     name="ocrlib",
     version=VERSION,
     description="OCRopus 4",
