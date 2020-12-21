@@ -100,12 +100,14 @@ def marker_segmentation_target_for_hocr(image, hocr, element="ocrx_word"):
     assert len(pages) == 1
     page = pages[0]
     h, w = image.shape[:2]
-    _, _, w1, h1 = [int(x) for x in get_prop(page, "bbox").split()]
-    if h1 != h or w1 != w:
-        print(
-            f"image and page dimensions differ ({h}, {w}) != ({h1}, {w1})",
-            file=sys.stderr,
-        )
+    ocr_bbox = get_prop(page, "bbox")
+    if ocr_bbox is not None:
+        _, _, w1, h1 = [int(x) for x in ocr_bbox.split()]
+        if h1 != h or w1 != w:
+            print(
+                f"image and page dimensions differ ({h}, {w}) != ({h1}, {w1})",
+                file=sys.stderr,
+            )
     # print(page.get("title"))
     bboxes = []
     for word in page.xpath(f"//*[@class='{element}']"):
