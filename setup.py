@@ -34,7 +34,6 @@ ocrodeg@git+git://github.com/NVlabs/ocrodeg.git
 tensorcom@git+git://github.com/NVlabs/tensorcom.git
 tarproc@git+git://github.com/tmbdev/tarproc.git
 torchmore@git+git://github.com/tmbdev/torchmore.git
-ocrodeg@git+git://github.com/NVlabs/ocrodeg.git
 """.split()
 print(PREREQS)
 
