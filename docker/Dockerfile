@@ -12,6 +12,7 @@ RUN pip3 install git+git://github.com/tmbdev/webdataset
 
 RUN apt-get install -qqy gcc build-essential vim-nox
 RUN pip3 install editdistance
+RUN apt-get install -qqy rxvt
 
 COPY ocropus4.tar /tmp
 RUN mkdir /tmp/ocropus4 && cd /tmp/ocropus4 && \
