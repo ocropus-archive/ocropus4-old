@@ -29,12 +29,12 @@ scikit-image
 scipy
 humanhash3
 tabulate
-git://github.com/tmbdev/webdataset.git#egg=webdataset
-git://github.com/NVlabs/ocrodeg.git#egg=ocrodeg
-git://github.com/NVlabs/tensorcom.git#egg=tensorcom
-git://github.com/tmbdev/tarproc.git#egg=tarproc
-git://github.com/tmbdev/torchmore.git#egg=torchmore
-git://github.com/NVlabs/ocrodeg.git#egg=ocrodeg
+webdataset@git+git://github.com/tmbdev/webdataset.git
+ocrodeg@git+git://github.com/NVlabs/ocrodeg.git
+tensorcom@git+git://github.com/NVlabs/tensorcom.git
+tarproc@git+git://github.com/tmbdev/tarproc.git
+torchmore@git+git://github.com/tmbdev/torchmore.git
+ocrodeg@git+git://github.com/NVlabs/ocrodeg.git
 """.split()
 print(PREREQS)
 
