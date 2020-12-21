@@ -16,4 +16,4 @@ tabulate
 -e git+git://github.com/NVlabs/tensorcom.git#egg=tensorcom
 -e git+git://github.com/tmbdev/tarproc.git#egg=tarproc
 -e git+git://github.com/tmbdev/torchmore.git#egg=torchmore
--e git+git://github.com/ocropus/ocrodeg.git#egg=ocrodeg
+-e git+git://github.com/NVLabs/ocrodeg.git#egg=ocrodeg
