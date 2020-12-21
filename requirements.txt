@@ -1,6 +1,6 @@
 braceexpand
 bs4
-click
+click<7.2.0
 editdistance
 lxml
 matplotlib
