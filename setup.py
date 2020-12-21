@@ -18,33 +18,25 @@ ocropus4
 """.split()
 
 PREREQS = """
-autopep8
-bash_kernel
+click==7.1.1
+typer
 braceexpand
 bs4
-click
 editdistance
-future
 lxml
 matplotlib
 scikit-image
 scipy
-tarproc
-tensorcom
-torch
-torchmore
-torchvision
-typer
-webdataset
-tensorboard
+humanhash3
+tabulate
+-e git+git://github.com/tmbdev/webdataset.git#egg=webdataset
+-e git+git://github.com/NVlabs/ocrodeg.git#egg=ocrodeg
+-e git+git://github.com/NVlabs/tensorcom.git#egg=tensorcom
+-e git+git://github.com/tmbdev/tarproc.git#egg=tarproc
+-e git+git://github.com/tmbdev/torchmore.git#egg=torchmore
+-e git+git://github.com/NVlabs/ocrodeg.git#egg=ocrodeg
 """.split()
 print(PREREQS)
-
-"""
-isort
-autopep8
-jupyter
-"""
 
 setuptools.setup(
     name="tarproc",
