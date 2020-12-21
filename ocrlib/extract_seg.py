@@ -139,6 +139,8 @@ def segmentation_patches(
     element="ocrx_word",
 ):
     """Extract training patches for segmentation."""
+    assert page is not None
+    assert hocr is not None
     if page.ndim == 3:
         page = np.mean(page, 2)
     if degrade is not None:
