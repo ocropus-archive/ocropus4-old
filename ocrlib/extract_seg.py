@@ -206,7 +206,7 @@ def hocr2seg(
     with wds.TarWriter(output) as sink:
         for key, page, hocr in ds:
             if debug:
-                print(key)
+                print("# starting", key, file=sys.stderr)
             if skip_missing:
                 if page is None:
                     print(key, "page is None", file=sys.stderr)
