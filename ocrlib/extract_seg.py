@@ -172,7 +172,7 @@ def segmentation_patches(
 def hocr2seg(
     src: str,
     output: str = "",
-    extensions: str = "png;jpg;jpeg;JPEG;PNG hocr;HOCR",
+    extensions: str = "page.jpg;page.png;png;jpg;jpeg;JPEG;PNG hocr;HOCR",
     maxcount: int = 9999999999,
     subsample: float = 1.0,
     patches_per_image: int = 50,
