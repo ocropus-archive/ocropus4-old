@@ -8,13 +8,11 @@ Usage: $0 [COMMAND] [--help] ...
 
 COMMAND:
 
-    - recex -- extract training data for recognition
-    - segex -- extract training data for segmentation
-    - rec[ognition] -- recognize text lines
-    - seg[mentation] -- segment page images
-    - nlbin -- nonlinear image binarizer
-
 EOF
+
+grep '^[a-z_*-]*[)] *#' $0 | sed 's/[)] *[#]/ -- /'
+
+echo
 type python3
 }
 
@@ -23,24 +21,33 @@ if test -d ./venv; then
 fi
 
 case $library in
-nlbin)
-    python3 -m ocrlib.nlbin "$@"
+
+# data extraction
+
+extract-seg)  # extract segmentation for deep learning
+    python3 -m ocrlib.extract_seg "$@"
     ;;
-segex)
-    python3 -m ocrlib.segex "$@"
+extract-lines)  # extract lines for deep learning
+    python3 -m ocrlib.extract_lines "$@"
     ;;
-recex)
-    python3 -m ocrlib.recex "$@"
-    ;;
-seg*)
+
+# inference
+
+seg*)  # page segmentation
     python3 -m ocrlib.ocroseg "$@"
     ;;
-rec*)
+rec*)  # line/word recognition
     python3 -m ocrlib.ocroline "$@"
     ;;
-bin*)
+nlbin)  # nonlinear binarization
+    python3 -m ocrlib.nlbin "$@"
+    ;;
+bin*)   # binarization
     python3 -m ocrlib.ocrobin "$@"
     ;;
+
+# help
+
 *)
     help
     ;;
