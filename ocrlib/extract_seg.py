@@ -201,11 +201,13 @@ def hocr2seg(
     count = 0
     with wds.TarWriter(output) as sink:
         for key, page, hocr in ds:
+            if debug:
+                print(key)
             if skip_missing:
                 if page is None:
                     print(key, "page is None", file=sys.stderr)
                     continue
-                if page is None:
+                if hocr is None:
                     print(key, "hocr is None", file=sys.stderr)
                     continue
             print("#", key, count, maxcount, file=sys.stderr)
