@@ -10,7 +10,7 @@ import numpy as np
 
 app = typer.Typer()
 
-import .utils
+from . import utils
 
 
 def get_text(node):
