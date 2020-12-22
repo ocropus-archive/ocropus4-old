@@ -216,7 +216,7 @@ def hocr2seg(
                     continue
             assert page is not None, key
             assert hocr is not None, key
-            print("#", key, count, maxcount, file=sys.stderr)
+            print("#", key, "count", count, "maxcount", maxcount, file=sys.stderr)
             assert isinstance(page, np.ndarray), (key, type(page))
             assert isinstance(hocr, bytes), (key, type(hocr))
             if count >= maxcount:
