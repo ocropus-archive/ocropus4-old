@@ -13,6 +13,8 @@ from . import utils
 
 import typer
 
+debug = int(os.environ.get("EXTRACT_SEG_DEBUG", "0"))
+
 app = typer.Typer()
 
 
@@ -168,6 +170,8 @@ def segmentation_patches(
             np.array(seg >= 2, "i"), threshold, [page, seg], r=patchsize, n=n
         )
     )
+    if debug:
+        print("# interesting patches", len(patches))
     for patch in patches:
         yield patch
 
