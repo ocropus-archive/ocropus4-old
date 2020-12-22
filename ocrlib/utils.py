@@ -324,6 +324,18 @@ def get_affine_patches(dst, src, images, size=None):
     return result
 
 
+def autoinvert(image, mode):
+    if mode == "False":
+        return image
+    elif mode == "True":
+        return np.amax(image) - image
+    elif mode == "Auto":
+        if np.mean(image) > np.mean([np.amax(image), np.amin(image)]):
+            return np.amax(image) - image
+        else:
+            return image
+
+
 def safe_randint(lo, hi):
     from numpy.random import randint
 

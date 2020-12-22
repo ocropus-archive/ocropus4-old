@@ -10,6 +10,8 @@ import numpy as np
 
 app = typer.Typer()
 
+import .utils
+
 
 def get_text(node):
     textnodes = node.xpath(".//text()")
@@ -126,6 +128,7 @@ def hocr2rec(
     show: int = 0,
     dictionary: str = "NONE",
     bounds: str = "50,1000,50,200",
+    invert: str = "Auto",
 ):
     """Extract recognition patches from src and send them to output."""
     if show > 0:
@@ -155,6 +158,7 @@ def hocr2rec(
             if page is None:
                 print(key, "hocr is None", file=sys.stderr)
                 continue
+            page = utils.autoinvert(page, invert)
             for lineimage, linetext, bbox in hocr2images(
                 page,
                 hocr,
