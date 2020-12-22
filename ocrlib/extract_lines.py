@@ -142,7 +142,7 @@ def hocr2rec(
     count = 0
     if dictionary == "NONE":
         acceptable_text = None
-    if dictionary == "":
+    elif dictionary == "":
         acceptable_text = acceptable_chars
     else:
         acceptable_text = acceptable_words(dictionary)
