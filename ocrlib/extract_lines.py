@@ -73,7 +73,7 @@ def hocr2images(
         x0, y0, x1, y1 = bbox
         lineimage = image[y0:y1, x0:x1, ...]
         linetext = get_text(line)
-        if not acceptable_text(linetext):
+        if acceptable_text is not None and not acceptable_text(linetext):
             continue
         yield lineimage, linetext, bbox
 
@@ -124,7 +124,7 @@ def hocr2rec(
     element="ocrx_word",
     maxcount: int = 9999999999,
     show: int = 0,
-    dictionary: str = "",
+    dictionary: str = "NONE",
     bounds: str = "50,1000,50,200",
 ):
     """Extract recognition patches from src and send them to output."""
@@ -140,6 +140,8 @@ def hocr2rec(
         .to_tuple("__key__", *extensions, handler=wds.warn_and_continue)
     )
     count = 0
+    if dictionary == "NONE":
+        acceptable_text = None
     if dictionary == "":
         acceptable_text = acceptable_chars
     else:
