@@ -187,6 +187,7 @@ def hocr2seg(
     element: str = "ocrx_word",
     skip_missing=True,
     ignore_errors=True,
+    invert=False,
     debug=False,
 ):
     """Extract segmentation patches from src and send them to output."""
@@ -216,6 +217,8 @@ def hocr2seg(
                     continue
             assert page is not None, key
             assert hocr is not None, key
+            if invert:
+                page = np.amax(page) - page
             print("#", key, "count", count, "maxcount", maxcount, file=sys.stderr)
             assert isinstance(page, np.ndarray), (key, type(page))
             assert isinstance(hocr, bytes), (key, type(hocr))
