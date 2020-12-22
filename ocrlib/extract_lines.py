@@ -120,7 +120,7 @@ def acceptable_bounds(bounds=(50, 1000, 50, 200), max_aspect=1.1):
 def hocr2rec(
     src: str,
     output: str = "",
-    extensions: str = "png;jpg;jpeg;JPEG;PNG hocr;HOCR",
+    extensions: str = "page.png;page.jpg;png;jpg;jpeg;JPEG;PNG page.hocr;hocr.html;hocr;HOCR",
     element="ocrx_word",
     maxcount: int = 9999999999,
     show: int = 0,
