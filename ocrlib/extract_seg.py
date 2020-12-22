@@ -141,6 +141,7 @@ def segmentation_patches(
     scale=1.0,
     rotation=(0.0, 0.0),
     element="ocrx_word",
+    minmark=0,
 ):
     """Extract training patches for segmentation."""
     assert page is not None
@@ -150,6 +151,9 @@ def segmentation_patches(
     if degrade is not None:
         page = degrade(page)
     seg = marker_segmentation_target_for_hocr(page, hocr, element=element)
+    if np.sum(seg) <= minmark:
+        print(f"didn't get any {element}", file=sys.stderr)
+        return
     if scale != 1.0:
         page = ndi.zoom(page, scale, order=1, mode="nearest")
         seg = ndi.zoom(seg, scale, order=0, mode="constant", cval=0)
@@ -170,8 +174,7 @@ def segmentation_patches(
             np.array(seg >= 2, "i"), threshold, [page, seg], r=patchsize, n=n
         )
     )
-    if debug:
-        print("# interesting patches", len(patches))
+    print("# interesting patches", len(patches))
     for patch in patches:
         yield patch
 

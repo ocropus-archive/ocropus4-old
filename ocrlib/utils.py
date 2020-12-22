@@ -8,6 +8,8 @@ import numpy as np
 import scipy.ndimage as ndi
 import torch
 
+debug = int(os.environ.get("UTILS_DEBUG", "0"))
+
 
 class Every(object):
     """Trigger an action every given number of seconds."""
