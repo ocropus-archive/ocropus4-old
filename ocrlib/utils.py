@@ -8,6 +8,8 @@ import numpy as np
 import scipy.ndimage as ndi
 import torch
 
+debug = int(os.environ.get("UTILS_DEBUG", "0"))
+
 
 class Every(object):
     """Trigger an action every given number of seconds."""
@@ -320,6 +322,18 @@ def get_affine_patches(dst, src, images, size=None):
         patch = apply_affine(image, (h, w), (m, d), order=1)
         result.append(patch)
     return result
+
+
+def autoinvert(image, mode):
+    if mode == "False":
+        return image
+    elif mode == "True":
+        return np.amax(image) - image
+    elif mode == "Auto":
+        if np.mean(image) > np.mean([np.amax(image), np.amin(image)]):
+            return np.amax(image) - image
+        else:
+            return image
 
 
 def safe_randint(lo, hi):

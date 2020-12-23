@@ -10,6 +10,8 @@ import numpy as np
 
 app = typer.Typer()
 
+from . import utils
+
 
 def get_text(node):
     textnodes = node.xpath(".//text()")
@@ -73,7 +75,7 @@ def hocr2images(
         x0, y0, x1, y1 = bbox
         lineimage = image[y0:y1, x0:x1, ...]
         linetext = get_text(line)
-        if not acceptable_text(linetext):
+        if acceptable_text is not None and not acceptable_text(linetext):
             continue
         yield lineimage, linetext, bbox
 
@@ -120,12 +122,13 @@ def acceptable_bounds(bounds=(50, 1000, 50, 200), max_aspect=1.1):
 def hocr2rec(
     src: str,
     output: str = "",
-    extensions: str = "png;jpg;jpeg;JPEG;PNG hocr;HOCR",
+    extensions: str = "page.png;page.jpg;png;jpg;jpeg;JPEG;PNG page.hocr;hocr.html;hocr;HOCR",
     element="ocrx_word",
     maxcount: int = 9999999999,
     show: int = 0,
-    dictionary: str = "",
+    dictionary: str = "NONE",
     bounds: str = "50,1000,50,200",
+    invert: str = "Auto",
 ):
     """Extract recognition patches from src and send them to output."""
     if show > 0:
@@ -140,7 +143,9 @@ def hocr2rec(
         .to_tuple("__key__", *extensions, handler=wds.warn_and_continue)
     )
     count = 0
-    if dictionary == "":
+    if dictionary == "NONE":
+        acceptable_text = None
+    elif dictionary == "":
         acceptable_text = acceptable_chars
     else:
         acceptable_text = acceptable_words(dictionary)
@@ -153,6 +158,7 @@ def hocr2rec(
             if page is None:
                 print(key, "hocr is None", file=sys.stderr)
                 continue
+            page = utils.autoinvert(page, invert)
             for lineimage, linetext, bbox in hocr2images(
                 page,
                 hocr,

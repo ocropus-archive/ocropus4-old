@@ -13,6 +13,8 @@ from . import utils
 
 import typer
 
+debug = int(os.environ.get("EXTRACT_SEG_DEBUG", "0"))
+
 app = typer.Typer()
 
 
@@ -100,12 +102,14 @@ def marker_segmentation_target_for_hocr(image, hocr, element="ocrx_word"):
     assert len(pages) == 1
     page = pages[0]
     h, w = image.shape[:2]
-    _, _, w1, h1 = [int(x) for x in get_prop(page, "bbox").split()]
-    if h1 != h or w1 != w:
-        print(
-            f"image and page dimensions differ ({h}, {w}) != ({h1}, {w1})",
-            file=sys.stderr,
-        )
+    ocr_bbox = get_prop(page, "bbox")
+    if ocr_bbox is not None:
+        _, _, w1, h1 = [int(x) for x in ocr_bbox.split()]
+        if h1 != h or w1 != w:
+            print(
+                f"image and page dimensions differ ({h}, {w}) != ({h1}, {w1})",
+                file=sys.stderr,
+            )
     # print(page.get("title"))
     bboxes = []
     for word in page.xpath(f"//*[@class='{element}']"):
@@ -137,13 +141,19 @@ def segmentation_patches(
     scale=1.0,
     rotation=(0.0, 0.0),
     element="ocrx_word",
+    minmark=0,
 ):
     """Extract training patches for segmentation."""
+    assert page is not None
+    assert hocr is not None
     if page.ndim == 3:
         page = np.mean(page, 2)
     if degrade is not None:
         page = degrade(page)
     seg = marker_segmentation_target_for_hocr(page, hocr, element=element)
+    if np.sum(seg) <= minmark:
+        print(f"didn't get any {element}", file=sys.stderr)
+        return
     if scale != 1.0:
         page = ndi.zoom(page, scale, order=1, mode="nearest")
         seg = ndi.zoom(seg, scale, order=0, mode="constant", cval=0)
@@ -164,6 +174,7 @@ def segmentation_patches(
             np.array(seg >= 2, "i"), threshold, [page, seg], r=patchsize, n=n
         )
     )
+    print("# interesting patches", len(patches))
     for patch in patches:
         yield patch
 
@@ -172,7 +183,7 @@ def segmentation_patches(
 def hocr2seg(
     src: str,
     output: str = "",
-    extensions: str = "png;jpg;jpeg;JPEG;PNG hocr;HOCR",
+    extensions: str = "page.jpg;page.png;png;jpg;jpeg;JPEG;PNG hocr;HOCR;hocr.html",
     maxcount: int = 9999999999,
     subsample: float = 1.0,
     patches_per_image: int = 50,
@@ -184,6 +195,7 @@ def hocr2seg(
     skip_missing=True,
     ignore_errors=True,
     debug=False,
+    invert: str = "Auto",
 ):
     """Extract segmentation patches from src and send them to output."""
     if show > 0:
@@ -201,14 +213,19 @@ def hocr2seg(
     count = 0
     with wds.TarWriter(output) as sink:
         for key, page, hocr in ds:
+            if debug:
+                print("# starting", key, file=sys.stderr)
             if skip_missing:
                 if page is None:
                     print(key, "page is None", file=sys.stderr)
                     continue
-                if page is None:
+                if hocr is None:
                     print(key, "hocr is None", file=sys.stderr)
                     continue
-            print("#", key, count, maxcount, file=sys.stderr)
+            assert page is not None, key
+            assert hocr is not None, key
+            page = utils.autoinvert(page, invert)
+            print("#", key, "count", count, "maxcount", maxcount, file=sys.stderr)
             assert isinstance(page, np.ndarray), (key, type(page))
             assert isinstance(hocr, bytes), (key, type(hocr))
             if count >= maxcount:
