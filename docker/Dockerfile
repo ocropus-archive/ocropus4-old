@@ -31,6 +31,8 @@ RUN pip3 install -e git+git://github.com/NVlabs/tensorcom.git#egg=tensorcom
 RUN pip3 install -e git+git://github.com/tmbdev/tarproc.git#egg=tarproc
 RUN pip3 install -e git+git://github.com/tmbdev/torchmore.git#egg=torchmore
 
+RUN apt-get install -qqy lsb-release
+
 COPY ocropus4.tar /tmp
 RUN mkdir /tmp/ocropus4 && cd /tmp/ocropus4 && \
     tar xvf ../ocropus4.tar && \

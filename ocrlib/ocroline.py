@@ -132,7 +132,7 @@ class LineTrainer:
         if lr is None:
             return
         if lr != self.last_lr:
-            print(f"setting learning rate to {lr}", file=sys.stderr)
+            print(f"setting learning rate to {lr:4.1e}", file=sys.stderr)
             self.optimizer = optim.SGD(
                 self.model.parameters(), lr=lr, momentum=momentum
             )

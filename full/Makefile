@@ -12,5 +12,5 @@ uw3-lines.tar: docker
 
 docker:
 	(cd .. && git commit -a || true)
-	(cd ../docker && make)
-
+	(cd .. && git archive --format=tar -o docker/ocropus4.tar HEAD)
+	docker build . -t ocropus4
