@@ -3,7 +3,7 @@ hocr=/sdata/ocropus4/uw3/uw3-hocr.tar
 all: linetrain
 
 linetrain: uw3-lines.tar
-	docropus rec train uw3-lines.tar --display --mdef linemodel.py --log-to linetrain.sqlite3.temp --epochs 50
+	docropus ocroline train uw3-lines.tar --display --mdef linemodel.py --log-to linetrain.sqlite3.temp --epochs 50
 	mv linetrain.sqlite3.temp linetrain.sqlite3
 
 uw3-seg.tar:
