@@ -410,19 +410,22 @@ def train(
     test: str = None,
     test_bs: int = 20,
     ntest: int = int(1e12),
-    lr: float = 1e-3,
     schedule: str = "1e-3 * (0.9**((n//100000)**.5))",
+    # lr: float = 1e-3,
     ntrain: int = -1,
     checkerr: float = 1e12,
     charset_file: str = None,
     dewarp_to: int = -1,
+    log_to: str = "",
 ):
 
     charset = Charset(chardef=charset_file)
 
     mmod, msrc = load_model(mdef)
 
-    logger = slog.Logger(prefix="ocroline")
+    if log_to == "":
+        log_to = None
+    logger = slog.Logger(fname=log_to, prefix="ocroline")
     logger.sysinfo()
     logger.json(
         "args",
@@ -464,10 +467,7 @@ def train(
 
     trainer = LineTrainer(model)
     trainer.charset = charset
-    if schedule != "":
-        trainer.schedule = eval(f"lambda n: {schedule}")
-    else:
-        trainer.set_lr(lr)
+    trainer.schedule = eval(f"lambda n: {schedule}")
     trainer.every_batch.append(log_progress)
     trainer.every_batch.append(display_progress if display else print_progress)
     print("starting training")

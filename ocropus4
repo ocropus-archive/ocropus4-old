@@ -33,17 +33,20 @@ extract-lines)  # extract lines for deep learning
 
 # inference
 
-seg*)  # page segmentation
+ocroseg)  # page segmentation
     python3 -m ocrlib.ocroseg "$@"
     ;;
-rec*)  # line/word recognition
+ocroline)  # line/word recognition
     python3 -m ocrlib.ocroline "$@"
+    ;;
+ocrobin)   # binarization
+    python3 -m ocrlib.ocrobin "$@"
+    ;;
+ocrorot)   # binarization
+    python3 -m ocrlib.ocrorot "$@"
     ;;
 nlbin)  # nonlinear binarization
     python3 -m ocrlib.nlbin "$@"
-    ;;
-bin*)   # binarization
-    python3 -m ocrlib.ocrobin "$@"
     ;;
 
 # help
