@@ -85,8 +85,10 @@ def preproc(scale, extra_target_scale=1.0, mod=16):
             image = np.mean(image, axis=2)
         if image.dtype == np.uint8:
             image = image.astype(np.float32) / 255.0
+        assert np.amax(image) <= 1.0
         if seg.ndim == 3:
             seg = seg[:, :, 0]
+        assert np.amax(seg) < 16, "max # classes for segmentation is set to 16"
         image = ndi.zoom(image, scale, order=1)
         seg = ndi.zoom(seg, scale * extra_target_scale, order=0)
         image = torch.tensor(image).unsqueeze(0)
