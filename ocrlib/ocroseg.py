@@ -107,6 +107,8 @@ def augmentation_none(sample):
     image, target = sample
     if image.dtype == np.uint8:
         image = image.astype(np.float32) / 255.0
+    if image.ndim == 4:
+        image = np.mean(image, 3)
     if target.ndim == 3:
         target = target[..., 0]
     assert image.ndim == 3
@@ -121,6 +123,8 @@ def augmentation_gray(sample):
     image, target = sample
     if image.dtype == np.uint8:
         image = image.astype(np.float32) / 255.0
+    if image.ndim == 4:
+        image = np.mean(image, 3)
     if target.ndim == 3:
         target = target[..., 0]
     assert image.ndim == 3
@@ -142,6 +146,8 @@ def augmentation_page(sample, max_distortion=0.05):
     image, target = sample
     if image.dtype == np.uint8:
         image = image.astype(np.float32) / 255.0
+    if image.ndim == 4:
+        image = np.mean(image, 3)
     if target.ndim == 3:
         target = target[..., 0]
     assert image.ndim == 3
