@@ -549,12 +549,15 @@ def train(
     prefix: str = "ocroseg",
     weightmask: int = -1,
     num_workers: int = 1,
+    log_to: str = "",
 ):
     global logger
 
     mmod, msrc = load_model(mdef)
 
-    logger = slog.Logger(prefix=prefix)
+    if log_to == "":
+        log_to = None
+    logger = slog.Logger(fname=log_to, prefix=prefix)
     logger.sysinfo()
     logger.json(
         "args",
