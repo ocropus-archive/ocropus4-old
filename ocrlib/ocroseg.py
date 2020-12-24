@@ -103,7 +103,18 @@ def preproc(scale, extra_target_scale=1.0, mod=16):
     return f
 
 
-augmentation_none = None
+def augmentation_none(sample):
+    image, target = sample
+    if image.dtype == np.uint8:
+        image = image.astype(np.float32) / 255.0
+    if target.ndim == 3:
+        target = target[..., 0]
+    assert image.ndim == 3
+    assert target.ndim == 2
+    assert image.dtype == np.float32
+    assert target.dtype in (np.uint8, np.int16, np.int32, np.int64)
+    assert image.shape[:2] == target.shape[:2]
+    return image, target
 
 
 def augmentation_gray(sample):
@@ -163,17 +174,14 @@ def make_loader(
     extensions="image.png;framed.png;ipatch.png target.png;lines.png;spatch.png",
     scale=0.5,
     extra_target_scale=1.0,
-    augmentation=None,
+    augmentation=augmentation_none,
     output_scale=None,
     shuffle=0,
     mod=16,
     num_workers=1,
 ):
     training = Dataset(urls).shuffle(shuffle).decode("rgb8").to_tuple(extensions)
-    if augmentation is not None:
-        training.map(augmentation)
-    # training.map(preproc(scale, extra_target_scale=extra_target_scale, mod=mod))
-
+    training.map(augmentation)
     return DataLoader(training, batch_size=batch_size, num_workers=num_workers)
 
 
