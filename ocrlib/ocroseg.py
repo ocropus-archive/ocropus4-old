@@ -97,7 +97,8 @@ def preproc(scale, extra_target_scale=1.0, mod=16):
         seg = ndi.zoom(seg, scale * extra_target_scale, order=0)
         image = torch.tensor(image).unsqueeze(0)
         seg = torch.tensor(seg).long()
-        return modimage(image, mod), modimage(seg, mod)
+        # return modimage(image, mod), modimage(seg, mod)
+        return image, seg
 
     return f
 
@@ -171,7 +172,7 @@ def make_loader(
     training = Dataset(urls).shuffle(shuffle).decode("rgb8").to_tuple(extensions)
     if augmentation is not None:
         training.map(augmentation)
-    training.map(preproc(scale, extra_target_scale=extra_target_scale, mod=mod))
+    # training.map(preproc(scale, extra_target_scale=extra_target_scale, mod=mod))
 
     return DataLoader(training, batch_size=batch_size, num_workers=num_workers)
 
