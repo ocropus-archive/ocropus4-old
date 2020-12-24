@@ -477,22 +477,22 @@ def train(
             errors, total = trainer.errors(test_dl, ntest=ntest)
             err = float(errors) / total
             logger.scalar("val/err", err, step=trainer.nsamples)
-            logger.save(
-                "model",
-                dict(
-                    n=trainer.nsamples,
-                    dewarp_to=dewarp_to,
-                    mdef=mdef,
-                    msrc=msrc,
-                    charset=charset,
-                    mstate=model.state_dict(),
-                    ostate=trainer.optimizer.state_dict(),
-                ),
-                step=trainer.nsamples,
-            )
-            logger.flush()
             print("test set:", err, errors, total)
             assert err < checkerr
+        logger.save(
+            "model",
+            dict(
+                n=trainer.nsamples,
+                dewarp_to=dewarp_to,
+                mdef=mdef,
+                msrc=msrc,
+                charset=charset,
+                mstate=model.state_dict(),
+                ostate=trainer.optimizer.state_dict(),
+            ),
+            step=trainer.nsamples,
+        )
+        logger.flush()
 
 
 @app.command()
