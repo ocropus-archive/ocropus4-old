@@ -545,7 +545,7 @@ def train(
     schedule: str = "1e-3 * (0.9 ** (n//100000))",
     zoom: float = 0.5,
     augmentation: str = "none",
-    extensions: str = "image.png;framed.png;ipatch.png target.png;lines.png;spatch.png",
+    extensions: str = "png;image.png;framed.png;ipatch.png seg.png;target.png;lines.png;spatch.png",
     prefix: str = "ocroseg",
     weightmask: int = -1,
     num_workers: int = 1,
