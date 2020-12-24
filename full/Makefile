@@ -1,6 +1,10 @@
 hocr=/sdata/ocropus4/uw3/uw3-hocr.tar
 
-all: linetrain
+all: segtrain
+
+segtrain: uw3-seg.tar docker
+	docropus ocroseg train uw3-seg.tar --display --mdef segmodel.py --log-to segtrain.sqlite3.temp --epochs 3
+	mv segtrain.sqlite3.temp segtrain.sqlite3
 
 linetrain: uw3-lines.tar docker
 	docropus ocroline train uw3-lines.tar --display --mdef linemodel.py --log-to linetrain.sqlite3.temp --epochs 3
