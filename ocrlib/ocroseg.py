@@ -85,7 +85,11 @@ def preproc(scale, extra_target_scale=1.0, mod=16):
             image = np.mean(image, axis=2)
         if image.dtype == np.uint8:
             image = image.astype(np.float32) / 255.0
-        assert np.amax(image) <= 1.0, image.dtype
+        elif image.dtype == np.float32:
+            pass
+        else:
+            raise ValueError(f"{image.dtype}: unknown dtype")
+        assert np.amax(image) <= 1.0
         if seg.ndim == 3:
             seg = seg[:, :, 0]
         assert np.amax(seg) < 16, "max # classes for segmentation is set to 16"
