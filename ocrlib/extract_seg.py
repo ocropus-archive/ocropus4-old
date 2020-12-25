@@ -252,6 +252,7 @@ def hocr2seg(
                         print(exn, file=sys.stderr)
                         continue
                     raise exn
+                finished = set()
                 for i, (y, x), (img, seg) in patches:
                     if count >= maxcount:
                         break
@@ -259,11 +260,16 @@ def hocr2seg(
                         print(f"{count}", file=sys.stderr)
                     count += 1
                     assert np.amax(img) < 2.0
+                    key = f"{key}@{y},{x}"
                     patch = {
-                        "__key__": f"{key}@{y},{x}",
+                        "__key__": key,
                         "png": np.clip(img, 0, 1),
                         "seg.png": seg,
                     }
+                    if key in finished:
+                        print(f"{key}: duplicate rectangle", file=sys.stderr)
+                        continue
+                    finished.add(key)
                     sink.write(patch)
                     if show > 0 and count % show == 0:
                         pylab.clf()
