@@ -123,8 +123,6 @@ def augmentation_gray(sample):
     image, target = sample
     if image.dtype == np.uint8:
         image = image.astype(np.float32) / 255.0
-    if image.ndim == 4:
-        image = np.mean(image, 3)
     if target.ndim == 3:
         target = target[..., 0]
     assert image.ndim == 3
@@ -146,8 +144,6 @@ def augmentation_page(sample, max_distortion=0.05):
     image, target = sample
     if image.dtype == np.uint8:
         image = image.astype(np.float32) / 255.0
-    if image.ndim == 4:
-        image = np.mean(image, 3)
     if target.ndim == 3:
         target = target[..., 0]
     assert image.ndim == 3
@@ -174,6 +170,19 @@ def augmentation_page(sample, max_distortion=0.05):
     return image, target
 
 
+def np2tensor(sample):
+    image, target = sample
+    assert image.ndim == 3
+    assert target.ndim == 2
+    assert image.dtype == np.float32
+    assert target.dtype in (np.uint8, np.int16, np.int32, np.int64)
+    assert image.shape[:2] == target.shape[:2]
+    image = np.mean(image, 2)
+    image = torch.tensor(image).float32()
+    target = torch.tensor(target).long()
+    return image, target
+
+
 def make_loader(
     urls,
     batch_size=2,
@@ -188,6 +197,7 @@ def make_loader(
 ):
     training = Dataset(urls).shuffle(shuffle).decode("rgb8").to_tuple(extensions)
     training.map(augmentation)
+    training.map(np2tensor)
     return DataLoader(training, batch_size=batch_size, num_workers=num_workers)
 
 
