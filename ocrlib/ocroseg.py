@@ -581,6 +581,7 @@ def train(
     weightmask: int = -1,
     num_workers: int = 1,
     log_to: str = "",
+    parallel: bool = False,
 ):
     global logger
 
@@ -621,7 +622,7 @@ def train(
 
     model = mmod.make_model()
     model.cuda()
-    if torch.cuda.device_count() > 1:
+    if parallel and torch.cuda.device_count() > 1:
         model = torch.nn.DataParallel(model)
     print(model)
 
