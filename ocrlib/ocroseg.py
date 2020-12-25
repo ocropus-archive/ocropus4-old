@@ -178,7 +178,7 @@ def np2tensor(sample):
     assert target.dtype in (np.uint8, np.int16, np.int32, np.int64)
     assert image.shape[:2] == target.shape[:2]
     image = np.mean(image, 2)
-    image = torch.tensor(image).float().unsqueeze(1)
+    image = torch.tensor(image).float().unsqueeze(0)
     target = torch.tensor(target).long()
     return image, target
 
