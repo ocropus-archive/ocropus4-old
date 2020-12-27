@@ -14,6 +14,9 @@ from . import utils
 import typer
 
 debug = int(os.environ.get("EXTRACT_SEG_DEBUG", "0"))
+acceptable_bboxes = list(
+    map(float, os.environ.get("EXTRACT_SEG_ACCEPTABLE", "5 5 8000 8000").split())
+)
 
 app = typer.Typer()
 
@@ -52,15 +55,14 @@ def dims(bbox):
 def acceptable(bbox, minw=10, maxw=1000, minh=10, maxh=100):
     """Determine whether a bounding box has an acceptable size."""
     bw, bh = dims(bbox)
-    w0, h0, w1, h1 = map(
-        float, os.environ.get("acceptable_bboxes", "10 10 1000 100").split()
-    )
+    w0, h0, w1, h1 = acceptable_bboxes
     return bw >= w0 and bw <= w1 and bh >= h0 and bh <= h1
 
 
 def marker_segmentation_target_for_bboxes(image, bboxes, inside=0):
     """
-    Generate a segmentation target given an image and hOCR segmentation info.
+    Generate a segmentation target given an image and target bounding boxes.
+    This generates a central marker and a separator for each bounding box.
         :param image: page image
         :param bboxes: list of (x0, y0, x1, y1) bounding boxes for marker generation
     """
@@ -89,7 +91,29 @@ def marker_segmentation_target_for_bboxes(image, bboxes, inside=0):
     return target
 
 
-def marker_segmentation_target_for_hocr(image, hocr, element="ocrx_word"):
+def mask_with_none(image, bboxes):
+    return image
+
+
+def mask_with_bbox(image, bboxes, background=0):
+    bboxes = np.array(bboxes, dtype=np.int)
+    x0, y0 = np.amin(bboxes[:, :2], 0)
+    x1, y1 = np.amax(bboxes[:, 2:], 0)
+    mask = np.zeros_like(image)
+    mask[y0:y1, x0:x1] = 1
+    image = np.where(mask, image, background)
+    return image
+
+
+def mask_with_boxes(image, bboxes, dilate=50, background=0):
+    mask = np.zeros_like(image)
+    for x0, y0, x1, y1 in bboxes:
+        mask[y0:y1, x0:x1] = 1
+    image = np.where(mask, image, background)
+    return image
+
+
+def bboxes_for_hocr(image, hocr, element="ocrx_word"):
     """
     Generate a segmentation target given an image and hOCR segmentation info.
         :param image: page image
@@ -117,6 +141,11 @@ def marker_segmentation_target_for_hocr(image, hocr, element="ocrx_word"):
         if not acceptable(bbox):
             continue
         bboxes.append(bbox)
+    return bboxes
+
+
+def marker_segmentation_target_for_hocr(image, hocr, element="ocrx_word"):
+    bboxes = bboxes_for_hocr(image, hocr, element=element)
     return marker_segmentation_target_for_bboxes(image, bboxes)
 
 
@@ -142,15 +171,18 @@ def segmentation_patches(
     rotation=(0.0, 0.0),
     element="ocrx_word",
     minmark=0,
+    mask=(lambda image, bboxes: image),
 ):
     """Extract training patches for segmentation."""
     assert page is not None
     assert hocr is not None
     if page.ndim == 3:
         page = np.mean(page, 2)
+    bboxes = bboxes_for_hocr(page, hocr, element=element)
+    page = mask(page, bboxes)
     if degrade is not None:
         page = degrade(page)
-    seg = marker_segmentation_target_for_hocr(page, hocr, element=element)
+    seg = marker_segmentation_target_for_bboxes(page, bboxes)
     if np.sum(seg) <= minmark:
         print(f"didn't get any {element}", file=sys.stderr)
         return
@@ -196,6 +228,7 @@ def hocr2seg(
     ignore_errors=True,
     debug=False,
     invert: str = "Auto",
+    mask: str = "boxes",
 ):
     """Extract segmentation patches from src and send them to output."""
     if show > 0:
@@ -245,6 +278,7 @@ def hocr2seg(
                         element=element,
                         scale=scale,
                         rotation=(-randrot, randrot),
+                        mask=eval(f"mask_with_{mask}")
                     )
                 except ValueError as exn:
                     if ignore_errors:

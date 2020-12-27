@@ -72,6 +72,8 @@ cmd_venv() { # set up a virtualenv
     pip3 install -U neovim
     pip3 install -U jupyterlab
     pip3 install -U pytest
+    pip3 install -U jupyterlab-sos
+    pip3 install -U transient-display-data
     python3 -m bash_kernel.install
     python3 -m sos_notebook.install
     jupyter kernelspec list
