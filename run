@@ -72,10 +72,14 @@ cmd_venv() { # set up a virtualenv
     pip3 install -U neovim
     pip3 install -U jupyterlab
     pip3 install -U pytest
-    pip3 install -U jupyterlab-sos
-    pip3 install -U transient-display-data
     python3 -m bash_kernel.install
     python3 -m sos_notebook.install
+    if false; then
+        # SOS install currently doesn't work upstream
+        pip3 install -U sos sos-pbs sos-rq sos-notebook sos-bash sos-python
+        jupyter labextension install transient-display-data
+        jupyter labextension install jupyterlab-sos
+    fi
     jupyter kernelspec list
 }
 
