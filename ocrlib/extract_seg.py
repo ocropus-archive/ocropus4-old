@@ -266,6 +266,7 @@ def hocr2seg(
                 break
             if np.random.uniform() >= subsample:
                 continue
+            rcount = 0
             for scale in scales:
                 if count >= maxcount:
                     break
@@ -293,17 +294,18 @@ def hocr2seg(
                     if count % 1000 == 0:
                         print(f"{count}", file=sys.stderr)
                     count += 1
+                    rcount += 1
                     assert np.amax(img) < 2.0
-                    key = f"{key}@{y},{x}"
+                    key_loc = f"{key}@{y},{x}"
                     patch = {
-                        "__key__": key,
+                        "__key__": key_loc,
                         "png": np.clip(img, 0, 1),
                         "seg.png": seg,
                     }
-                    if key in finished:
+                    if key_loc in finished:
                         print(f"{key}: duplicate rectangle", file=sys.stderr)
                         continue
-                    finished.add(key)
+                    finished.add(key_loc)
                     sink.write(patch)
                     if show > 0 and count % show == 0:
                         pylab.clf()
