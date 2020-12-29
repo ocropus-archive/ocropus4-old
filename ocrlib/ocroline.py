@@ -33,6 +33,7 @@ min_w, min_h, max_w, max_h = 15, 15, 4000, 200
 
 
 def goodsize(sample):
+    """Determine whether the given sample has a good size."""
     image, txt = sample
     h, w = image.shape[-2:]
     good = h > min_h and h < max_h and w > min_w and w < max_w
@@ -60,7 +61,8 @@ def asnp(a):
 
 
 def nothing(*args, **kw):
-    pass
+    """Ignore the parameters and return None."""
+    return None
 
 
 def ctc_decode(probs, sigma=1.0, threshold=0.7, kind=None, full=False):
@@ -110,7 +112,16 @@ def collate4ocr(samples):
 
 
 class LineTrainer:
-    def __init__(self, model, *, lr=1e-4, device=None, savedir=True, maxgrad=10.0):
+    """A class encapsulating the logic for training text line recognizers.
+    """
+    def __init__(self, model, *, lr=1e-4, device=None, maxgrad=10.0):
+        """A class encapsulating line training logic.
+
+        :param model: the model to be trained
+        :param lr: learning rate, defaults to 1e-4
+        :param device: GPU used for training, defaults to None
+        :param maxgrad: gradient clipping, defaults to 10.0
+        """        
         super().__init__()
         self.model = model
         self.device = None
@@ -220,12 +231,25 @@ class LineTrainer:
 
 
 class LineRec:
+    """A line recognizer (without training logic)."""
     def __init__(self, *, charset=Charset()):
         self.charset = charset
 
     def load_from_save(self, fname):
+        """Load a model from a save file.
+
+        Saved line recognizers are hash tables with keys:
+        charset, dewarp_to (-1 = no dewarping), msrc (model source),
+        mstate (model state)
+
+        :param fname: source file name
+        """        
         result = torch.load(fname)
         print(f"# loaded {fname}", file=sys.stderr)
+        self.set_model(result)
+
+    def set_model(self, result):
+        """Set the model from a saved hash."""
         self.charset = result.get("charset", self.charset)
         self.dewarp_to = result.get("dewarp_to", -1)
         if self.dewarp_to > 0:

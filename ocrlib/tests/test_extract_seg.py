@@ -4,12 +4,12 @@
 # See the LICENSE file for licensing terms (TBD).
 #
 
-from ocrlib import segex
+from ocrlib import extract_seg
 import webdataset as wds
 
 
 def test_hocr2seg(tmp_path):
-    segex.hocr2seg(
+    extract_seg.hocr2seg(
         "testdata/pages.tar", output=f"{tmp_path}/_seg.tar", maxcount=50, ignore_errors=False
     )
     count = 0
@@ -19,7 +19,7 @@ def test_hocr2seg(tmp_path):
 
 
 def test_hocr2seg_pipe(tmp_path):
-    segex.hocr2seg(
+    extract_seg.hocr2seg(
         "pipe:cat testdata/pages.tar",
         output=f"pipe:dd of={tmp_path}/_seg2.tar",
         maxcount=50,
