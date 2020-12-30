@@ -64,7 +64,7 @@ class NoLogger:
 
 class Logger:
     def __init__(self, fname=None, prefix="", sysinfo=True):
-        if fname is None:
+        if fname is None or fname == "":
             import datetime
 
             fname = prefix + "-"
@@ -276,7 +276,7 @@ def getargs(fname):
 @app.command()
 def getmodel(fname):
     con = sqlite3.connect(fname)
-    query = f"select obj from log where key='model'"
+    query = "select obj from log where key='model'"
     result = list(con.execute(query))
     assert len(result) > 0, "found no model"
     mbuf = result[0][0]
@@ -304,7 +304,7 @@ def getbest(fname, output=None):
     assert not os.path.exists(output)
     con = sqlite3.connect(fname)
     query = (
-        f"select obj, step, scalar from log where key='model' order by scalar limit 1"
+        "select obj, step, scalar from log where key='model' order by scalar limit 1"
     )
     result = list(con.execute(query))
     assert len(result) > 0, "found no model"
@@ -318,7 +318,7 @@ def getbest(fname, output=None):
 def val2model(fname):
     con = sqlite3.connect(fname)
     print(list(con.execute("select step, scalar from log where key='model'")))
-    query = f"select step, scalar from log where key='val/err'"
+    query = "select step, scalar from log where key='val/err'"
     errs = [tuple(row) for row in con.execute(query)]
     print(errs)
     for step, scalar in errs:

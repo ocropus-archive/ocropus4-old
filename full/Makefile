@@ -1,13 +1,16 @@
 hocr=/sdata/ocropus4/uw3/uw3-hocr.tar
 
 ocropus=vocropus
-all: segtrain
 
-segtrain: uw3-seg.tar
+rottrain.sqlite3:
+	$(ocropus) ocrorot train-rot $(hocr) --output rottrain.sqlite3.temp --nepochs 5
+	mv rottrain.sqlite3.temp rottrain.sqlite3
+
+segtrain.sqlite3: uw3-seg.tar
 	$(ocropus) ocroseg train uw3-seg.tar --display --mdef segmodel.py --log-to segtrain.sqlite3.temp --epochs 3 # --weightmask 20
 	mv segtrain.sqlite3.temp segtrain.sqlite3
 
-linetrain: uw3-lines.tar
+linetrain.sqlite3: uw3-lines.tar
 	$(ocropus) ocroline train uw3-lines.tar --display --mdef linemodel.py --log-to linetrain.sqlite3.temp --epochs 3
 	mv linetrain.sqlite3.temp linetrain.sqlite3
 

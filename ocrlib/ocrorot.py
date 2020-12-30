@@ -331,8 +331,9 @@ def train_rot(
     bs: int = 64,
     prefix: str = "rot",
     lrfun="0.3**(3+n//5000000)",
+    output: str = "",
 ):
-    logger = slog.Logger(prefix=prefix)
+    logger = slog.Logger(fname=output, prefix=prefix)
     logger.sysinfo()
     logger.json("args", sys.argv)
     model = make_model_rot()
