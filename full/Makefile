@@ -2,8 +2,16 @@ hocr=/sdata/ocropus4/uw3/uw3-hocr.tar
 
 ocropus=vocropus
 
+scaletrain.sqlite3:
+	$(ocropus) ocrorot train-scale $(hocr) --output scaletrain.sqlite3.temp --nepochs 3 --replicate 8 --num-workers 8
+	mv scaletrain.sqlite3.temp scaletrain.sqlite3
+
+skewtrain.sqlite3:
+	$(ocropus) ocrorot train-skew $(hocr) --output skewtrain.sqlite3.temp --nepochs 3 --replicate 8 --num-workers 8
+	mv skewtrain.sqlite3.temp skewtrain.sqlite3
+
 rottrain.sqlite3:
-	$(ocropus) ocrorot train-rot $(hocr) --output rottrain.sqlite3.temp --nepochs 5
+	$(ocropus) ocrorot train-rot $(hocr) --output rottrain.sqlite3.temp --nepochs 3 --replicate 8 --num-workers 8
 	mv rottrain.sqlite3.temp rottrain.sqlite3
 
 segtrain.sqlite3: uw3-seg.tar

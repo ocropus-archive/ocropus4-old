@@ -400,9 +400,10 @@ def train_skew(
     prefix: str = "skew",
     lrfun: str = "0.3**(3+n//5000000)",
     do_scale: bool = False,
+    output: str = "",
 ):
     """Trains either skew (=small rotation) or scale models."""
-    logger = slog.Logger(prefix=prefix)
+    logger = slog.Logger(fname=output, prefix=prefix)
     logger.sysinfo()
     logger.json("args", sys.argv)
     model = make_model_skew(bins)
