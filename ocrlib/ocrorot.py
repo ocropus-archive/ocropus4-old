@@ -482,7 +482,7 @@ def train_scale(
     bs: int = 64,
     prefix: str = "scale",
     lrfun: str = "0.3**(3+n//5000000)",
-    do_scale: bool = False,
+    output: str = "",
 ):
     return train_skew(
         urls,
@@ -494,6 +494,7 @@ def train_scale(
         bs=bs,
         prefix=prefix,
         lrfun=lrfun,
+        output=output,
         do_scale=True,
     )
 
