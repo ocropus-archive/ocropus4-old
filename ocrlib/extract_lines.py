@@ -126,8 +126,8 @@ def hocr2framed(
     maxcount: int = 9999999999,
     element: str = "ocr_line",
     show: int = 0,
-    lightbg: bool = False,
-    invert: str = "Auto",
+    lightbg: bool = True,
+    invert: str = "False",
     minelements: int = 2,
 ):
     """Remove data outside the content frame."""

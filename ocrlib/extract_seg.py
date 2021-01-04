@@ -59,12 +59,13 @@ def acceptable(bbox, minw=10, maxw=1000, minh=10, maxh=100):
     return bw >= w0 and bw <= w1 and bh >= h0 and bh <= h1
 
 
-def marker_segmentation_target_for_bboxes(image, bboxes, inside=0):
+def marker_segmentation_target_for_bboxes(image, bboxes, labels=[1, 0, 2]):
     """
     Generate a segmentation target given an image and target bounding boxes.
     This generates a central marker and a separator for each bounding box.
         :param image: page image
         :param bboxes: list of (x0, y0, x1, y1) bounding boxes for marker generation
+        :param labels: list of labels for marker, inside, separator (default: [1, 0, 2])
     """
     fa, fb, fc, fd = map(
         float, os.environ.get("marker_segmentation", "0.4 0.05 0.2 0.0").split()
@@ -75,19 +76,19 @@ def marker_segmentation_target_for_bboxes(image, bboxes, inside=0):
         x0, y0, x1, y1 = bbox
         bw, bh = dims(bbox)
         a = int(bh * fa)
-        target[y0 - a : y1 + a, x0 - a : x1 + a] = 1
+        target[y0 - a : y1 + a, x0 - a : x1 + a] = labels[0]
     for bbox in bboxes:
         x0, y0, x1, y1 = bbox
         bw, bh = dims(bbox)
         b = int(-bh * fb)
-        target[y0 - b : y1 + b, x0 - b : x1 + b] = inside
+        target[y0 - b : y1 + b, x0 - b : x1 + b] = labels[1]
     for bbox in bboxes:
         x0, y0, x1, y1 = bbox
         xc, yc = center(bbox)
         bw, bh = dims(bbox)
         c = int(bh * fc)
         d = int(bh * fd)
-        target[yc - c : yc + c, x0 + d : x1 - d] = 2
+        target[yc - c : yc + c, x0 + d : x1 - d] = labels[2]
     return target
 
 
@@ -144,9 +145,9 @@ def bboxes_for_hocr(image, hocr, element="ocrx_word"):
     return bboxes
 
 
-def marker_segmentation_target_for_hocr(image, hocr, element="ocrx_word"):
+def marker_segmentation_target_for_hocr(image, hocr, element="ocrx_word", labels=[1, 0, 2]):
     bboxes = bboxes_for_hocr(image, hocr, element=element)
-    return marker_segmentation_target_for_bboxes(image, bboxes)
+    return marker_segmentation_target_for_bboxes(image, bboxes, labels=labels)
 
 
 def get_any(sample, key, default=None):
@@ -172,6 +173,7 @@ def segmentation_patches(
     element="ocrx_word",
     minmark=0,
     mask=(lambda image, bboxes: image),
+    labels=[1, 0, 2],
 ):
     """Extract training patches for segmentation."""
     assert page is not None
@@ -182,7 +184,7 @@ def segmentation_patches(
     page = mask(page, bboxes)
     if degrade is not None:
         page = degrade(page)
-    seg = marker_segmentation_target_for_bboxes(page, bboxes)
+    seg = marker_segmentation_target_for_bboxes(page, bboxes, labels=labels)
     if np.sum(seg) <= minmark:
         print(f"didn't get any {element}", file=sys.stderr)
         return
@@ -229,8 +231,10 @@ def hocr2seg(
     debug=False,
     invert: str = "Auto",
     mask: str = "boxes",
+    labels: str = "1, 0, 2",
 ):
     """Extract segmentation patches from src and send them to output."""
+    labels = eval(f"[{labels}]")
     if show > 0:
         pylab.ion()
     assert output != ""
@@ -279,7 +283,8 @@ def hocr2seg(
                         element=element,
                         scale=scale,
                         rotation=(-randrot, randrot),
-                        mask=eval(f"mask_with_{mask}")
+                        mask=eval(f"mask_with_{mask}"),
+                        labels=labels,
                     )
                 except ValueError as exn:
                     if ignore_errors:
