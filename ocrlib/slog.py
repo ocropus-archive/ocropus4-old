@@ -264,6 +264,7 @@ class Logger:
 
 @app.command()
 def getargs(fname):
+    """Get the arguments used for training from a logfile."""
     con = sqlite3.connect(fname)
     query = "select json from log where key='args'"
     result = list(con.execute(query))
@@ -275,6 +276,7 @@ def getargs(fname):
 
 @app.command()
 def getmodel(fname):
+    """Get the model definition used for training from a logfile."""
     con = sqlite3.connect(fname)
     query = "select obj from log where key='model'"
     result = list(con.execute(query))
@@ -285,7 +287,8 @@ def getmodel(fname):
 
 
 @app.command()
-def getstep(fname, step, output=None):
+def getstep(fname, step: int, output=None):
+    """Get the model at the given step."""
     assert output is not None
     assert not os.path.exists(output)
     con = sqlite3.connect(fname)
@@ -298,14 +301,10 @@ def getstep(fname, step, output=None):
         stream.write(mbuf)
 
 
-@app.command()
-def getbest(fname, output=None):
+def gettrained(fname, query, output=None):
     assert output is not None
     assert not os.path.exists(output)
     con = sqlite3.connect(fname)
-    query = (
-        "select obj, step, scalar from log where key='model' order by scalar limit 1"
-    )
     result = list(con.execute(query))
     assert len(result) > 0, "found no model"
     mbuf = result[0][0]
@@ -315,7 +314,26 @@ def getbest(fname, output=None):
 
 
 @app.command()
+def getbest(fname, output=None):
+    """Get the model associated with the smallest scalar value (usu. test error)."""
+    query = (
+        "select obj, step, scalar from log where key='model' order by scalar limit 1"
+    )
+    return gettrained(fname, query, output=output)
+
+
+@app.command()
+def getlast(fname, output=None):
+    """Get the last model from a log."""
+    query = (
+        "select obj, step, scalar from log where key='model' order by logtime desc limit 1"
+    )
+    return gettrained(fname, query, output=output)
+
+
+@app.command()
 def val2model(fname):
+    """Move the validation values into the scalar field for the corresponding model."""
     con = sqlite3.connect(fname)
     print(list(con.execute("select step, scalar from log where key='model'")))
     query = "select step, scalar from log where key='val/err'"
@@ -331,6 +349,7 @@ def val2model(fname):
 
 @app.command()
 def info(fnames: List[str], verbose: bool = False):
+    """Print information on each of the log files."""
     fnames = sorted(fnames)
     result = []
     for fname in fnames:
@@ -377,6 +396,10 @@ def info(fnames: List[str], verbose: bool = False):
 
 @app.command()
 def findempty(fnames: List[str]):
+    """Find all files that don't contain a saved model.
+
+    This is used for deleting partial logs.
+    """
     fnames = sorted(fnames)
     for fname in fnames:
         try:
@@ -390,11 +413,6 @@ def findempty(fnames: List[str]):
                 print(fname)
         except Exception as exn:
             print(f"ERROR: {fname} {repr(exn)[:30]}", file=sys.stderr)
-
-
-@app.command()
-def noop():
-    pass
 
 
 if __name__ == "__main__":

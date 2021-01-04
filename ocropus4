@@ -48,6 +48,12 @@ ocrorot)   # binarization
 nlbin)  # nonlinear binarization
     python3 -m ocrlib.nlbin "$@"
     ;;
+slog)  # examine logs
+    python3 -m ocrlib.slog "$@"
+    ;;
+pagerec)  # recognize pages
+    python3 -m ocrlib.pagerec "$@"
+    ;;
 
 # help
 

@@ -102,10 +102,13 @@ class WordRecognizer:
     - (optionally) perform a topological sort for minimal reading order
     """
 
-    def __init__(self):
+    def __init__(self, segment_type="span"):
         self.segmenter = None
         self.lineseg = None
         self.recognizer = None
+        self.segment_type = segment_type
+        self.after_segmentation_hook = lambda x: None
+        self.after_recognition_hook = lambda x, y: None
 
     def load_config(self, conf):
         conf = get_config(conf)
@@ -115,12 +118,11 @@ class WordRecognizer:
         # if "lineseg" in models:
         #     self.load_lineseg(models["lineseg"])
 
-    def load_segmenter(self, fname, segment_type="word"):
+    def load_segmenter(self, fname):
         print(f"# loading segmenter {fname}", file=sys.stderr)
         self.segmenter = ocroseg.Segmenter()
         self.segmenter.load_from_save(fname)
         self.segmenter.activate(False)
-        self.segment_type = segment_type
 
     def load_recognizer(self, fname):
         print(f"# loading recognizer {fname}", file=sys.stderr)
@@ -135,6 +137,8 @@ class WordRecognizer:
         self.segmenter.activate(False)
         self.segments = ocroseg.extract_boxes(image, self.boxes)
 
+        self.after_segmentation_hook(self.segmenter)
+
         print("# recognizing", file=sys.stderr)
         self.outputs = []
         self.recognizer.activate(True)
@@ -144,6 +148,7 @@ class WordRecognizer:
                 continue
             text = self.recognizer.recognize(segment)
             self.outputs.append(text)
+            self.after_recognition_hook(segment, text)
         self.recognizer.activate(False)
 
     def recognize_words(self, image, return_segments=False):
@@ -291,12 +296,12 @@ class PageRecognizer:
 
         words = self.wordrec.recognize_words(image, return_segments=return_segments)
 
-        print(f"# running line segmenter")
+        print("# running line segmenter")
         self.lineseg.activate(True)
         self.lineseg.segment(image)
         self.lineseg.activate(False)
 
-        print(f"# running block segmenter")
+        print("# running block segmenter")
         if self.bseg is not None:
             self.bseg.activate(True)
             self.bseg.segment(image)
@@ -371,11 +376,68 @@ def print_raw_text(result):
 
 
 @app.command()
+def recognize_segments(
+    tarfile: List[str],
+    conf: str = "./ocropus4.yaml",
+    recmodel: str = "",
+    segmodel: str = "",
+    extensions: str = "jpg;png;page.jpg;page.png",
+    segment_type: str = "span",
+    maxrec: int = 999999999,
+    debugseg: bool = False,
+    debug: bool = False,
+):
+
+    assert recmodel != "", "must give --recmodel argument"
+    assert segmodel != "", "must give --segmodel argument"
+
+    def show_page(segmenter):
+        plt.clf()
+        plt.subplot(121)
+        plt.imshow(segmenter.page)
+        plt.subplot(122)
+        print(segmenter.probs.shape)
+        print(np.amin(segmenter.probs), np.amax(segmenter.probs))
+        plt.imshow(segmenter.probs[:, :, -3:])
+        plt.ginput(1, 100)
+
+    def show_segment(segment, text):
+        plt.clf()
+        plt.imshow(segment)
+        plt.title(text)
+        plt.ginput(1, 100)
+
+    pr = WordRecognizer(segment_type=segment_type)
+    if debug:
+        pr.after_recognition_hook = show_segment
+    if debugseg:
+        pr.after_segmentation_hook = show_page
+    pr.load_recognizer(recmodel)
+    pr.load_segmenter(segmodel)
+    print("# starting", file=sys.stderr)
+    ds = wds.Dataset(tarfile[0]).decode("l").to_tuple(f"__key__ {extensions}")
+    for count, (key, image) in enumerate(ds):
+        if count >= maxrec:
+            break
+        assert isinstance(image, np.ndarray), type(image)
+        image = normalize_image(image)
+        try:
+            result = pr.recognize_words(image)
+            print("\n===", key, "=" * 40, "\n")
+            for s in result[:10]:
+                print(s["output"])
+        except Exception as exn:
+            traceback.print_exc()
+            print(exn, file=sys.stderr)
+
+
+@app.command()
 def recognize_tar(
     tarfile: List[str],
     conf: str = "./ocropus4.yaml",
     extensions: str = "jpg;png;page.jpg;page.png",
     format: str = "text",
+    maxrec: int = 999999999,
 ):
     print("# loading", conf, file=sys.stderr)
     with open(conf) as stream:
@@ -386,7 +448,10 @@ def recognize_tar(
 
     print("# starting", file=sys.stderr)
     ds = wds.Dataset(tarfile[0]).decode("l").to_tuple(f"__key__ {extensions}")
+    count = 0
     for key, image in ds:
+        if count >= maxrec:
+            break
         assert isinstance(image, np.ndarray), type(image)
         image = normalize_image(image)
         try:
@@ -407,6 +472,7 @@ def recognize_tar(
         except Exception as exn:
             traceback.print_exc()
             print(exn, file=sys.stderr)
+        count += 1
 
 
 @app.command()
