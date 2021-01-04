@@ -8,9 +8,9 @@ from matplotlib import pylab
 import webdataset as wds
 import numpy as np
 
-app = typer.Typer()
-
 from . import utils
+
+app = typer.Typer()
 
 
 def get_text(node):
@@ -63,7 +63,7 @@ def hocr2images(
     for line in lines:
         bbox = [int(x) for x in get_prop(line, "bbox").split()]
         if padding is not None:
-            w, h = image.shape[:2]
+            h, w = image.shape[:2]
             bbox[0] = max(bbox[0] - padding[0], 0)
             bbox[1] = max(bbox[1] - padding[1], 0)
             bbox[2] = min(bbox[2] + padding[2], w)
@@ -119,6 +119,82 @@ def acceptable_bounds(bounds=(50, 1000, 50, 200), max_aspect=1.1):
 
 
 @app.command()
+def hocr2framed(
+    src: str,
+    output: str = "",
+    extensions: str = "page.png;page.jpg;png;jpg;jpeg;JPEG;PNG page.hocr;hocr.html;hocr;HOCR",
+    maxcount: int = 9999999999,
+    element: str = "ocr_line",
+    show: int = 0,
+    lightbg: bool = False,
+    invert: str = "Auto",
+    minelements: int = 2,
+):
+    """Remove data outside the content frame."""
+    if show > 0:
+        pylab.ion()
+    assert output != ""
+    if isinstance(extensions, str):
+        extensions = extensions.split()
+    assert len(extensions) == 2
+    ds = (
+        wds.Dataset(src, handler=wds.warn_and_stop)
+        .decode("rgb", handler=wds.warn_and_continue)
+        .to_tuple("__key__", *extensions, handler=wds.warn_and_continue)
+    )
+    count = 0
+    with wds.TarWriter(output) as sink:
+        for key, page, hocr in ds:
+            if page is None:
+                print(key, "page is None", file=sys.stderr)
+                continue
+            if page is None:
+                print(key, "hocr is None", file=sys.stderr)
+                continue
+            page_x0, page_y0, page_x1, page_y1 = 999999999, 999999999, 0, 0
+            page = utils.autoinvert(page, invert)
+            nelements = 0
+            for lineimage, linetext, bbox in hocr2images(
+                page,
+                hocr,
+                element=element,
+                padding=5,
+            ):
+                x0, y0, x1, y1 = bbox
+                page_x0 = min(page_x0, x0)
+                page_y0 = min(page_y0, y0)
+                page_x1 = max(page_x1, x1)
+                page_y1 = max(page_y1, y1)
+                nelements += 1
+            if nelements < minelements:
+                print(f"too few instances of {element} found ({nelements})", file=sys.stderr)
+                continue
+            print("bbox", page_x0, page_y0, page_x1, page_y1, page.shape)
+            mask = np.zeros_like(page)
+            mask[page_y0:page_y1, page_x0:page_x1, ...] = 1.0
+            bgvalue = np.amax(page) if lightbg else np.amin(page)
+            npage = np.where(mask, page, bgvalue)
+            sink.write({
+                "__key__": key,
+                "page.jpg": npage,
+                "hocr.html": hocr
+            })
+            if show > 0 and count % show == 0:
+                pylab.clf()
+                pylab.subplot(121)
+                pylab.imshow(page)
+                pylab.subplot(122)
+                pylab.imshow(npage)
+                pylab.ginput(1, 0.0001)
+            count += 1
+            print("#", key, count, file=sys.stderr)
+            if count >= maxcount:
+                print("# MAXCOUNT REACHED", file=sys.stderr)
+                break
+    print("# wrote", count, "records to", output, file=sys.stderr)
+
+
+@app.command()
 def hocr2rec(
     src: str,
     output: str = "",
@@ -130,7 +206,14 @@ def hocr2rec(
     bounds: str = "50,1000,50,200",
     invert: str = "Auto",
 ):
-    """Extract recognition patches from src and send them to output."""
+    """Extract recognizable segments from training data.
+
+    The training data is a .tar file containing .page.jpg and .hocr.html files
+    (alternative extensions specified by --extensions). For each segment of the
+    requested type (usually, ocrx_word or ocr_line), extract the corresponding
+    subimage and text. Output a .tar file with each extracted subimages and
+    corresponding text. This can be used for training text recognizers.
+    """
     if show > 0:
         pylab.ion()
     assert output != ""
