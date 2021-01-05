@@ -1,0 +1,4 @@
+#!/bin/bash
+export PYTHONPATH=../..
+. ../../venv/bin/activate
+../../ocropus4 "$@"

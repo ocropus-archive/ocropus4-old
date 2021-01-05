@@ -1,0 +1,3 @@
+models:
+  segmenter: ./segtrain.pth
+  recognizer: ./linetrain.pth

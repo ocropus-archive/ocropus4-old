@@ -36,7 +36,6 @@ def hocr2images(
     element="ocrx_word",
     padding=5,
     unicodedammit=False,
-    bounds="50,1000,50,200",
     acceptable_size=lambda x: True,
     acceptable_text=lambda x: True,
 ):
@@ -90,23 +89,26 @@ def acceptable_chars(text):
     )
 
 
-def acceptable_words(fname="/usr/share/dict/word"):
+def acceptable_words(fname="/usr/share/dict/words", minlen=1):
+    print(f"reading {fname}", file=sys.stderr)
     with open(fname) as stream:
         dictionary = set([x.strip().lower() for x in stream.readlines()])
 
     def f(text):
-        core = re.sub(r"\W?(\w+)\W{0,3}", r"\1", text)
+        core = re.sub(r"\W?(\w[\w -]*)\W{0,3}", r"\1", text)
         core = core.lower()
+        if len(core) < minlen:
+            return False
         return core in dictionary
 
     return f
 
 
-def acceptable_bounds(bounds=(50, 1000, 50, 200), max_aspect=1.1):
+def acceptable_bounds(bounds=(50, 50, 9999, 300), max_aspect=0.9):
     def f(bbox):
         x0, y0, x1, y1 = bbox
         h, w = y1 - y0, x1 - x0
-        wlo, whi, hlo, hhi = bounds
+        wlo, hlo, whi, hhi = bounds
         if h < hlo or h > hhi:
             return False
         if w < wlo or w > whi:

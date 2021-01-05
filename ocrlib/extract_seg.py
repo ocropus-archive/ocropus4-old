@@ -17,6 +17,7 @@ debug = int(os.environ.get("EXTRACT_SEG_DEBUG", "0"))
 acceptable_bboxes = list(
     map(float, os.environ.get("EXTRACT_SEG_ACCEPTABLE", "5 5 8000 8000").split())
 )
+max_aspect = 1.0
 
 app = typer.Typer()
 
@@ -56,7 +57,8 @@ def acceptable(bbox, minw=10, maxw=1000, minh=10, maxh=100):
     """Determine whether a bounding box has an acceptable size."""
     bw, bh = dims(bbox)
     w0, h0, w1, h1 = acceptable_bboxes
-    return bw >= w0 and bw <= w1 and bh >= h0 and bh <= h1
+    aspect = bh / max(float(bw), 0.001)
+    return aspect <= max_aspect and bw >= w0 and bw <= w1 and bh >= h0 and bh <= h1
 
 
 def marker_segmentation_target_for_bboxes(image, bboxes, labels=[1, 0, 2]):
@@ -199,7 +201,7 @@ def segmentation_patches(
     assert isinstance(seg, np.ndarray), type(seg)
     assert page.dtype == np.float32, page.dtype
     assert seg.dtype in [np.uint8, np.int32, np.int64], seg.dtype
-    assert np.amax(seg) <= 2 and np.amin(seg) >= 0
+    assert np.amax(seg) <= np.amax(labels) and np.amin(seg) >= 0
     assert page.ndim == 2
     assert page.shape == seg.shape
     extra["seg"] = seg
@@ -232,8 +234,11 @@ def hocr2seg(
     invert: str = "Auto",
     mask: str = "boxes",
     labels: str = "1, 0, 2",
+    acceptable: str = "5, 5, 9999, 9999",
 ):
     """Extract segmentation patches from src and send them to output."""
+    global acceptable_bboxes
+    acceptable_bboxes = eval(f"[{acceptable}]")
     labels = eval(f"[{labels}]")
     if show > 0:
         pylab.ion()

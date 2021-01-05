@@ -1,6 +1,13 @@
 *.egg-info
 *.orig
+*.pth
 *.pyc
+*.sqlite3
+*.tar
+*.old
+*.bak
+*.temp
+*.code-workspace
 .*
 OLD
 _*
@@ -12,6 +19,5 @@ outputs
 shards
 t
 temp
-venv
-*.sqlite3
 uw3
+venv
