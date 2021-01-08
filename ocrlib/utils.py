@@ -10,6 +10,8 @@ import torch
 
 debug = int(os.environ.get("UTILS_DEBUG", "0"))
 
+do_trace = int(os.environ.get("OCROTRACE", "0"))
+
 
 class Every(object):
     """Trigger an action every given number of seconds."""
@@ -342,6 +344,10 @@ def safe_randint(lo, hi):
     return randint(lo, max(lo + 1, hi))
 
 
+def get_patch(image, y0, y1, x0, x1, **kw):
+    return ndi.affine_transform(image, np.eye(2), offset=(y0, x0), output_shape=(y1 - y0, x1 - x0), **kw)
+
+
 def interesting_patches(
     indicator_image, threshold, images, r=256, n=50, trials=500, margin=0.1, jitter=5
 ):
@@ -364,14 +370,14 @@ def interesting_patches(
     for i in range(trials):
         if count >= n:
             break
-        y = safe_randint(0, h - r - 1)
-        x = safe_randint(0, w - r - 1)
+        y = safe_randint(-r // 2, h - r//2 - 1)
+        x = safe_randint(-r // 2, w - r//2 - 1)
         rx, ry = int(uniform(0.8, 1.2) * r), int(uniform(0.8, 1.2) * r)
         if margin < 1.0:
             dx, dy = int(rx * margin), int(ry * margin)
         else:
             dx, dy = int(margin), int(margin)
-        patch = indicator_image[y + dy : y + ry - dy, x + dx : x + rx - dx]
+        patch = get_patch(indicator_image, y + dy , y + ry - dy, x + dx , x + rx - dx, order=0)
         if np.sum(patch) < threshold:
             continue
         rect = [y, x, y + ry, x + rx]
@@ -379,6 +385,25 @@ def interesting_patches(
         y0, x0, y1, x1 = rect
         src = [(y0, x0), (y0, x1), (y1, x1), (y1, x0)]
         dst = [(0, 0), (0, r), (r, r), (r, 0)]
+        # print("*", src, dst)
         patches = get_affine_patches(dst, src, images)
         yield i, (x, y), patches
         count += 1
+
+
+def trace(f):
+    import functools
+
+    @functools.wraps(f)
+    def wrapped(*args, **kw):
+        global do_trace
+        name = f.__name__
+        args_summary = f"{args} {kw}"[:70]
+        if do_trace:
+            print(f"> {name} {args_summary}")
+        result = f(*args, **kw)
+        if do_trace:
+            print(f"< {name}")
+        return result
+
+    return wrapped
