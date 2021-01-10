@@ -438,6 +438,7 @@ def recognize_tar(
     extensions: str = "jpg;png;page.jpg;page.png",
     format: str = "text",
     maxrec: int = 999999999,
+    show: int = 0,
 ):
     print("# loading", conf, file=sys.stderr)
     with open(conf) as stream:

@@ -11,10 +11,10 @@ def make_model(noutput=4):
                 *combos.conv2d_block(32, 3, mp=2, repeat=2),
                 *combos.conv2d_block(48, 3, mp=2, repeat=2),
                 *combos.conv2d_block(96, 3, mp=2, repeat=2),
-                flex.BDHW_LSTM(50),
+                flex.BDHW_LSTM(100),
             )
         ),
-        flex.BDHW_LSTM(20),
+        flex.BDHW_LSTM(40),
         flex.Conv2d(noutput, 3, padding=1),
     )
     flex.shape_inference(model, (1, 1, 256, 256))
