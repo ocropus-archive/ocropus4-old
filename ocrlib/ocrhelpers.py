@@ -52,7 +52,7 @@ def array_infos(**kw):
     return " ".join(f"{k}={array_info(v)}" for k, v in sorted(list(kw.items())))
 
 
-def tshow(a, order, b=0, ax=None, **kw):
+def imshow_tensor(a, order, b=0, ax=None, **kw):
     """Display a torch array with imshow."""
     from matplotlib.pyplot import gca
 
