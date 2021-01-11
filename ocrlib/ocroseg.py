@@ -31,17 +31,6 @@ plt.rc("image", interpolation="nearest")
 app = typer.Typer()
 
 
-def nothing(*args, **kw):
-    """Do nothing (for callbacks)."""
-    return None
-
-
-def modimage(image, mod):
-    h, w = image.shape[-2:]
-    hm, wm = (h // mod) * mod, (w // mod) * mod
-    return image[..., :hm, :wm]
-
-
 ###
 # Loading and Preprocessing
 ###
