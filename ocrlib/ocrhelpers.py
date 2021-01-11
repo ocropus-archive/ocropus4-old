@@ -16,25 +16,6 @@ plt.rc("image", cmap="gray")
 plt.rc("image", interpolation="nearest")
 
 
-def RUN(x):
-    """Run a command and output the result."""
-    print(x, ":", os.popen(x).read().strip())
-
-
-def method(cls):
-    """A decorator allowing methods to be added to classes."""
-
-    def decorator(func):
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            return func(self, *args, **kwargs)
-
-        setattr(cls, func.__name__, wrapper)
-        return func
-
-    return decorator
-
-
 def ctc_decode(probs, sigma=1.0, threshold=0.7, kind=None, full=False):
     """A simple decoder for CTC-trained OCR recognizers.
 
