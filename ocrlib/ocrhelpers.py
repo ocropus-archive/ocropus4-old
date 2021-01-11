@@ -16,17 +16,6 @@ plt.rc("image", cmap="gray")
 plt.rc("image", interpolation="nearest")
 
 
-def curry(func):
-    def curried(*args, **kwargs):
-        if len(args) + len(kwargs) >= func.__code__.co_argcount:
-            return func(*args, **kwargs)
-        return lambda *args2, **kwargs2: curried(
-            *(args + args2), **dict(kwargs, **kwargs2)
-        )
-
-    return curried
-
-
 def RUN(x):
     """Run a command and output the result."""
     print(x, ":", os.popen(x).read().strip())
@@ -144,14 +133,6 @@ def epoch_and_loss(fname):
     loss = float(loss) * 1e-6
     return epoch, loss
 
-
-@curry
-def lossof(use_epoch, fname):
-    epoch, loss = epoch_and_loss(fname)
-    if use_epoch:
-        return -epoch
-    else:
-        return loss
 
 
 def softmax1(x):
