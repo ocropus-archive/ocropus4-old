@@ -48,10 +48,6 @@ def scale_to(a, shape, order=0):
     return result
 
 
-def cpu(t):
-    return t.detach().cpu()
-
-
 def modimage(image, mod):
     h, w = image.shape[-2:]
     hm, wm = (h // mod) * mod, (w // mod) * mod
@@ -366,7 +362,7 @@ class SegTrainer:
         if self.clip_gradient is not None:
             nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_gradient)
         self.optimizer.step()
-        self.last_batch = (cpu(inputs), cpu(targets), cpu(outputs))
+        self.last_batch = (inputs.detach().cpu(), targets.detach().cpu(), outputs.detach().cpu())
         self.nsamples += len(inputs)
         self.nbatches += 1
         return loss.detach().item()
