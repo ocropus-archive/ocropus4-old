@@ -36,13 +36,6 @@ def nothing(*args, **kw):
     return None
 
 
-def scale_to(a, shape, order=0):
-    """Scale a numpy array to a given target size."""
-    scales = np.array(a.shape, "f") / np.array(shape, "f")
-    result = ndi.affine_transform(a, np.diag(scales), output_shape=shape, order=order)
-    return result
-
-
 def modimage(image, mod):
     h, w = image.shape[-2:]
     hm, wm = (h // mod) * mod, (w // mod) * mod

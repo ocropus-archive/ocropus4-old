@@ -411,18 +411,6 @@ def trace(f):
     return wrapped
 
 
-def model_device(model):
-    """Find the device of a model."""
-    return next(model.parameters()).device
-
-
-def scale_to(a, shape):
-    """Scale a numpy array to a given target size."""
-    scales = np.array(a.shape, "f") / np.array(shape, "f")
-    result = ndi.affine_transform(a, np.diag(scales), output_shape=shape, order=1)
-    return result
-
-
 def imshow_tensor(a, order, b=0, ax=None, **kw):
     """Display a torch array with imshow."""
     from matplotlib.pyplot import gca
