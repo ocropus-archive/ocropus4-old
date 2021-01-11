@@ -8,6 +8,7 @@ import numpy as np
 import scipy.ndimage as ndi
 import torch
 from scipy import ndimage as ndi
+from torchmore import layers
 
 debug = int(os.environ.get("UTILS_DEBUG", "0"))
 
@@ -420,3 +421,21 @@ def scale_to(a, shape):
     scales = np.array(a.shape, "f") / np.array(shape, "f")
     result = ndi.affine_transform(a, np.diag(scales), output_shape=shape, order=1)
     return result
+
+
+def imshow_tensor(a, order, b=0, ax=None, **kw):
+    """Display a torch array with imshow."""
+    from matplotlib.pyplot import gca
+
+    ax = ax or gca()
+    if set(order) == set("BHWD"):
+        a = layers.reorder(a.detach().cpu(), order, "BHWD")[b].numpy()
+    elif set(order) == set("HWD"):
+        a = layers.reorder(a.detach().cpu(), order, "HWD").numpy()
+    elif set(order) == set("HW"):
+        a = layers.reorder(a.detach().cpu(), order, "HW").numpy()
+    else:
+        raise ValueError(f"{order}: unknown order")
+    if a.shape[-1] == 1:
+        a = a[..., 0]
+    ax.imshow(a, **kw)

@@ -32,53 +32,6 @@ def RUN(x):
     print(x, ":", os.popen(x).read().strip())
 
 
-def array_info(data):
-    if isinstance(data, np.ndarray):
-        tp = f"np:{data.dtype}"
-        lo = np.min(data)
-        med = np.mean(data)
-        hi = np.max(data)
-        shape = ",".join(map(str, data.shape))
-    else:
-        tp = f"t:{data.dtype}"
-        lo = float(data.min())
-        med = float(data.mean())
-        hi = float(data.max())
-        shape = ",".join(map(str, tuple(data.size())))
-    return f"<{tp} {shape} [{lo:.2e}:{med:.2e}:{hi:.2e}]>"
-
-
-def array_infos(**kw):
-    return " ".join(f"{k}={array_info(v)}" for k, v in sorted(list(kw.items())))
-
-
-def imshow_tensor(a, order, b=0, ax=None, **kw):
-    """Display a torch array with imshow."""
-    from matplotlib.pyplot import gca
-
-    ax = ax or gca()
-    if set(order) == set("BHWD"):
-        a = layers.reorder(a.detach().cpu(), order, "BHWD")[b].numpy()
-    elif set(order) == set("HWD"):
-        a = layers.reorder(a.detach().cpu(), order, "HWD").numpy()
-    elif set(order) == set("HW"):
-        a = layers.reorder(a.detach().cpu(), order, "HW").numpy()
-    else:
-        raise ValueError(f"{order}: unknown order")
-    if a.shape[-1] == 1:
-        a = a[..., 0]
-    ax.imshow(a, **kw)
-
-
-def asnp(a):
-    """Convert to numpy."""
-    if isinstance(a, torch.Tensor):
-        return a.detach().cpu().numpy()
-    else:
-        assert isinstance(a, np.ndarray)
-        return a
-
-
 def method(cls):
     """A decorator allowing methods to be added to classes."""
 

@@ -51,15 +51,6 @@ def model_device(model):
     return next(model.parameters()).device
 
 
-def asnp(a):
-    """Convert to numpy."""
-    if isinstance(a, torch.Tensor):
-        return a.detach().cpu().numpy()
-    else:
-        assert isinstance(a, np.ndarray)
-        return a
-
-
 def nothing(*args, **kw):
     """Ignore the parameters and return None."""
     return None
