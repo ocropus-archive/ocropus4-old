@@ -13,8 +13,8 @@ from torch.utils.data import DataLoader
 from webdataset import Dataset
 import torchmore.layers
 
-from . import slog
-from . import utils
+from . import slog, utils
+import ocrlib.utils
 
 
 logger = slog.NoLogger()
@@ -29,21 +29,6 @@ plt.rc("image", interpolation="nearest")
 
 
 app = typer.Typer()
-
-
-class Every(object):
-    """Do something every few seconds/minutes/hours."""
-
-    def __init__(self, interval):
-        self.interval = interval
-        self.last = 0
-
-    def __call__(self):
-        now = time.time()
-        if now - self.last >= self.interval:
-            self.last = now
-            return True
-        return False
 
 
 def nothing(*args, **kw):
@@ -217,7 +202,7 @@ def load_model(fname):
 # Logging
 ###
 
-mem_every = Every(60)
+mem_every = ocrlib.utils.Every(60)
 
 
 def memsum(trainer):
@@ -227,7 +212,7 @@ def memsum(trainer):
     print(torch.cuda.memory_summary())
 
 
-log_progress_every = Every(60)
+log_progress_every = ocrlib.utils.Every(60)
 
 
 def log_progress(trainer):
@@ -241,7 +226,7 @@ def log_progress(trainer):
     logger.flush()
 
 
-print_progress_every = Every(60)
+print_progress_every = ocrlib.utils.Every(60)
 
 
 def print_progress(self):

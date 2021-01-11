@@ -8,6 +8,7 @@ import numpy as np
 import scipy.ndimage as ndi
 import torch
 
+
 debug = int(os.environ.get("UTILS_DEBUG", "0"))
 
 do_trace = int(os.environ.get("OCROTRACE", "0"))
