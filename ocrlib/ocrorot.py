@@ -151,7 +151,7 @@ def make_loader(
     return DataLoader(training, batch_size=batch_size, num_workers=num_workers)
 
 
-def load_model(fname):
+def JUNK_load_model(fname):
     assert fname is not None, "provide model with --mdef or --load"
     assert os.path.exists(fname), f"{fname} does not exist"
     assert fname.endswith(".py"), f"{fname} must be a .py file"

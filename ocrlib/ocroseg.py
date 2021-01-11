@@ -23,11 +23,6 @@ plt.rc("image", cmap="gray")
 plt.rc("image", interpolation="nearest")
 
 
-###
-# Helpers
-###
-
-
 app = typer.Typer()
 
 

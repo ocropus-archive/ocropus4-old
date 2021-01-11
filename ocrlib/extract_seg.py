@@ -147,21 +147,6 @@ def bboxes_for_hocr(image, hocr, element="ocrx_word"):
     return bboxes
 
 
-def marker_segmentation_target_for_hocr(image, hocr, element="ocrx_word", labels=[1, 0, 2]):
-    bboxes = bboxes_for_hocr(image, hocr, element=element)
-    return marker_segmentation_target_for_bboxes(image, bboxes, labels=labels)
-
-
-def get_any(sample, key, default=None):
-    """Given a list of keys, return the first dictionary entry matching a key."""
-    if isinstance(key, str):
-        key = key.split(";")
-    for k in key:
-        if k in sample:
-            return sample[k]
-    return default
-
-
 def segmentation_patches(
     page,
     hocr,
