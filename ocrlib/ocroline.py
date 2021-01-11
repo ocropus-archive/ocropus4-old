@@ -94,8 +94,8 @@ def collate4ocr(samples):
 
 
 class LineTrainer:
-    """A class encapsulating the logic for training text line recognizers.
-    """
+    """A class encapsulating the logic for training text line recognizers."""
+
     def __init__(self, model, *, lr=1e-4, device=None, maxgrad=10.0):
         """A class encapsulating line training logic.
 
@@ -214,6 +214,7 @@ class LineTrainer:
 
 class LineRec:
     """A line recognizer (without training logic)."""
+
     def __init__(self, *, charset=Charset()):
         self.charset = charset
 
@@ -268,7 +269,10 @@ class LineRec:
             return self.charset.decode_str(decoded)
         else:
             h, w = image.shape
-            decoded = [(r / float(w), self.charset.decode_chr(c), p) for r, c, p in ctc_decode(self.probs[0], full=True)]
+            decoded = [
+                (r / float(w), self.charset.decode_chr(c), p)
+                for r, c, p in ctc_decode(self.probs[0], full=True)
+            ]
             return decoded
 
 
@@ -295,7 +299,7 @@ def normalize_simple(s):
     s = re.sub("\\\\[_^]+", "", s)
     s = re.sub("[{}]", "", s)
     s = re.sub(" +", " ", s)
-    s = re.sub("\"", "''", s)
+    s = re.sub('"', "''", s)
     return s.strip()
 
 

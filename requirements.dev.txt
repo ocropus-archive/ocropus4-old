@@ -3,5 +3,5 @@ coverage
 isort
 pytest-cov
 tk
-
+black
 bash_kernel
