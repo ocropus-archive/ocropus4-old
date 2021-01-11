@@ -36,11 +36,6 @@ def nothing(*args, **kw):
     return None
 
 
-def model_device(model):
-    """Find the device of a model."""
-    return next(model.parameters()).device
-
-
 def scale_to(a, shape, order=0):
     """Scale a numpy array to a given target size."""
     scales = np.array(a.shape, "f") / np.array(shape, "f")

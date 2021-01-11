@@ -52,13 +52,6 @@ def array_infos(**kw):
     return " ".join(f"{k}={array_info(v)}" for k, v in sorted(list(kw.items())))
 
 
-def scale_to(a, shape):
-    """Scale a numpy array to a given target size."""
-    scales = np.array(a.shape, "f") / np.array(shape, "f")
-    result = ndi.affine_transform(a, np.diag(scales), output_shape=shape, order=1)
-    return result
-
-
 def tshow(a, order, b=0, ax=None, **kw):
     """Display a torch array with imshow."""
     from matplotlib.pyplot import gca
