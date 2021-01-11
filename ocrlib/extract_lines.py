@@ -58,23 +58,28 @@ def hocr2images(
     pages = list(doc.xpath('//*[@class="ocr_page"]'))
     assert len(pages) == 1
     page = pages[0]
-    lines = page.xpath("//*[@class='%s']" % element)
+    lines = list(page.xpath("//*[@class='%s']" % element))
+    print(f"# got {len(lines)} elements of class {element}", file=sys.stderr)
     for line in lines:
         bbox = [int(x) for x in get_prop(line, "bbox").split()]
+        x0, y0, x1, y1 = bbox
         if padding is not None:
             h, w = image.shape[:2]
-            bbox[0] = max(bbox[0] - padding[0], 0)
-            bbox[1] = max(bbox[1] - padding[1], 0)
-            bbox[2] = min(bbox[2] + padding[2], w)
-            bbox[3] = min(bbox[3] + padding[3], h)
-        if bbox[0] > bbox[2] or bbox[1] >= bbox[3]:
+            x0 = max(x0 - padding[0], 0)
+            y0 = max(y0 - padding[1], 0)
+            x1 = min(x1 + padding[2], w)
+            y1 = min(y1 + padding[3], h)
+        if x0 >= x1 or y0 >= y1:
+            print(f"# bad bounding box {bbox}", file=sys.stderr)
             continue
-        if not acceptable_size(bbox):
+        bbox = x0, y0, x1, y1
+        if not acceptable_size((x0, y0, x1, y1)):
+            print(f"# acceptable_size({bbox}) is False", file=sys.stderr)
             continue
-        x0, y0, x1, y1 = bbox
         lineimage = image[y0:y1, x0:x1, ...]
         linetext = get_text(line)
         if acceptable_text is not None and not acceptable_text(linetext):
+            print(f"# bad text {linetext}", file=sys.stderr)
             continue
         yield lineimage, linetext, bbox
 
@@ -108,12 +113,13 @@ def acceptable_bounds(bounds=(50, 50, 9999, 300), max_aspect=0.9):
     def f(bbox):
         x0, y0, x1, y1 = bbox
         h, w = y1 - y0, x1 - x0
-        wlo, hlo, whi, hhi = bounds
-        if h < hlo or h > hhi:
+        lo_w, lo_h, hi_w, hi_h = bounds
+        if h < lo_h or h > hi_h:
             return False
-        if w < wlo or w > whi:
+        if w < lo_w or w > hi_w:
             return False
-        if h > max_aspect * w:
+        aspect = h / float(w)
+        if aspect > max_aspect:
             return False
         return True
 

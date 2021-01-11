@@ -218,7 +218,7 @@ def hocr2seg(
     debug=False,
     invert: str = "Auto",
     mask: str = "boxes",
-    labels: str = "1, 0, 2",
+    labels: str = "1, 2, 3",
     acceptable: str = "5, 5, 9999, 9999",
 ):
     """Extract segmentation patches from src and send them to output."""

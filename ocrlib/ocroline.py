@@ -51,10 +51,11 @@ def ctc_decode(probs, sigma=1.0, threshold=0.7, kind=None, full=False):
 
     :probs: d x l sequence classification output
     """
-    probs = asnp(probs.T)
-    assert (
-        abs(probs.sum(1) - 1) < 1e-4
-    ).all(), "input not normalized; did you apply .softmax()?"
+    if not isinstance(probs, np.ndarray):
+        probs = probs.detach().cpu().numpy()
+    probs = probs.T
+    delta = np.amax(abs(probs.sum(1) - 1))
+    assert delta < 1e-4, f"input not normalized ({delta}); did you apply .softmax()?"
     probs = ndi.gaussian_filter(probs, (sigma, 0))
     probs /= probs.sum(1)[:, newaxis]
     labels, n = ndi.label(probs[:, 0] < threshold)
@@ -102,7 +103,7 @@ class LineTrainer:
         :param lr: learning rate, defaults to 1e-4
         :param device: GPU used for training, defaults to None
         :param maxgrad: gradient clipping, defaults to 10.0
-        """        
+        """
         super().__init__()
         self.model = model
         self.device = None
@@ -224,7 +225,7 @@ class LineRec:
         mstate (model state)
 
         :param fname: source file name
-        """        
+        """
         result = torch.load(fname)
         print(f"# loaded {fname}", file=sys.stderr)
         self.set_model(result)

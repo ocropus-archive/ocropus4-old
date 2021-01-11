@@ -1,0 +1,16 @@
+#!/bin/bash
+
+docker run -ti \
+    --runtime=nvidia \
+    -u $(id -u):$(id -g) \
+    -v /etc/passwd:/etc/passwd \
+    -v /etc/group:/etc/group \
+    -v /tmp/.X11-unix:/tmp/.X11-unix \
+    -v $HOME:$HOME \
+    -v /sdata:/sdata \
+    -v $(pwd):/work \
+    -w /work \
+    --net host \
+    -e DISPLAY=$DISPLAY \
+    ocropus4 \
+    "$@"
