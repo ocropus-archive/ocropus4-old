@@ -16,54 +16,7 @@ plt.rc("image", cmap="gray")
 plt.rc("image", interpolation="nearest")
 
 
-def ctc_decode(probs, sigma=1.0, threshold=0.7, kind=None, full=False):
-    """A simple decoder for CTC-trained OCR recognizers.
-
-    :probs: d x l sequence classification output
-    """
-    probs = asnp(probs.T)
-    assert (
-        abs(probs.sum(1) - 1) < 1e-4
-    ).all(), "input not normalized; did you apply .softmax()?"
-    probs = ndi.gaussian_filter(probs, (sigma, 0))
-    probs /= probs.sum(1)[:, np.newaxis]
-    labels, n = ndi.label(probs[:, 0] < threshold)
-    mask = np.tile(labels[:, np.newaxis], (1, probs.shape[1]))
-    mask[:, 0] = 0
-    maxima = ndi.maximum_position(probs, mask, np.arange(1, np.amax(mask) + 1))
-    if not full:
-        return [c for r, c in sorted(maxima)]
-    else:
-        return [(r, c, probs[r, c]) for r, c in sorted(maxima)]
-
-
-def pack_for_ctc(seqs):
-    """Pack a list of sequences for nn.CTCLoss."""
-    allseqs = torch.cat(seqs).long()
-    alllens = torch.tensor([len(s) for s in seqs]).long()
-    return (allseqs, alllens)
-
-
-def collate4ocr(samples):
-    """Collate image+sequence samples into batches.
-
-    This returns an image batch and a compressed sequence batch using CTCLoss conventions.
-    """
-    images, seqs = zip(*samples)
-    images = [im.unsqueeze(2) if im.ndimension() == 2 else im for im in images]
-    w, h, d = map(max, zip(*[x.shape for x in images]))
-    result = torch.zeros((len(images), w, h, d), dtype=torch.float)
-    for i, im in enumerate(images):
-        w, h, d = im.shape
-        if im.dtype == torch.uint8:
-            im = im.float() / 255.0
-        result[i, :w, :h, :d] = im
-    allseqs = torch.cat(seqs).long()
-    alllens = torch.tensor([len(s) for s in seqs]).long()
-    return (result, (allseqs, alllens))
-
-
-device = None
+evice = None
 
 
 def get_maxcount(dflt=999999999):
