@@ -17,7 +17,7 @@ import typer
 from torch import nn, optim
 from torch.utils.data import DataLoader
 from torchmore import flex, layers
-from webdataset import Dataset
+import webdataset as wds
 import torch.fft
 
 from . import slog
@@ -145,9 +145,12 @@ def make_loader(
     shuffle=0,
     num_workers=4,
     pipe=rot_pipe,
+    limit=-1,
 ):
-    training = Dataset(urls).shuffle(shuffle).decode("l").to_tuple(extensions)
+    training = wds.Dataset(urls).shuffle(shuffle).decode("l").to_tuple(extensions)
     training.pipe(pipe)
+    if limit > 0:
+        training = wds.ResizedDataset(training, limit, limit)
     return DataLoader(training, batch_size=batch_size, num_workers=num_workers)
 
 
@@ -332,7 +335,10 @@ def train_rot(
     prefix: str = "rot",
     lrfun="0.3**(3+n//5000000)",
     output: str = "",
+    subset: str = "0, 999999999",
+    limit: int = -1,
 ):
+    subset = eval(f"({subset},)")
     logger = slog.Logger(fname=output, prefix=prefix)
     logger.sysinfo()
     logger.json("args", sys.argv)
@@ -340,7 +346,7 @@ def train_rot(
     model.cuda()
     print(model)
     urls = urls * replicate
-    training = make_loader(urls, shuffle=10000, num_workers=num_workers, batch_size=bs)
+    training = make_loader(urls, shuffle=10000, num_workers=num_workers, batch_size=bs, limit=limit)
     criterion = nn.CrossEntropyLoss().cuda()
     lrfun = eval(f"lambda n: {lrfun}")
     lr = lrfun(0)
@@ -349,7 +355,7 @@ def train_rot(
     losses = []
     last = time.time()
     for epoch in range(nepochs):
-        for patches, targets in training:
+        for patches, targets in islice(iter(training), *subset):
             patches = patches.type(torch.float).unsqueeze(1).cuda()
             optimizer.zero_grad()
             outputs = model(patches)
@@ -401,6 +407,7 @@ def train_skew(
     lrfun: str = "0.3**(3+n//5000000)",
     do_scale: bool = False,
     output: str = "",
+    limit: int = -1,
 ):
     """Trains either skew (=small rotation) or scale models."""
     logger = slog.Logger(fname=output, prefix=prefix)
@@ -415,7 +422,7 @@ def train_skew(
     else:
         pipe = partial(skew_pipe, abins=bins, alpha=maxval)
     training = make_loader(
-        urls, shuffle=10000, num_workers=num_workers, batch_size=bs, pipe=pipe,
+        urls, shuffle=10000, num_workers=num_workers, batch_size=bs, pipe=pipe, limit=limit,
     )
     criterion = nn.CrossEntropyLoss().cuda()
     lrfun = eval(f"lambda n: {lrfun}")
@@ -483,6 +490,7 @@ def train_scale(
     prefix: str = "scale",
     lrfun: str = "0.3**(3+n//5000000)",
     output: str = "",
+    limit: int = -1,
 ):
     return train_skew(
         urls,
@@ -496,6 +504,7 @@ def train_scale(
         lrfun=lrfun,
         output=output,
         do_scale=True,
+        limit=limit,
     )
 
 
