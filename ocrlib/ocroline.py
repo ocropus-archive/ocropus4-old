@@ -46,16 +46,6 @@ plt.rc("image", cmap="gray")
 plt.rc("image", interpolation="nearest")
 
 
-def model_device(model):
-    """Find the device of a model."""
-    return next(model.parameters()).device
-
-
-def nothing(*args, **kw):
-    """Ignore the parameters and return None."""
-    return None
-
-
 def ctc_decode(probs, sigma=1.0, threshold=0.7, kind=None, full=False):
     """A simple decoder for CTC-trained OCR recognizers.
 

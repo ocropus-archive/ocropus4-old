@@ -93,11 +93,6 @@ def collate4ocr(samples):
     return (result, (allseqs, alllens))
 
 
-def model_device(model):
-    """Find the device of a model."""
-    return next(model.parameters()).device
-
-
 device = None
 
 
