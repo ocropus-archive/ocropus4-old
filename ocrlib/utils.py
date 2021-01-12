@@ -3,16 +3,43 @@ import os
 import re
 import sys
 import time
+from functools import wraps
 
 import numpy as np
 import scipy.ndimage as ndi
 import torch
-from scipy import ndimage as ndi
 from torchmore import layers
 
 debug = int(os.environ.get("UTILS_DEBUG", "0"))
 
 do_trace = int(os.environ.get("OCROTRACE", "0"))
+
+
+def junk(message="don't use this function anymore"):
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kw):
+            raise Exception(message)
+        return wrapped
+    return decorator
+
+
+def trace(f):
+    import functools
+
+    @functools.wraps(f)
+    def wrapped(*args, **kw):
+        global do_trace
+        name = f.__name__
+        args_summary = f"{args} {kw}"[:70]
+        if do_trace:
+            print(f"> {name} {args_summary}")
+        result = f(*args, **kw)
+        if do_trace:
+            print(f"< {name}")
+        return result
+
+    return wrapped
 
 
 class Every(object):
@@ -83,46 +110,22 @@ def array_infos(**kw):
     return " ".join(f"{k}={array_info(v)}" for k, v in sorted(list(kw.items())))
 
 
-def find_best_model(base, ext="pth", which=1, reverse=False):
-    """Given a base directory, find the best model for model names that follow conventions."""
-    pattern = f"{base}-*.{ext}"
-    files = glob.glob(pattern)
-    assert len(files) > 0, f"no {pattern} found"
+def imshow_tensor(a, order, b=0, ax=None, **kw):
+    """Display a torch array with imshow."""
+    from matplotlib.pyplot import gca
 
-    def keyfn(fname):
-        match = re.search("(-[0-9]+)+[.]{ext}$", fname)
-        return match.group(which)
-
-    files = np.sort(files, key=keyfn, reverse=reverse)
-
-
-def model_name(base, ntrain, loss, nscale=1e-3, lscale=1e6):
-    ierr = int(lscale * loss)
-    itrain = int(nscale * ntrain)
-    return f"{base}-{itrain:08d}-{ierr:010d}.pth"
-
-
-def load_model(model, fname):
-    try:
-        model.load_state_dict(torch.load(fname))
-        print(f"# loaded state dict {type(model)}")
-    except Exception as e:
-        print(f"error loading {fname}", file=sys.stderr)
-        print(e, file=sys.stderr)
-        model = torch.load(fname)
-        print(f"# loaded whole model {type(model)}")
-    return model
-
-
-def int2rgb(image):
-    """Convert an int32 RGB image into a uint8 RGB image."""
-    result = np.array([image >> 16, image >> 8, image], dtype="uint8")
-    return result.transpose(1, 2, 0)
-
-
-def number_list(ctx, param, value):
-    """Convert a comma-separated list of numbers into a float list."""
-    return [float(x) for x in value.split(",")]
+    ax = ax or gca()
+    if set(order) == set("BHWD"):
+        a = layers.reorder(a.detach().cpu(), order, "BHWD")[b].numpy()
+    elif set(order) == set("HWD"):
+        a = layers.reorder(a.detach().cpu(), order, "HWD").numpy()
+    elif set(order) == set("HW"):
+        a = layers.reorder(a.detach().cpu(), order, "HW").numpy()
+    else:
+        raise ValueError(f"{order}: unknown order")
+    if a.shape[-1] == 1:
+        a = a[..., 0]
+    ax.imshow(a, **kw)
 
 
 def batch_images(*args):
@@ -391,39 +394,3 @@ def interesting_patches(
         patches = get_affine_patches(dst, src, images)
         yield i, (x, y), patches
         count += 1
-
-
-def trace(f):
-    import functools
-
-    @functools.wraps(f)
-    def wrapped(*args, **kw):
-        global do_trace
-        name = f.__name__
-        args_summary = f"{args} {kw}"[:70]
-        if do_trace:
-            print(f"> {name} {args_summary}")
-        result = f(*args, **kw)
-        if do_trace:
-            print(f"< {name}")
-        return result
-
-    return wrapped
-
-
-def imshow_tensor(a, order, b=0, ax=None, **kw):
-    """Display a torch array with imshow."""
-    from matplotlib.pyplot import gca
-
-    ax = ax or gca()
-    if set(order) == set("BHWD"):
-        a = layers.reorder(a.detach().cpu(), order, "BHWD")[b].numpy()
-    elif set(order) == set("HWD"):
-        a = layers.reorder(a.detach().cpu(), order, "HWD").numpy()
-    elif set(order) == set("HW"):
-        a = layers.reorder(a.detach().cpu(), order, "HW").numpy()
-    else:
-        raise ValueError(f"{order}: unknown order")
-    if a.shape[-1] == 1:
-        a = a[..., 0]
-    ax.imshow(a, **kw)

@@ -486,12 +486,12 @@ class Segmenter:
         ]
 
 
-class LineSegmenter(Segmenter):
-    def __init__(self, smooth=(1, 4)):
-        super().__init__(smooth=smooth)
+# class LineSegmenter(Segmenter):
+#     def __init__(self, smooth=(1, 4)):
+#         super().__init__(smooth=smooth)
 
-    def get_targets(self, classes):
-        return classes == 2
+#     def get_targets(self, classes):
+#         return classes == 2
 
 
 def extract_boxes(page, boxes, pad=5):

@@ -154,18 +154,6 @@ def make_loader(
     return DataLoader(training, batch_size=batch_size, num_workers=num_workers)
 
 
-def JUNK_load_model(fname):
-    assert fname is not None, "provide model with --mdef or --load"
-    assert os.path.exists(fname), f"{fname} does not exist"
-    assert fname.endswith(".py"), f"{fname} must be a .py file"
-    src = open(fname).read()
-    mod = slog.load_module("mmod", src)
-    assert "make_model" in dir(
-        mod
-    ), f"{fname} source does not define make_model function"
-    return mod, src
-
-
 class GlobalAvgPool2d(nn.Module):
     def __init__(self):
         super().__init__()

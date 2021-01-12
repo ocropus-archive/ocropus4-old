@@ -1,9 +1,14 @@
 # hocr=/sdata/ocropus4/uw3/uw3-hocr.tar
 hocr=./uw3-hocr.tar
 
-ocropus=vocropus
+ocropus=env python3="coverage run -a" vocropus
 
-# all: scaletrain.pth skewtrain.pth rottrain.pth segtrain.pth linetrain.pth
+OUTPUTS=uw3-lines.tar uw3-seg.tar scaletrain.sqlite3 skewtrain.sqlite3 rottrain.sqlite3 segtrain.sqlite3 linetrain.sqlite3
+
+all: $(OUTPUTS)
+
+clean:
+	rm -f $(OUTPUTS)
 
 %.pth: %.sqlite3
 	$(ocropus) slog getlast $< --output $@

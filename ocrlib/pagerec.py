@@ -155,7 +155,11 @@ class WordRecognizer:
         self.run_recognizers(image)
         result = []
         for i in range(len(self.boxes)):
-            r = dict(type=self.segment_type, box=self.boxes[i], output=self.outputs[i],)
+            r = dict(
+                type=self.segment_type,
+                box=self.boxes[i],
+                output=self.outputs[i],
+            )
             if return_segments:
                 r["image"] = self.segments[i]
             result.append(r)
@@ -270,7 +274,9 @@ class PageRecognizer:
 
     def __init__(self):
         self.wordrec = WordRecognizer()
-        self.lineseg = ocroseg.LineSegmenter()
+        self.lineseg = ocroseg.Segmenter(
+            smooth=(1, 4), get_targets=lambda classes: classes == 2
+        )
 
     def load_config(self, conf):
         conf = get_config(conf)
