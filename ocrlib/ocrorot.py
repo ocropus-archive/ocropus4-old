@@ -1,5 +1,4 @@
 import sys
-import os
 import random as pyrand
 from functools import partial
 from math import cos, exp, log, sin
@@ -21,6 +20,7 @@ import webdataset as wds
 import torch.fft
 
 from . import slog
+from . import utils
 
 logger = slog.NoLogger()
 
@@ -29,6 +29,14 @@ plt.rc("image", interpolation="nearest")
 
 
 app = typer.Typer()
+
+
+def binned(x, bins):
+    return np.argmin(np.abs(np.array(bins) - x))
+
+
+def unbinned(b, bins):
+    return bins[b]
 
 
 def get_patch(image, shape, center, m=np.eye(2), order=1):
@@ -99,11 +107,6 @@ def get_patches(
         yield result, (rangle // 90, a, s, inv)
 
 
-def binned(x, r, n):
-    assert x >= -r and x <= r
-    return np.clip(int(n * float(x + r) / 2.0 / r), 0, n)
-
-
 def rot_pipe(source, shape=(256, 256), alpha=0.1, scale=3.0):
     for (page,) in source:
         if np.mean(page) > 0.5:
@@ -120,22 +123,15 @@ def rot_pipe(source, shape=(256, 256), alpha=0.1, scale=3.0):
             yield torch.tensor(patch), r
 
 
-def skew_pipe(source, shape=(256, 256), alpha=0.1, scale=3.0, abins=20, sbins=20):
+def skew_pipe(source, shape=(256, 256), alpha=(-0.1, 0.1), scale=(0.5, 2.0)):
     for (page,) in source:
         if np.mean(page) > 0.5:
             page = 1.0 - page
         for patch, params in get_patches(
-            page,
-            shape=shape,
-            flip=False,
-            alpha=(-alpha, alpha),
-            scale=(1.0 / scale, scale),
-            degrade=True,
+            page, shape=shape, alpha=alpha, scale=scale, degrade=True
         ):
             _, a, s, _ = params
-            abin = binned(a, alpha, abins)
-            sbin = binned(log(s), log(scale), sbins)
-            yield torch.tensor(patch), abin, sbin
+            yield torch.tensor(patch), a, s
 
 
 def make_loader(
@@ -211,7 +207,7 @@ def make_model_rot(size=256):
     return model
 
 
-def make_model_skew(abuckets, size=256, r=5, nf=8, r2=5, nf2=4):
+def make_model_skew(noutput, size=256, r=5, nf=8, r2=5, nf2=4):
     B, D, H, W = (2, 128), (1, 512), size, size
     model = nn.Sequential(
         layers.CheckSizes(B, D, H, W),
@@ -226,8 +222,8 @@ def make_model_skew(abuckets, size=256, r=5, nf=8, r2=5, nf2=4):
         nn.Linear(nf2 * W * H, 128),
         nn.BatchNorm1d(128),
         nn.ReLU(),
-        nn.Linear(128, abuckets),
-        layers.CheckSizes(B, abuckets),
+        nn.Linear(128, noutput),
+        layers.CheckSizes(B, noutput),
     )
     return model
 
@@ -280,8 +276,8 @@ class PageSkew:
     def load_model(self, fname):
         with open(fname, "rb") as stream:
             loaded = torch.load(stream)
-        self.abins, self.arange = loaded.get("abins", 31), loaded.get("arange", 0.1)
-        self.model = make_model_skew(self.abins)
+        self.bins = loaded["bins"]
+        self.model = make_model_skew(noutput=len(self.bins))
         self.model.load_state_dict(loaded["mstate"])
         self.model.cuda()
         self.model.eval()
@@ -303,8 +299,48 @@ class PageSkew:
             self.last = torch.cat(result)
             self.hist = self.last.mean(0)
             bucket = int(self.last.mean(0).argmax())
-            r = self.abins // 2
-            return (bucket - r) * self.arange / r
+            return unbinned(bucket, self.bins)
+        finally:
+            self.model.cpu()
+
+    def deskew(self, page):
+        self.angle = self.skew(page) * 180.0 / np.pi
+        return ndi.rotate(page, self.angle, order=1)
+
+
+class PageScale:
+    def __init__(self, fname=None, check=True):
+        if fname is not None:
+            self.load_model(fname)
+        self.check = check
+
+    def load_model(self, fname):
+        with open(fname, "rb") as stream:
+            loaded = torch.load(stream)
+        self.bins = loaded["bins"]
+        self.model = make_model_skew(len(self.bins))
+        self.model.load_state_dict(loaded["mstate"])
+        self.model.cuda()
+        self.model.eval()
+
+    def skew(self, page, npatches=200, bs=50):
+        if self.check:
+            assert np.mean(page) < 0.5
+        try:
+            self.model.cuda()
+            patches = get_patches(page, npatches=npatches)
+            result = []
+            while True:
+                batch = [x[0] for x in islice(patches, bs)]
+                if len(batch) == 0:
+                    break
+                inputs = torch.tensor(batch).unsqueeze(1).cuda()
+                outputs = self.model(inputs).softmax(1).cpu().detach()
+                result.append(outputs)
+            self.last = torch.cat(result)
+            self.hist = self.last.mean(0)
+            bucket = int(self.last.mean(0).argmax())
+            return unbinned(bucket, self.bins)
         finally:
             self.model.cpu()
 
@@ -323,10 +359,8 @@ def train_rot(
     prefix: str = "rot",
     lrfun="0.3**(3+n//5000000)",
     output: str = "",
-    subset: str = "0, 999999999",
-    limit: int = -1,
+    limit: int = 999999999,
 ):
-    subset = eval(f"({subset},)")
     logger = slog.Logger(fname=output, prefix=prefix)
     logger.sysinfo()
     logger.json("args", sys.argv)
@@ -334,7 +368,9 @@ def train_rot(
     model.cuda()
     print(model)
     urls = urls * replicate
-    training = make_loader(urls, shuffle=10000, num_workers=num_workers, batch_size=bs, limit=limit)
+    training = make_loader(
+        urls, shuffle=10000, num_workers=num_workers, batch_size=bs, limit=limit
+    )
     criterion = nn.CrossEntropyLoss().cuda()
     lrfun = eval(f"lambda n: {lrfun}")
     lr = lrfun(0)
@@ -342,8 +378,20 @@ def train_rot(
     count = 0
     losses = []
     last = time.time()
+
+    def save():
+        state = dict(
+            mdef="",
+            msrc="",
+            mstate=model.state_dict(),
+            ostate=optimizer.state_dict(),
+        )
+        avgloss = np.mean(losses[-100:])
+        logger.save("model", state, scalar=avgloss, step=count)
+        logger.flush()
+
     for epoch in range(nepochs):
-        for patches, targets in islice(iter(training), *subset):
+        for patches, targets in islice(iter(training), limit):
             patches = patches.type(torch.float).unsqueeze(1).cuda()
             optimizer.zero_grad()
             outputs = model(patches)
@@ -364,22 +412,20 @@ def train_rot(
             if len(losses) % 100 == 0:
                 avgloss = np.mean(losses[-100:])
                 logger.scalar(
-                    "train/loss", avgloss, step=count, json=dict(lr=lr),
+                    "train/loss",
+                    avgloss,
+                    step=count,
+                    json=dict(lr=lr),
                 )
                 logger.flush()
             if time.time() - last > 900.0:
-                state = dict(
-                    mdef="",
-                    msrc="",
-                    mstate=model.state_dict(),
-                    ostate=optimizer.state_dict(),
-                )
-                avgloss = np.mean(losses[-100:])
-                logger.save("model", state, scalar=avgloss, step=count)
+                save()
                 last = time.time()
             if lrfun(count) != lr:
                 lr = lrfun(count)
                 optimizer = optim.SGD(model.parameters(), lr=lr)
+    print("last save")
+    save()
 
 
 @app.command()
@@ -387,8 +433,9 @@ def train_skew(
     urls: List[str],
     nepochs: int = 100,
     num_workers: int = 8,
-    maxval: float = 0.1,
-    bins: int = 31,
+    bins: str = "np.linspace(-0.1, 0.1, 21)",
+    alpha: str = "-0.1, 0.1",
+    scale: str = "0.5, 2.0",
     replicate: int = 1,
     bs: int = 64,
     prefix: str = "skew",
@@ -398,19 +445,27 @@ def train_skew(
     limit: int = -1,
 ):
     """Trains either skew (=small rotation) or scale models."""
+
+    scale = eval(f"[{scale}]")
+    alpha = eval(f"[{alpha}]")
+    bins = eval(bins)
     logger = slog.Logger(fname=output, prefix=prefix)
     logger.sysinfo()
     logger.json("args", sys.argv)
-    model = make_model_skew(bins)
+    model = make_model_skew(len(bins))
     model.cuda()
     print(model)
     urls = urls * replicate
-    if do_scale:
-        pipe = partial(skew_pipe, sbins=bins, scale=maxval)
-    else:
-        pipe = partial(skew_pipe, abins=bins, alpha=maxval)
+
+    pipe = partial(skew_pipe, scale=scale, alpha=alpha)
+
     training = make_loader(
-        urls, shuffle=10000, num_workers=num_workers, batch_size=bs, pipe=pipe, limit=limit,
+        urls,
+        shuffle=10000,
+        num_workers=num_workers,
+        batch_size=bs,
+        pipe=pipe,
+        limit=limit,
     )
     criterion = nn.CrossEntropyLoss().cuda()
     lrfun = eval(f"lambda n: {lrfun}")
@@ -419,9 +474,23 @@ def train_skew(
     count = 0
     losses = []
     last = time.time()
+
+    def save():
+        state = dict(
+            mdef="",
+            msrc="",
+            mstate=model.state_dict(),
+            ostate=optimizer.state_dict(),
+        )
+        state["bins"] = bins
+        avgloss = np.mean(losses[-100:])
+        logger.save("model", state, scalar=avgloss, step=count)
+        logger.flush()
+
     for epoch in range(nepochs):
         for patches, angles, scales in training:
             targets = angles if not do_scale else scales
+            targets = torch.tensor([binned(float(t), bins) for t in targets])
             patches = patches.type(torch.float).unsqueeze(1).cuda()
             optimizer.zero_grad()
             outputs = model(patches)
@@ -442,28 +511,19 @@ def train_skew(
             if len(losses) % 100 == 0:
                 avgloss = np.mean(losses[-100:])
                 logger.scalar(
-                    "train/loss", avgloss, step=count, json=dict(lr=lr),
+                    "train/loss",
+                    avgloss,
+                    step=count,
+                    json=dict(lr=lr),
                 )
                 logger.flush()
             if time.time() - last > 900.0:
-                state = dict(
-                    mdef="",
-                    msrc="",
-                    mstate=model.state_dict(),
-                    ostate=optimizer.state_dict(),
-                )
-                if do_scale:
-                    state["srange"] = maxval
-                    state["sbins"] = bins
-                else:
-                    state["arange"] = maxval
-                    state["abins"] = bins
-                avgloss = np.mean(losses[-100:])
-                logger.save("model", state, scalar=avgloss, step=count)
+                save()
                 last = time.time()
             if lrfun(count) != lr:
                 lr = lrfun(count)
                 optimizer = optim.SGD(model.parameters(), lr=lr)
+        save()
 
 
 @app.command()
@@ -471,8 +531,9 @@ def train_scale(
     urls: List[str],
     nepochs: int = 100,
     num_workers: int = 8,
-    maxval: float = 3.0,
-    bins: int = 31,
+    alpha: str = "-0.1, 0.1",
+    scale: str = "0.5, 2.0",
+    bins: str = "np.linspace(0.5, 2.0, 21)",
     replicate: int = 1,
     bs: int = 64,
     prefix: str = "scale",
@@ -484,8 +545,9 @@ def train_scale(
         urls,
         nepochs=nepochs,
         num_workers=num_workers,
-        maxval=maxval,
         bins=bins,
+        alpha=alpha,
+        scale=scale,
         replicate=replicate,
         bs=bs,
         prefix=prefix,
@@ -494,6 +556,25 @@ def train_scale(
         do_scale=True,
         limit=limit,
     )
+
+
+@app.command()
+def predict(
+    urls: List[str],
+    rotmodel: str = "",
+    skewmodel: str = "",
+    extensions: str = "page.jpg;page.png;jpg;png",
+    limit: int = 999999999,
+    invert: str = "Auto",
+):
+    rotest = PageOrientation(rotmodel) if rotmodel != "" else None
+    skewest = PageSkew(skewmodel) if skewmodel != "" else None
+    dataset = wds.Dataset(urls).decode("l").to_tuple("__key__ " + extensions)
+    for key, image in islice(dataset, limit):
+        image = utils.autoinvert(image, invert)
+        rot = rotest.orientation(image) if rotest else None
+        skew = skewest.skew(image) if skewest else None
+        print(key, image.shape, rot, skew)
 
 
 @app.command()

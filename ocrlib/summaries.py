@@ -176,7 +176,7 @@ def make_tensorboard_style_summary(dest):
         from torch.utils import tensorboard
 
         if os.path.exists(path):
-            new_directory = make_unique(path)
+            new_directory = utils.make_unique(path)
             print(f"# {path} already exists, using {new_directory} instead")
             path = new_directory
         os.makedirs(path, exist_ok=True)

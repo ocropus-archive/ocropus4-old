@@ -9,6 +9,7 @@ from lxml import etree
 from matplotlib import pylab
 import scipy.ndimage as ndi
 
+import ocrlib.patches
 from . import utils
 
 import typer
@@ -148,7 +149,7 @@ def patches_of_segmentation(
     assert page.ndim == 2
     assert page.shape == seg.shape
     patches = list(
-        utils.interesting_patches(
+        ocrlib.patches.interesting_patches(
             np.array(seg >= label_threshold, "i"),
             threshold,
             [page, seg],

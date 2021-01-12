@@ -13,6 +13,8 @@ from torch.utils.data import DataLoader
 from webdataset import Dataset
 import torchmore.layers
 
+import ocrlib.patches
+from ocrlib.utils import normalize_image
 from . import slog, utils
 import ocrlib.utils
 
@@ -84,7 +86,7 @@ def augmentation_gray(sample):
     assert target.dtype in (np.uint8, np.int16, np.int32, np.int64)
     assert image.shape[:2] == target.shape[:2]
     if np.random.uniform() > 0.5:
-        image = utils.simple_bg_fg(
+        image = simple_bg_fg(
             image,
             amplitude=np.random.uniform(0.01, 0.3),
             imsigma=np.random.uniform(0.01, 2.0),
@@ -111,15 +113,15 @@ def augmentation_page(sample, max_distortion=0.05):
         np.random.uniform(-d, d),
         image.shape[1] + np.random.uniform(-d, d),
     ]
-    image = utils.get_affine_patch(image, image.shape[:2], src, order=1)
+    image = ocrlib.patches.get_affine_patch(image, image.shape[:2], src, order=1)
     if np.random.uniform() > 0.5:
-        image = utils.simple_bg_fg(
+        image = simple_bg_fg(
             image,
             amplitude=np.random.uniform(0.01, 0.3),
             imsigma=np.random.uniform(0.01, 2.0),
             sigma=np.random.uniform(0.5, 10.0),
         )
-    target = utils.get_affine_patch(target, target.shape[:2], src, order=0)
+    target = ocrlib.patches.get_affine_patch(target, target.shape[:2], src, order=0)
     return image, target
 
 
@@ -621,3 +623,13 @@ def noop():
 
 if __name__ == "__main__":
     app()
+
+
+def simple_bg_fg(binimage, amplitude=0.3, imsigma=1.0, sigma=3.0):
+    """Simple noisy grascale image from a binary image."""
+    bg = np.random.uniform(size=binimage.shape)
+    bg = amplitude * normalize_image(ndi.gaussian_filter(bg, sigma))
+    fg = np.random.uniform(size=binimage.shape)
+    fg = 1.0 - amplitude * normalize_image(ndi.gaussian_filter(bg, sigma))
+    mask = normalize_image(ndi.gaussian_filter(binimage, imsigma))
+    return mask * fg + (1.0 - mask) * bg

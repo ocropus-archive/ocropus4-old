@@ -1,17 +1,22 @@
 # hocr=/sdata/ocropus4/uw3/uw3-hocr.tar
 hocr=./uw3-hocr.tar
 
-ocropus=env python3="coverage run -a" vocropus
+# ocropus=env python3="coverage run -a" vocropus
+ocropus=vocropus
 
-OUTPUTS=uw3-lines.tar uw3-seg.tar scaletrain.sqlite3 skewtrain.sqlite3 rottrain.sqlite3 segtrain.sqlite3 linetrain.sqlite3
+OUTPUTS=uw3-lines.tar uw3-seg.tar scaletrain.sqlite3 skewtrain.sqlite3 rottrain.sqlite3 segtrain.sqlite3 linetrain.sqlite3 deskew.out
 
 all: $(OUTPUTS)
 
 clean:
 	rm -f $(OUTPUTS)
+	rm -f *.pth
 
 %.pth: %.sqlite3
 	$(ocropus) slog getlast $< --output $@
+
+deskew.out: rottrain.pth skewtrain.pth
+	$(ocropus) ocrorot predict $(hocr) --limit 10 --rotmodel rottrain.pth --skewmodel skewtrain.pth
 
 scaletrain.sqlite3:
 	$(ocropus) ocrorot train-scale $(hocr) --output scaletrain.sqlite3.temp --nepochs 3 --replicate 8 --num-workers 8 --limit 50
