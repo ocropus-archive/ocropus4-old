@@ -30,9 +30,11 @@ def make_module(text, module_name=None):
         stream.flush()
         return load_module(stream.name, module_name=module_name)
 
+
 #
 # File I/O
 #
+
 
 def read_file(fname):
     """Read a file into memory."""
@@ -43,6 +45,7 @@ def read_file(fname):
 #
 # Loading/Saving Structures
 #
+
 
 def torch_dumps(obj):
     """Dump a data structure to a string using torch.save."""
@@ -71,10 +74,12 @@ def make_model(src, *args, fun_name="make_model", **kw):
     model.margs_ = (args, kw)
     return model
 
+
 def load_or_make_model(fname, *args, load_best=False, fun_name="make_model", **kw):
     """Load a model from ".pth" file or instantiate it from a ".py" file."""
     if fname.endswith(".sqlite3"):
         from . import slog
+
         logger = slog.Logger(fname)
         if load_best:
             state = logger.load_best()
@@ -107,7 +112,9 @@ def save_model_as_dict(model, fname, step=None):
     """Save a PyTorch model (parameters and source code) to a file."""
     if step is None:
         step = getattr(model, "step_", 0)
-    state = dict(msrc=model.msrc_, margs=model.margs_, mstate=model.state_dict(), step=step)
+    state = dict(
+        msrc=model.msrc_, margs=model.margs_, mstate=model.state_dict(), step=step
+    )
     torch.save(state, fname)
 
 
@@ -116,5 +123,3 @@ def dump_model_as_dict(model):
     buf = io.BytesIO()
     save_model_as_dict(model, buf)
     return buf.getbuffer()
-
-
