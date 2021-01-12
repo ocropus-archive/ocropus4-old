@@ -10,6 +10,7 @@ import webdataset as wds
 import torch
 from torch import nn, optim
 from torch.utils import data
+from itertools import islice
 
 from . import slog
 from . import loading
@@ -88,7 +89,7 @@ class BinTrainer:
         self.model = loading.load_or_make_model(mname)
 
     def save(self, mname):
-        loading.save_model(self.model, mname)
+        loading.save_model_as_dict(self.model, mname)
 
     def to(self, device="cpu"):
         self.device = device
@@ -173,11 +174,12 @@ def generate(
     output: str = None,
     ngen: int = 1,
     extensions: str = "png;jpg;jpeg;page.png;page.jpg;image.png;image.jpg",
+    limit: int = 999999999,
 ):
-    """Given binary image training data, generate artificial binarization data using ocrogen."""
+    """Given binary image training data, generate artificial binarization data using ocrodeg."""
     ds = wds.Dataset(input).decode("l").rename(__key__="__key__", image=extensions)
     sink = wds.TarWriter(output)
-    for i, sample in enumerate(ds):
+    for i, sample in enumerate(islice(ds, limit)):
         key = sample["__key__"]
         print(i, key)
         for v in range(ngen):

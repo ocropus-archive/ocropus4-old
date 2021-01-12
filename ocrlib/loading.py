@@ -3,24 +3,9 @@ import torch
 import io
 import tempfile
 
-
-def torch_dumps(obj):
-    """Dump a data structure to a string using torch.save."""
-    buf = io.BytesIO()
-    torch.save(obj, buf)
-    return buf.getbuffer()
-
-
-def torch_loads(buf):
-    """Load a data structure from a string using torch.load."""
-    return torch.load(io.BytesIO(buf))
-
-
-def read_file(fname):
-    """Read a file into memory."""
-    with open(fname) as stream:
-        return stream.read()
-
+#
+# Modules
+#
 
 num_modules = 0
 
@@ -45,6 +30,36 @@ def make_module(text, module_name=None):
         stream.flush()
         return load_module(stream.name, module_name=module_name)
 
+#
+# File I/O
+#
+
+def read_file(fname):
+    """Read a file into memory."""
+    with open(fname) as stream:
+        return stream.read()
+
+
+#
+# Loading/Saving Structures
+#
+
+def torch_dumps(obj):
+    """Dump a data structure to a string using torch.save."""
+    buf = io.BytesIO()
+    torch.save(obj, buf)
+    return buf.getbuffer()
+
+
+def torch_loads(buf):
+    """Load a data structure from a string using torch.load."""
+    return torch.load(io.BytesIO(buf))
+
+
+#
+# Model Creation/Loading
+#
+
 
 def make_model(src, *args, fun_name="make_model", **kw):
     """Instantiate a PyTorch model from Python source code."""
@@ -55,22 +70,6 @@ def make_model(src, *args, fun_name="make_model", **kw):
     model.msrc_ = src
     model.margs_ = (args, kw)
     return model
-
-
-def save_model(model, fname, step=None):
-    """Save a PyTorch model (parameters and source code) to a file."""
-    if step is None:
-        step = getattr(model, "step_", 0)
-    state = dict(msrc=model.msrc_, margs=model.margs_, mstate=model.state_dict(), step=step)
-    torch.save(state, fname)
-
-
-def dump_model(model):
-    """Dump a model to a string using torch.save."""
-    buf = io.BytesIO()
-    save_model(model, buf)
-    return buf.getbuffer()
-
 
 def load_or_make_model(fname, *args, load_best=False, fun_name="make_model", **kw):
     """Load a model from ".pth" file or instantiate it from a ".py" file."""
@@ -97,3 +96,25 @@ def load_or_make_model(fname, *args, load_best=False, fun_name="make_model", **k
         model = make_model(fname, *args, **kw)
         model.step_ = 0
         return model
+
+
+#
+# Model Saving
+#
+
+
+def save_model_as_dict(model, fname, step=None):
+    """Save a PyTorch model (parameters and source code) to a file."""
+    if step is None:
+        step = getattr(model, "step_", 0)
+    state = dict(msrc=model.msrc_, margs=model.margs_, mstate=model.state_dict(), step=step)
+    torch.save(state, fname)
+
+
+def dump_model_as_dict(model):
+    """Dump a model to a string using torch.save."""
+    buf = io.BytesIO()
+    save_model_as_dict(model, buf)
+    return buf.getbuffer()
+
+

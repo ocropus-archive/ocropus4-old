@@ -15,6 +15,13 @@ clean:
 %.pth: %.sqlite3
 	$(ocropus) slog getlast $< --output $@
 
+
+bintrain.sqlite3: uw3-gray.tar
+	$(ocropus) ocrobin train uw3-gray.tar --num-workers 1 
+
+uw3-gray.tar: $(hocr)
+	$(ocropus) ocrobin generate $(hocr) --output uw3-gray.tar --limit 20
+
 deskew.out: rottrain.pth skewtrain.pth
 	$(ocropus) ocrorot predict $(hocr) --limit 10 --rotmodel rottrain.pth --skewmodel skewtrain.pth
 
