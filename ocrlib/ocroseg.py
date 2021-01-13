@@ -14,8 +14,8 @@ from webdataset import Dataset
 import torchmore.layers
 
 import ocrlib.patches
-from ocrlib.utils import normalize_image
-from . import slog, utils
+from . import slog
+from . import utils
 import ocrlib.utils
 
 
@@ -31,6 +31,16 @@ app = typer.Typer()
 ###
 # Loading and Preprocessing
 ###
+
+
+def simple_bg_fg(binimage, amplitude=0.3, imsigma=1.0, sigma=3.0):
+    """Simple noisy grascale image from a binary image."""
+    bg = np.random.uniform(size=binimage.shape)
+    bg = amplitude * utils.normalize_image(ndi.gaussian_filter(bg, sigma))
+    fg = np.random.uniform(size=binimage.shape)
+    fg = 1.0 - amplitude * utils.normalize_image(ndi.gaussian_filter(bg, sigma))
+    mask = utils.normalize_image(ndi.gaussian_filter(binimage, imsigma))
+    return mask * fg + (1.0 - mask) * bg
 
 
 def preproc(scale, extra_target_scale=1.0, mod=16):
@@ -336,7 +346,11 @@ class SegTrainer:
         if self.clip_gradient is not None:
             nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_gradient)
         self.optimizer.step()
-        self.last_batch = (inputs.detach().cpu(), targets.detach().cpu(), outputs.detach().cpu())
+        self.last_batch = (
+            inputs.detach().cpu(),
+            targets.detach().cpu(),
+            outputs.detach().cpu(),
+        )
         self.nsamples += len(inputs)
         self.nbatches += 1
         return loss.detach().item()
@@ -417,7 +431,9 @@ class Segmenter:
         self.preproc.eval()
 
     def load_from_save(
-        self, fname, args={},
+        self,
+        fname,
+        args={},
     ):
         result = torch.load(fname)
         mod = slog.load_module("model", result["msrc"])
@@ -570,7 +586,10 @@ def train(
         num_workers=num_workers,
         **kw,
     )
-    images, targets, = next(iter(training_dl))
+    (
+        images,
+        targets,
+    ) = next(iter(training_dl))
     if test is not None:
         kw = eval(f"dict({test_args})")
         test_dl = make_loader(test, batch_size=test_bs, **kw)
@@ -623,13 +642,3 @@ def noop():
 
 if __name__ == "__main__":
     app()
-
-
-def simple_bg_fg(binimage, amplitude=0.3, imsigma=1.0, sigma=3.0):
-    """Simple noisy grascale image from a binary image."""
-    bg = np.random.uniform(size=binimage.shape)
-    bg = amplitude * normalize_image(ndi.gaussian_filter(bg, sigma))
-    fg = np.random.uniform(size=binimage.shape)
-    fg = 1.0 - amplitude * normalize_image(ndi.gaussian_filter(bg, sigma))
-    mask = normalize_image(ndi.gaussian_filter(binimage, imsigma))
-    return mask * fg + (1.0 - mask) * bg

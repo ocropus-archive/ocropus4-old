@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 from functools import wraps
 
@@ -16,7 +17,9 @@ def junk(message="don't use this function anymore"):
         @wraps(f)
         def wrapped(*args, **kw):
             raise Exception(message)
+
         return wrapped
+
     return decorator
 
 
@@ -36,6 +39,17 @@ def trace(f):
         return result
 
     return wrapped
+
+
+def enumerated(source, start=0, limit=999999999999, message=None):
+    """Like enumerate, but with limit and message."""
+    count = 0
+    for x in source:
+        if count >= limit:
+            if message is not None:
+                print(message, file=sys.stderr)
+            return
+        yield count, x
 
 
 class Every(object):
@@ -192,5 +206,3 @@ def normalize_image(image, lo=0.1):
     image = image.astype(np.float32) - np.amin(image)
     image /= max(lo, np.amax(image))
     return image
-
-
