@@ -4,10 +4,13 @@ hocr=./uw3-hocr.tar
 # ocropus=env python3="coverage run -a" vocropus
 ocropus=vocropus
 
-OUTPUTS=uw3-lines.tar uw3-seg.tar \
-	scaletrain.sqlite3 skewtrain.sqlite3 rottrain.sqlite3 segtrain.sqlite3 linetrain.sqlite3 bintrain.sqlite3 \
+OUTPUTS=\
+	scaletrain.sqlite3 skewtrain.sqlite3 rottrain.sqlite3 \
+	segtrain.sqlite3 linetrain.sqlite3 bintrain.sqlite3 \
 	uw3-binarized.tar \
 	deskew.out lines.out
+
+# uw3-lines.tar uw3-seg.tar
 
 all: $(OUTPUTS)
 

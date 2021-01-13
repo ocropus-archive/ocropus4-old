@@ -11,11 +11,10 @@ import numpy as np
 import ocrodeg
 import scipy.ndimage as ndi
 import torch
-import torch.nn.functional as F
 import typer
-from torch import nn, optim
+from torch import nn
+from torch import optim
 from torch.utils.data import DataLoader
-from torchmore import flex, layers
 import webdataset as wds
 import torch.fft
 
@@ -151,97 +150,88 @@ def make_loader(
     return DataLoader(training, batch_size=batch_size, num_workers=num_workers)
 
 
-class GlobalAvgPool2d(nn.Module):
-    def __init__(self):
-        super().__init__()
+# class GlobalAvgPool2d(nn.Module):
+#     def __init__(self):
+#         super().__init__()
 
-    def forward(self, x):
-        return F.adaptive_avg_pool2d(x, (1, 1))[:, :, 0, 0]
-
-
-def block(s, r, repeat=2):
-    result = []
-    for i in range(repeat):
-        result += [flex.Conv2d(8, r, padding=r // 2), flex.BatchNorm2d(), nn.ReLU()]
-    result += [nn.MaxPool2d(2)]
-    return result
+#     def forward(self, x):
+#         return F.adaptive_avg_pool2d(x, (1, 1))[:, :, 0, 0]
 
 
-class Spectrum(nn.Module):
-    def __init__(self, nonlin="logplus1"):
-        nn.Module.__init__(self)
-        self.nonlin = nonlin
-
-    def forward(self, x):
-        inputs = torch.stack([x, torch.zeros_like(x)], dim=-1)
-        mag = torch.fft.fftn(torch.view_as_complex(inputs), dim=(2, 3)).abs()
-        if self.nonlin is None:
-            return mag
-        elif self.nonlin == "logplus1":
-            return (1.0 + mag).log()
-        elif self.nonlin == "sqrt":
-            return mag ** 0.5
-        else:
-            raise ValueError(f"{self.nonlin}: unknown nonlinearity")
-
-    def __repr__(self):
-        return f"Spectrum-{self.nonlin}"
+# def block(s, r, repeat=2):
+#     result = []
+#     for i in range(repeat):
+#         result += [flex.Conv2d(8, r, padding=r // 2), flex.BatchNorm2d(), nn.ReLU()]
+#     result += [nn.MaxPool2d(2)]
+#     return result
 
 
-def make_model_rot(size=256):
-    r = 3
-    B, D, H, W = (2, 128), (1, 512), size, size
-    model = nn.Sequential(
-        layers.CheckSizes(B, D, H, W),
-        *block(32, r),
-        *block(64, r),
-        *block(96, r),
-        *block(128, r),
-        GlobalAvgPool2d(),
-        flex.Linear(64),
-        nn.BatchNorm1d(64),
-        nn.ReLU(),
-        flex.Linear(4),
-        layers.CheckSizes(B, 4),
-    )
-    flex.shape_inference(model, (2, 1, size, size))
-    return model
+# class Spectrum(nn.Module):
+#     def __init__(self, nonlin="logplus1"):
+#         nn.Module.__init__(self)
+#         self.nonlin = nonlin
+
+#     def forward(self, x):
+#         inputs = torch.stack([x, torch.zeros_like(x)], dim=-1)
+#         mag = torch.fft.fftn(torch.view_as_complex(inputs), dim=(2, 3)).abs()
+#         if self.nonlin is None:
+#             return mag
+#         elif self.nonlin == "logplus1":
+#             return (1.0 + mag).log()
+#         elif self.nonlin == "sqrt":
+#             return mag ** 0.5
+#         else:
+#             raise ValueError(f"{self.nonlin}: unknown nonlinearity")
+
+#     def __repr__(self):
+#         return f"Spectrum-{self.nonlin}"
 
 
-def make_model_skew(noutput, size=256, r=5, nf=8, r2=5, nf2=4):
-    B, D, H, W = (2, 128), (1, 512), size, size
-    model = nn.Sequential(
-        layers.CheckSizes(B, D, H, W),
-        nn.Conv2d(1, nf, r, padding=r // 2),
-        nn.BatchNorm2d(nf),
-        nn.ReLU(),
-        Spectrum(),
-        nn.Conv2d(nf, nf2, r2, padding=r2 // 2),
-        nn.BatchNorm2d(nf2),
-        nn.ReLU(),
-        layers.Reshape(0, [1, 2, 3]),
-        nn.Linear(nf2 * W * H, 128),
-        nn.BatchNorm1d(128),
-        nn.ReLU(),
-        nn.Linear(128, noutput),
-        layers.CheckSizes(B, noutput),
-    )
-    return model
+# def make_model_rot(size=256):
+#     r = 3
+#     B, D, H, W = (2, 128), (1, 512), size, size
+#     model = nn.Sequential(
+#         layers.CheckSizes(B, D, H, W),
+#         *block(32, r),
+#         *block(64, r),
+#         *block(96, r),
+#         *block(128, r),
+#         GlobalAvgPool2d(),
+#         flex.Linear(64),
+#         nn.BatchNorm1d(64),
+#         nn.ReLU(),
+#         flex.Linear(4),
+#         layers.CheckSizes(B, 4),
+#     )
+#     flex.shape_inference(model, (2, 1, size, size))
+#     return model
+
+
+# def make_model_skew(noutput, size=256, r=5, nf=8, r2=5, nf2=4):
+#     B, D, H, W = (2, 128), (1, 512), size, size
+#     model = nn.Sequential(
+#         layers.CheckSizes(B, D, H, W),
+#         nn.Conv2d(1, nf, r, padding=r // 2),
+#         nn.BatchNorm2d(nf),
+#         nn.ReLU(),
+#         Spectrum(),
+#         nn.Conv2d(nf, nf2, r2, padding=r2 // 2),
+#         nn.BatchNorm2d(nf2),
+#         nn.ReLU(),
+#         layers.Reshape(0, [1, 2, 3]),
+#         nn.Linear(nf2 * W * H, 128),
+#         nn.BatchNorm1d(128),
+#         nn.ReLU(),
+#         nn.Linear(128, noutput),
+#         layers.CheckSizes(B, noutput),
+#     )
+#     return model
 
 
 class PageOrientation:
-    def __init__(self, fname=None, check=True):
-        if fname is not None:
-            self.load_model(fname)
+    def __init__(self, fname, check=True):
+        self.model = loading.load_only_model(fname)()
         self.check = check
-
-    def load_model(self, fname):
-        self.model = make_model_rot()
-        with open(fname, "rb") as stream:
-            loaded = torch.load(stream)
-        self.model.load_state_dict(loaded["mstate"])
-        self.model.cpu()
-        self.model.eval()
 
     def orientation(self, page, npatches=200, bs=50):
         if self.check:
@@ -269,19 +259,9 @@ class PageOrientation:
 
 
 class PageSkew:
-    def __init__(self, fname=None, check=True):
-        if fname is not None:
-            self.load_model(fname)
+    def __init__(self, fname, check=True):
+        self.model = loading.load_only_model(fname)()
         self.check = check
-
-    def load_model(self, fname):
-        with open(fname, "rb") as stream:
-            loaded = torch.load(stream)
-        self.bins = loaded["bins"]
-        self.model = make_model_skew(noutput=len(self.bins))
-        self.model.load_state_dict(loaded["mstate"])
-        self.model.cuda()
-        self.model.eval()
 
     def skew(self, page, npatches=200, bs=50):
         if self.check:
@@ -311,18 +291,8 @@ class PageSkew:
 
 class PageScale:
     def __init__(self, fname=None, check=True):
-        if fname is not None:
-            self.load_model(fname)
+        self.model = loading.load_only_model(fname)()
         self.check = check
-
-    def load_model(self, fname):
-        with open(fname, "rb") as stream:
-            loaded = torch.load(stream)
-        self.bins = loaded["bins"]
-        self.model = make_model_skew(len(self.bins))
-        self.model.load_state_dict(loaded["mstate"])
-        self.model.cuda()
-        self.model.eval()
 
     def skew(self, page, npatches=200, bs=50):
         if self.check:
@@ -361,11 +331,12 @@ def train_rot(
     lrfun="0.3**(3+n//5000000)",
     output: str = "",
     limit: int = 999999999,
+    model: str = "basic_page_orientation",
 ):
     logger = slog.Logger(fname=output, prefix=prefix)
     logger.sysinfo()
     logger.json("args", sys.argv)
-    model = make_model_rot()
+    model = loading.load_or_construct_model(model)
     model.cuda()
     print(model)
     urls = urls * replicate
@@ -443,6 +414,7 @@ def train_skew(
     do_scale: bool = False,
     output: str = "",
     limit: int = -1,
+    model: str = "basic_page_skew",
 ):
     """Trains either skew (=small rotation) or scale models."""
 
@@ -452,7 +424,7 @@ def train_skew(
     logger = slog.Logger(fname=output, prefix=prefix)
     logger.sysinfo()
     logger.json("args", sys.argv)
-    model = make_model_skew(len(bins))
+    model = loading.load_or_construct_model(model, len(bins))
     model.cuda()
     print(model)
     urls = urls * replicate

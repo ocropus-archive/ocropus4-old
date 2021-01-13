@@ -69,7 +69,7 @@ def nothing(trainer):
 class BinTrainer:
     def __init__(
         self,
-        model=None,
+        model,
         lr=1e-3,
         savedir=True,
     ):
@@ -82,14 +82,6 @@ class BinTrainer:
         self.criterion = nn.MSELoss().cuda()
         self.every_batch = nothing
         self.maxcount = 1e21
-
-    def load(self, mname=""):
-        if mname == "":
-            mname = default_model
-        self.model = loading.load_or_make_model(mname)
-
-    def save(self, mname):
-        loading.save_model_as_dict(self.model, mname)
 
     def to(self, device="cpu"):
         self.device = device
@@ -156,11 +148,7 @@ class BinTrainer:
 
 class Binarizer:
     def __init__(self, fname=None):
-        if fname is not None:
-            self.load_from_save(fname)
-
-    def load_from_save(self, fname, args=[], kw={}):
-        self.model = loading.load_or_make_model(fname, *args, **kw)
+        self.model = loading.load_only_model(fname)
 
     def activate(self, yes=True):
         if yes:
@@ -212,7 +200,7 @@ def train(
     fnames: List[str],
     extensions: str = "png;page.png;jpg;page.jpg bin.png",
     num_workers: int = 4,
-    mname: str = "",
+    model: str = "basic_binarization",
     bs: int = 32,
     lr: float = 1e-4,
     show: int = 0,
@@ -231,9 +219,7 @@ def train(
     )
     dl = data.DataLoader(ds, num_workers=num_workers, batch_size=bs)
     logger = slog.Logger(fname=output, prefix="bin")
-    if mname == "":
-        mname = default_model
-    model = loading.load_or_make_model(mname)
+    model = loading.load_or_construct_model(model)
     model.cuda()
     trainer = BinTrainer(model, lr=lr)
     trainer.count = int(getattr(model, "step_", 0))
