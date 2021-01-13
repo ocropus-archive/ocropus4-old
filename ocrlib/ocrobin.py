@@ -100,7 +100,9 @@ class BinTrainer:
     def set_lr(self, lr, momentum=0.9):
         if lr == self.last_lr:
             return
-        self.optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=0.9, weight_decay=0.0)
+        self.optimizer = optim.SGD(
+            self.model.parameters(), lr=lr, momentum=0.9, weight_decay=0.0
+        )
         self.last_lr = lr
 
     def train_batch(self, inputs, targets):
@@ -116,14 +118,22 @@ class BinTrainer:
         self.optimizer.step()
         self.count += len(inputs)
         self.losses.append(float(loss))
-        self.last = (inputs.detach().cpu(), targets.detach().cpu(), outputs.detach().cpu())
+        self.last = (
+            inputs.detach().cpu(),
+            targets.detach().cpu(),
+            outputs.detach().cpu(),
+        )
         self.every_batch(self)
 
     def train_epoch(self, loader, show=-1):
         count = 0
         for inputs, targets in loader:
             self.train_batch(inputs, targets)
-            print(f"{self.count:10d} {np.mean(self.losses[-10:]):.5f}", end="\r", file=sys.stderr)
+            print(
+                f"{self.count:10d} {np.mean(self.losses[-10:]):.5f}",
+                end="\r",
+                file=sys.stderr,
+            )
             if show > 0 and count % show == 0:
                 self.show_batch()
             count += 1
@@ -200,8 +210,7 @@ def generate(
 @app.command()
 def train(
     fnames: List[str],
-    inputs: str = "png",
-    outputs: str = "bin.png",
+    extensions: str = "png;page.png;jpg;page.jpg bin.png",
     num_workers: int = 4,
     mname: str = "",
     bs: int = 32,
@@ -209,19 +218,19 @@ def train(
     show: int = 0,
     num_epochs: int = 100,
     maxcount: float = 1e21,
-    prefix: str = "bin",
+    output: str = "",
     replicate: int = 1,
 ):
     fnames = fnames * replicate
     ds = (
         wds.WebDataset(fnames, handler=wds.warn_and_continue)
         .decode("torchrgb")
-        .to_tuple(inputs, outputs)
+        .to_tuple(extensions)
         .pipe(tiles)
         .shuffle(5000)
     )
     dl = data.DataLoader(ds, num_workers=num_workers, batch_size=bs)
-    logger = slog.Logger(prefix=prefix)
+    logger = slog.Logger(fname=output, prefix="bin")
     if mname == "":
         mname = default_model
     model = loading.load_or_make_model(mname)
@@ -230,11 +239,19 @@ def train(
     trainer.count = int(getattr(model, "step_", 0))
     trainer.to("cuda")
     trainer.maxcount = maxcount
+
+    def save():
+        logger.save_smodel(
+            model, step=trainer.count, scalar=np.mean(trainer.losses[-100:])
+        )
+        logger.flush()
+
     for epoch in range(num_epochs):
         trainer.train_epoch(dl, show=show)
         print(f"\nepoch {epoch} loss {np.mean(trainer.losses[-500:])}")
         # obj = dict(mstate=model.state_dict())
-        logger.save_smodel(model, step=trainer.count, scalar=np.mean(trainer.losses[-100:]))
+        save()
+    save()
 
 
 @app.command()
@@ -246,11 +263,12 @@ def binarize(
     oext: str = "bin.png",
     keep: bool = True,
     show: int = 0,
+    limit: int = 99999999,
 ):
     src = wds.Dataset(fname).decode("rgb")
     binarizer = Binarizer(model)
     with wds.TarWriter(output) as sink:
-        for index, sample in enumerate(src):
+        for index, sample in enumerate(islice(src, limit)):
             print(f"{sample['__key__']}")
             image = sample.get(iext)
             result = binarizer.binarize(image)

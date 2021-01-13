@@ -4,7 +4,9 @@ hocr=./uw3-hocr.tar
 # ocropus=env python3="coverage run -a" vocropus
 ocropus=vocropus
 
-OUTPUTS=uw3-lines.tar uw3-seg.tar scaletrain.sqlite3 skewtrain.sqlite3 rottrain.sqlite3 segtrain.sqlite3 linetrain.sqlite3 deskew.out
+OUTPUTS=uw3-lines.tar uw3-seg.tar \
+	scaletrain.sqlite3 skewtrain.sqlite3 rottrain.sqlite3 segtrain.sqlite3 linetrain.sqlite3 bintrain.sqlite3 \
+	deskew.out uw3-binarized.tar
 
 all: $(OUTPUTS)
 
@@ -15,15 +17,17 @@ clean:
 %.pth: %.sqlite3
 	$(ocropus) slog getlast $< --output $@
 
+uw3-binarized.tar: bintrain.pth
+	$(ocropus) ocrobin binarize uw3-gray.tar --model bintrain.pth --output uw3-binarized.tar --limit 10
 
 bintrain.sqlite3: uw3-gray.tar
-	$(ocropus) ocrobin train uw3-gray.tar --num-workers 1 
+	$(ocropus) ocrobin train uw3-gray.tar --num-workers 1 --num-epochs 3 --output bintrain.sqlite3
 
 uw3-gray.tar: $(hocr)
 	$(ocropus) ocrobin generate $(hocr) --output uw3-gray.tar --limit 20
 
 deskew.out: rottrain.pth skewtrain.pth
-	$(ocropus) ocrorot predict $(hocr) --limit 10 --rotmodel rottrain.pth --skewmodel skewtrain.pth
+	$(ocropus) ocrorot predict $(hocr) --limit 10 --rotmodel rottrain.pth --skewmodel skewtrain.pth | tee deskew.out
 
 scaletrain.sqlite3:
 	$(ocropus) ocrorot train-scale $(hocr) --output scaletrain.sqlite3.temp --nepochs 3 --replicate 8 --num-workers 8 --limit 50
