@@ -2,6 +2,8 @@ import importlib
 import torch
 import io
 import tempfile
+import warnings
+import os.path
 
 from . import slog
 
@@ -66,6 +68,17 @@ def torch_loads(buf):
 #
 
 
+def get_function(path):
+    mname, fun_name = path.rsplit(".", 1)
+    try:
+        mmod = importlib.import_module(mname)
+    except ModuleNotFoundError:
+        return None
+    if not hasattr(mmod, fun_name):
+        return None
+    return getattr(mmod, fun_name)
+
+
 def make_model(src, *args, fun_name="make_model", **kw):
     """Instantiate a PyTorch model from Python source code."""
     if src.endswith(".py"):
@@ -77,41 +90,59 @@ def make_model(src, *args, fun_name="make_model", **kw):
     return model
 
 
-def load_or_make_model(fname, *args, module_path=[], load_best=False, fun_name="make_model", **kw):
-    """Load a model from ".pth" file or instantiate it from a ".py" file."""
-    if fname.endswith(".sqlite3"):
-        logger = slog.Logger(fname)
-        if load_best:
-            state = logger.load_best()
-        else:
-            state = logger.load_last()
-        args, kw = state.get("margs", ([], {}))
-        model = make_model(state["msrc"], *args, fun_name=fun_name, **kw)
-        model.load_state_dict(state["mstate"])
-        model.step_ = state.get("step", 0)
-        return model
-    elif fname.endswith(".pth"):
-        state = torch.load(fname)
-        args, kw = state.get("margs", ([], {}))
-        model = make_model(state["msrc"], *args, fun_name=fun_name, **kw)
-        model.load_state_dict(state["mstate"])
-        model.step_ = state.get("step", 0)
-        return model
-    elif fname.endswith(".py"):
-        src = read_file(fname)
+def construct_model(path, *args, module_path=[], **kw):
+    if path.endswith(".py"):
+        warnings.warn(".py file used in construct_model")
+        src = read_file(path)
         mmod = make_module(src)
-        model = getattr(mmod, fun_name)(*args, **kw)
+        model = getattr(mmod, "make_model")(*args, **kw)
         model.msrc_ = src
         model.margs_ = (args, kw)
+        model.step_ = 0
+        return model
+    elif path.startswith("\n"):
+        warnings.warn("source code used in construct_model")
+        mmod = make_module(src)
+        model = getattr(mmod, "make_model")(*args, **kw)
+        model.msrc_ = src
+        model.margs_ = (args, kw)
+        model.step_ = 0
         return model
     else:
-        if isinstance(module_path, str):
-            module_path = module_path.split(":")
-        for mname in module_path:
-            mmod = importlib.import_module(mname)
-            if hasattr(mmod, fun_name):
-                return getattr(mmod, fun_name)(*args, **kw)
-        raise ValueError(f"{fun_name} not found in module path {module_path}")
+        model = get_function(path)(*args, **kw)
+        model.mpath_ = path
+        model.margs_ = (args, kw)
+        model.step_ = 0
+        return model
+
+
+def load_model(path, *args, module_path=[], **kw):
+    if path.endswith(".sqlite3"):
+        logger = slog.Logger(path)
+        state = logger.load_last()
+    else:
+        state = torch.load(path)
+    args, kw = state.get("margs", ([], {}))
+    if "msrc" in state:
+        warnings.warn("msrc used in load_model")
+        src = state["msrc"]
+        mmod = make_module(src)
+        model = getattr(mmod, "make_model")(*args, **kw)
+        model.msrc_ = src
+    else:
+        model = get_function(state["make_model"], *args, **kw)
+        model.mpath_ = state["make_model"]
+    model.margs_ = (args, kw)
+    model.load_state_dict(state["mstate"])
+    model.step_ = state.get("step", 0)
+    return model
+
+
+def load_or_construct_model(path, *args, module_path=["models", "experimental_models"], **kw):
+    if os.path.splitext(path)[1] in ["py", "sqlite3"]:
+        return load_model(path, *args, module_path=module_path, **kw)
+    else:
+        return construct_model(path, *args, module_path=module_path, **kw)
 
 
 #
