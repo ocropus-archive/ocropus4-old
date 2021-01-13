@@ -3,6 +3,8 @@ import torch
 import io
 import tempfile
 
+from . import slog
+
 #
 # Modules
 #
@@ -75,11 +77,9 @@ def make_model(src, *args, fun_name="make_model", **kw):
     return model
 
 
-def load_or_make_model(fname, *args, load_best=False, fun_name="make_model", **kw):
+def load_or_make_model(fname, *args, module_path=[], load_best=False, fun_name="make_model", **kw):
     """Load a model from ".pth" file or instantiate it from a ".py" file."""
     if fname.endswith(".sqlite3"):
-        from . import slog
-
         logger = slog.Logger(fname)
         if load_best:
             state = logger.load_best()
@@ -97,10 +97,21 @@ def load_or_make_model(fname, *args, load_best=False, fun_name="make_model", **k
         model.load_state_dict(state["mstate"])
         model.step_ = state.get("step", 0)
         return model
-    else:
-        model = make_model(fname, *args, **kw)
-        model.step_ = 0
+    elif fname.endswith(".py"):
+        src = read_file(fname)
+        mmod = make_module(src)
+        model = getattr(mmod, fun_name)(*args, **kw)
+        model.msrc_ = src
+        model.margs_ = (args, kw)
         return model
+    else:
+        if isinstance(module_path, str):
+            module_path = module_path.split(":")
+        for mname in module_path:
+            mmod = importlib.import_module(mname)
+            if hasattr(mmod, fun_name):
+                return getattr(mmod, fun_name)(*args, **kw)
+        raise ValueError(f"{fun_name} not found in module path {module_path}")
 
 
 #
@@ -123,3 +134,16 @@ def dump_model_as_dict(model):
     buf = io.BytesIO()
     save_model_as_dict(model, buf)
     return buf.getbuffer()
+
+
+def log_model(logger, model, loss=None, step=None, optimizer=None):
+    assert loss is not None
+    assert step is not None
+    state = dict(
+        mdef="",
+        msrc="",
+        mstate=model.state_dict(),
+        ostate=optimizer.state_dict() if optimizer is not None else None,
+    )
+    logger.save("model", state, scalar=loss, step=step)
+    logger.flush()

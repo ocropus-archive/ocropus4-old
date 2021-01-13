@@ -21,6 +21,7 @@ import torch.fft
 
 from . import slog
 from . import utils
+from . import loading
 
 logger = slog.NoLogger()
 
@@ -419,13 +420,12 @@ def train_rot(
                 )
                 logger.flush()
             if time.time() - last > 900.0:
-                save()
+                loading.log_model(logger, model, step=count, loss=np.mean(losses[-100:]))
                 last = time.time()
             if lrfun(count) != lr:
                 lr = lrfun(count)
                 optimizer = optim.SGD(model.parameters(), lr=lr)
-    print("last save")
-    save()
+    loading.log_model(logger, model, step=count, loss=np.mean(losses[-100:]))
 
 
 @app.command()

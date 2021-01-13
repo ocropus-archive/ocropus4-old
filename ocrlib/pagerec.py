@@ -13,6 +13,7 @@ import json
 
 import webdataset as wds
 
+from ocrlib.utils import BBox
 from . import ocroline, ocroseg
 
 Charset = ocroline.Charset
@@ -28,7 +29,7 @@ def get_config(conf):
     return conf
 
 
-def fix4json(obj):
+def python_to_json(obj):
     if isinstance(obj, (int, float, str)):
         return obj
     if isinstance(obj, (np.uint8, np.int8, np.uint16, np.int16, np.int32, np.int64)):
@@ -36,36 +37,10 @@ def fix4json(obj):
     if isinstance(obj, (np.float32, np.float64)):
         return float(obj)
     if isinstance(obj, (tuple, list)):
-        return [fix4json(x) for x in obj]
+        return [python_to_json(x) for x in obj]
     if isinstance(obj, dict):
-        return {k: fix4json(v) for k, v in obj.items()}
+        return {k: python_to_json(v) for k, v in obj.items()}
     raise ValueError("bad type in fix4json", type(obj), obj)
-
-
-class BBox:
-    """A simple bounding box class, for compatibility
-    with slice-based code."""
-
-    def __init__(self, y0, y1, x0, x1):
-        self.y0, self.y1, self.x0, self.x1 = y0, y1, x0, x1
-
-    def __getitem__(self, index):
-        assert index >= 0 and index <= 1
-        if index == 0:
-            return slice(self.y0, self.y1)
-        elif index == 1:
-            return slice(self.x0, self.x1)
-
-    def union(self, other):
-        return BBox(
-            min(self.y0, other.y0),
-            max(self.y1, other.y1),
-            min(self.x0, other.x0),
-            max(self.x1, other.x1),
-        )
-
-    def coords(self):
-        return tuple(int(x) for x in [self.y0, self.y1, self.x0, self.x1])
 
 
 def sortwords(lst):
@@ -91,7 +66,7 @@ def goodsize(segment):
     )
 
 
-class WordRecognizer:
+class BasicRecognizer:
     """A wrapper for the text recognizer and segmenters.
 
     This performs three steps:
@@ -273,7 +248,7 @@ class PageRecognizer:
     """
 
     def __init__(self):
-        self.wordrec = WordRecognizer()
+        self.wordrec = BasicRecognizer()
         self.lineseg = ocroseg.Segmenter(
             smooth=(1, 4), get_targets=lambda classes: classes == 2
         )
@@ -369,7 +344,7 @@ def recognize_image(
         image = normalize_image(image)
         result = pr.recognize_page(image)
         if format == "json":
-            result = fix4json(result)
+            result = python_to_json(result)
             print(json.dumps(result, indent=4))
         else:
             print_raw_text(result)
@@ -413,7 +388,7 @@ def recognize_segments(
         plt.title(text)
         plt.ginput(1, 100)
 
-    pr = WordRecognizer(segment_type=segment_type)
+    pr = BasicRecognizer(segment_type=segment_type)
     if debug:
         pr.after_recognition_hook = show_segment
     if debugseg:
@@ -467,7 +442,7 @@ def recognize_tar(
             print("===", key, "=" * 40)
             print()
             if format == "json":
-                result = fix4json(result)
+                result = python_to_json(result)
                 try:
                     print(json.dumps(result, indent=4))
                 except Exception as exn:

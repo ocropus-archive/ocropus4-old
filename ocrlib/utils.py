@@ -206,3 +206,29 @@ def normalize_image(image, lo=0.1):
     image = image.astype(np.float32) - np.amin(image)
     image /= max(lo, np.amax(image))
     return image
+
+
+class BBox:
+    """A simple bounding box class, for compatibility
+    with slice-based code."""
+
+    def __init__(self, y0, y1, x0, x1):
+        self.y0, self.y1, self.x0, self.x1 = y0, y1, x0, x1
+
+    def __getitem__(self, index):
+        assert index >= 0 and index <= 1
+        if index == 0:
+            return slice(self.y0, self.y1)
+        elif index == 1:
+            return slice(self.x0, self.x1)
+
+    def union(self, other):
+        return BBox(
+            min(self.y0, other.y0),
+            max(self.y1, other.y1),
+            min(self.x0, other.x0),
+            max(self.x1, other.x1),
+        )
+
+    def coords(self):
+        return tuple(int(x) for x in [self.y0, self.y1, self.x0, self.x1])
