@@ -6,7 +6,8 @@ ocropus=vocropus
 
 OUTPUTS=uw3-lines.tar uw3-seg.tar \
 	scaletrain.sqlite3 skewtrain.sqlite3 rottrain.sqlite3 segtrain.sqlite3 linetrain.sqlite3 bintrain.sqlite3 \
-	deskew.out uw3-binarized.tar
+	uw3-binarized.tar \
+	deskew.out lines.out
 
 all: $(OUTPUTS)
 
@@ -25,6 +26,10 @@ bintrain.sqlite3: uw3-gray.tar
 
 uw3-gray.tar: $(hocr)
 	$(ocropus) ocrobin generate $(hocr) --output uw3-gray.tar --limit 20
+
+lines.out: linetrain.pth
+	$(ocropus) ocroline recognize --model linetrain.pth uw3-lines.tar --limit 10
+	touch lines.out
 
 deskew.out: rottrain.pth skewtrain.pth
 	$(ocropus) ocrorot predict $(hocr) --limit 10 --rotmodel rottrain.pth --skewmodel skewtrain.pth | tee deskew.out

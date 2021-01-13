@@ -3,6 +3,7 @@ import os
 import random
 import sys
 import re
+from itertools import islice
 
 import editdistance
 import matplotlib.pyplot as plt
@@ -19,6 +20,7 @@ from torchmore import layers
 
 from . import lineest, linemodels, slog
 from .utils import Every, Charset
+from . import utils
 
 _ = linemodels
 
@@ -286,7 +288,7 @@ def invert_image(a):
 
 def normalize_image(a):
     a = a - a.min()
-    a /= a.max()
+    a = a / float(a.max())
     return a
 
 
@@ -507,10 +509,11 @@ def train(
 
 @app.command()
 def recognize(
-    model: str,
     fname: str,
     extensions: str = "png;jpg;line.png;line.jpg",
-    invert: bool = True,
+    model: str = "",
+    invert: str = "Auto",
+    limit: int = 999999999,
     normalize: bool = True,
 ):
     linerec = LineRec()
@@ -520,10 +523,10 @@ def recognize(
     dataset = wds.Dataset(fname)
     dataset.decode("l8").rename(image=extensions)
     plt.ion()
-    for sample in dataset:
+    for sample in islice(dataset, limit):
         image = sample["image"]
         if invert:
-            image = invert_image(image)
+            image = utils.autoinvert(image, invert)
         if normalize:
             image = normalize_image(image)
         if image.shape[0] < 10 or image.shape[1] < 10:
