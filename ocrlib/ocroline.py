@@ -1,4 +1,3 @@
-import itertools as itt
 import os
 import random
 import sys
