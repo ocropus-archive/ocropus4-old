@@ -331,7 +331,7 @@ def train_rot(
     lrfun="0.3**(3+n//5000000)",
     output: str = "",
     limit: int = 999999999,
-    model: str = "basic_page_orientation",
+    model: str = "page_orientation_210113",
 ):
     logger = slog.Logger(fname=output, prefix=prefix)
     logger.sysinfo()
@@ -414,7 +414,7 @@ def train_skew(
     do_scale: bool = False,
     output: str = "",
     limit: int = -1,
-    model: str = "basic_page_skew",
+    model: str = "page_skew_210113",
 ):
     """Trains either skew (=small rotation) or scale models."""
 

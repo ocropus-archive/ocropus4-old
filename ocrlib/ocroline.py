@@ -21,6 +21,7 @@ from torchmore import layers
 from . import lineest, linemodels, slog
 from .utils import Every, Charset
 from . import utils
+from . import loading
 
 _ = linemodels
 
@@ -119,6 +120,7 @@ class LineTrainer:
         self.every_batch = []
         self.schedule = lambda n: None
         self.charset = None
+        self.dewarp_to = None
 
     def set_lr(self, lr, momentum=0.9):
         """Set the learning rate.
@@ -217,36 +219,14 @@ class LineTrainer:
 class LineRec:
     """A line recognizer (without training logic)."""
 
-    def __init__(self, *, charset=Charset()):
-        self.charset = charset
-
-    def load_from_save(self, fname):
-        """Load a model from a save file.
-
-        Saved line recognizers are hash tables with keys:
-        charset, dewarp_to (-1 = no dewarping), msrc (model source),
-        mstate (model state)
-
-        :param fname: source file name
-        """
-        result = torch.load(fname)
-        print(f"# loaded {fname}", file=sys.stderr)
-        self.set_model(result)
-
-    def set_model(self, result):
-        """Set the model from a saved hash."""
-        self.charset = result.get("charset", self.charset)
-        self.dewarp_to = result.get("dewarp_to", -1)
+    def __init__(self, model, *, charset=Charset()):
+        self.model = model
+        self.charset = model.extra_.get("charset", charset)
+        self.dewarp_to = model.extra_.get("dewarp_to", -1)
         if self.dewarp_to > 0:
             self.dewarper = lineest.CenterNormalizer(target_height=self.dewarp_to)
         else:
             self.dewarper = None
-        mod = slog.load_module("model", result["msrc"])
-        model = mod.make_model(96)
-        model.load_state_dict(result["mstate"])
-        model.eval()
-        self.mod = mod
-        self.model = model
         model.cuda()
 
     def activate(self, active):
@@ -418,7 +398,7 @@ def train(
     display: bool = False,
     invert: bool = False,
     normalize_intensity: bool = False,
-    mdef: str = None,
+    model: str = "text_model_210113",
     test: str = None,
     test_bs: int = 20,
     ntest: int = int(1e12),
@@ -433,8 +413,6 @@ def train(
 
     charset = Charset(chardef=charset_file)
 
-    mmod, msrc = load_model(mdef)
-
     if log_to == "":
         log_to = None
     logger = slog.Logger(fname=log_to, prefix="ocroline")
@@ -443,8 +421,7 @@ def train(
         "args",
         dict(
             epochs=epochs,
-            mdef=mdef,
-            msrc=msrc,
+            mdef=model,
             training=training,
             training_bs=training_bs,
             invert=invert,
@@ -473,7 +450,11 @@ def train(
             mode="test",
         )
 
-    model = mmod.make_model(len(charset))
+    model = loading.load_or_construct_model(model, len(charset))
+    if not hasattr(model, "extra_"):
+        model.extra_ = {}
+    model.extra_.setdefault("charset", charset)
+    model.extra_.setdefault("dewarp_to", dewarp_to)
     model.cuda()
     print(model)
 
@@ -485,26 +466,14 @@ def train(
     print("starting training")
     for epoch in range(epochs):
         trainer.train(training_dl)
+        loss = np.mean(trainer.losses[-100:])
         if test is not None:
             errors, total = trainer.errors(test_dl, ntest=ntest)
             err = float(errors) / total
             logger.scalar("val/err", err, step=trainer.nsamples)
             print("test set:", err, errors, total)
-            assert err < checkerr
-        logger.save(
-            "model",
-            dict(
-                n=trainer.nsamples,
-                dewarp_to=dewarp_to,
-                mdef=mdef,
-                msrc=msrc,
-                charset=charset,
-                mstate=model.state_dict(),
-                ostate=trainer.optimizer.state_dict(),
-            ),
-            step=trainer.nsamples,
-        )
-        logger.flush()
+            loss = err
+        loading.log_model(logger, model, step=trainer.nsamples, loss=loss)
 
 
 @app.command()
@@ -516,8 +485,8 @@ def recognize(
     limit: int = 999999999,
     normalize: bool = True,
 ):
-    linerec = LineRec()
-    linerec.load_from_save(model)
+    model = loading.load_only_model(model)
+    linerec = LineRec(model)
     linerec.invert = invert
     linerec.normalize = normalize
     dataset = wds.Dataset(fname)
@@ -538,52 +507,6 @@ def recognize(
         plt.title(result)
         plt.ginput(1, 1.0)
         print(sample.get("__key__"), image.shape, result)
-
-
-@app.command()
-def check(
-    training: str = "data/words-simple-training.tar",
-    training_bs: int = 5,
-    epochs: int = 1,
-    nbatches: int = 3000,
-    display: bool = False,
-    invert: bool = False,
-    normalize_intensity: bool = False,
-    model: str = "lstm2",
-    check: str = "data/words-simple-test.tar",
-    checkerr: float = 0.05,
-    checking_bs: int = 20,
-    ncheck: int = 1000,
-):
-    charset = Charset()
-    training_dl = make_loader(
-        training,
-        batch_size=training_bs,
-        invert=invert,
-        normalize_intensity=normalize_intensity,
-    )
-    print(next(iter(training_dl))[0].size())
-
-    model = eval(f"linemodels.make_{model}")(len(charset))
-    model.cuda()
-    print(model)
-
-    trainer = LineTrainer(model)
-    trainer.every_batch.append(display_progress if display else print_progress)
-    print("starting training")
-    trainer.train(itt.islice(iter(training_dl), 0, nbatches))
-
-    if checkerr >= 0.0:
-        checking_dl = make_loader(
-            check,
-            batch_size=checking_bs,
-            invert=invert,
-            normalize_intensity=normalize_intensity,
-        )
-        errors, total = trainer.errors(checking_dl, ntest=ncheck)
-        err = float(errors) / total
-        print(err, errors, total)
-        assert err <= checkerr, "error rate too high"
 
 
 @app.command()

@@ -7,7 +7,8 @@ import os.path
 
 from . import slog
 
-module_path = os.environ.get("MODEL_MODULES", "ocrlib.models:ocrlib.experimental_models").split(":")
+default_path = "ocrlib.models:ocrlib.experimental_models:old_models"
+module_path = os.environ.get("MODEL_MODULES", default_path).split(":")
 
 #
 # Modules
@@ -70,7 +71,7 @@ def torch_loads(buf):
 #
 
 
-def load_function(function_name, src):
+def load_function(fun_name, src):
     """Instantiate a PyTorch model from Python source code."""
     warnings.warn("direct loading of model source code")
     if src.endswith(".py"):
@@ -100,6 +101,7 @@ def dict_to_model(state, module_path=module_path):
     model.mname_ = state.get("mname")
     model.margs_ = state["margs"]
     model.step_ = state.get("step", 0)
+    model.extra_ = state.get("extra", {})
     return model
 
 
@@ -108,6 +110,7 @@ def model_to_dict(model):
         mstate=model.state_dict(),
         mname=model.mname_,
         margs=model.margs_,
+        extra=getattr(model, "extra_", {}),
         step=getattr(model, "step_", 0),
     )
 

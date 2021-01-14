@@ -200,7 +200,7 @@ def train(
     fnames: List[str],
     extensions: str = "png;page.png;jpg;page.jpg bin.png",
     num_workers: int = 4,
-    model: str = "basic_binarization",
+    model: str = "binarization_210113",
     bs: int = 32,
     lr: float = 1e-4,
     show: int = 0,
