@@ -7,7 +7,7 @@ import os.path
 
 from . import slog
 
-default_path = "ocrlib.models:ocrlib.experimental_models:old_models"
+default_path = "ocrlib.models:ocrlib.experimental_models:ocrlib.old_models"
 module_path = os.environ.get("MODEL_MODULES", default_path).split(":")
 
 #
@@ -96,6 +96,7 @@ def find_function(name, path):
 
 def dict_to_model(state, module_path=module_path):
     constructor = find_function(state["mname"], module_path)
+    assert constructor is not None, f"can't find {state['mname']} in {module_path}"
     args, kw = state["margs"]
     model = constructor(*args, **kw)
     model.mname_ = state.get("mname")
@@ -121,6 +122,7 @@ def construct_model(name, *args, module_path=module_path, **kw):
         constructor = load_function(name)
     else:
         constructor = find_function(name, module_path)
+        assert constructor is not None, f"can't find {name} in {module_path}"
     model = constructor(*args, **kw)
     model.mname_ = name
     model.margs_ = (args, kw)

@@ -16,6 +16,7 @@ import torchmore.layers
 import ocrlib.patches
 from . import slog
 from . import utils
+from . import loading
 import ocrlib.utils
 
 
@@ -164,18 +165,6 @@ def make_loader(
     training.map(augmentation)
     training.map(np2tensor)
     return DataLoader(training, batch_size=batch_size, num_workers=num_workers)
-
-
-def load_model(fname):
-    assert fname is not None, "provide model with --mdef or --load"
-    assert os.path.exists(fname), f"{fname} does not exist"
-    assert fname.endswith(".py"), f"{fname} must be a .py file"
-    src = open(fname).read()
-    mod = slog.load_module("mmod", src)
-    assert "make_model" in dir(
-        mod
-    ), f"{fname} source does not define make_model function"
-    return mod, src
 
 
 ###
@@ -420,7 +409,7 @@ class SegTrainer:
 
 
 class Segmenter:
-    def __init__(self, smooth=1.0, scale=0.5, preproc=None):
+    def __init__(self, model, smooth=1.0, scale=0.5, preproc=None):
         if isinstance(smooth, (int, float)):
             self.smooth = (float(smooth), float(smooth), 0)
         else:
@@ -429,27 +418,6 @@ class Segmenter:
         self.zoom = scale
         self.preproc = preproc or torchmore.layers.ModPad(8)
         self.preproc.eval()
-
-    def load_from_save(
-        self,
-        fname,
-        args={},
-    ):
-        result = torch.load(fname)
-        mod = slog.load_module("model", result["msrc"])
-        model = mod.make_model(**args)
-        model.load_state_dict(result["mstate"])
-        model.eval()
-        self.model = model
-        self.activate()
-
-    def load_from_log(self, fname, args={}):
-        log = slog.Logger(fname)
-        result = log.load_last()
-        mod = slog.load_module("model", result["msrc"])
-        model = mod.make_model(**args)
-        model.load_state_dict(result["mstate"])
-        model.eval()
         self.model = model
         self.activate()
 
@@ -538,7 +506,7 @@ def train(
     epochs: int = 200,
     display: bool = False,
     shuffle: int = 1000,
-    mdef: str = None,
+    model: str = "segmentation_model_210113",
     test: str = None,
     test_bs: int = 2,
     test_args: str = "",
@@ -556,8 +524,6 @@ def train(
 ):
     global logger
 
-    mmod, msrc = load_model(mdef)
-
     if log_to == "":
         log_to = None
     logger = slog.Logger(fname=log_to, prefix=prefix)
@@ -566,8 +532,7 @@ def train(
         "args",
         dict(
             epochs=epochs,
-            mdef=mdef,
-            msrc=msrc,
+            model=model,
             training=training,
             training_args=training_args,
             training_bs=training_bs,
@@ -594,7 +559,7 @@ def train(
         kw = eval(f"dict({test_args})")
         test_dl = make_loader(test, batch_size=test_bs, **kw)
 
-    model = mmod.make_model()
+    model = loading.load_or_construct_model(model)
     model.cuda()
     if parallel and torch.cuda.device_count() > 1:
         model = torch.nn.DataParallel(model)
@@ -616,13 +581,7 @@ def train(
             logger.scalar("val/err", err, step=trainer.nsamples)
         else:
             err = np.mean(trainer.losses[-100:])
-        state = dict(
-            mdef=mdef,
-            msrc=msrc,
-            mstate=model.state_dict(),
-            ostate=trainer.optimizer.state_dict(),
-        )
-        logger.save("model", state, scalar=err, step=trainer.nsamples)
+        loading.log_model(logger, model, loss=err, step=trainer.nsamples)
         print(
             "epoch",
             epoch,
