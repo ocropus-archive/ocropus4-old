@@ -453,6 +453,7 @@ class Segmenter:
                 .numpy()[0]
                 .transpose(1, 2, 0)
             )
+        self.probs = probs
         if unzoom:
             probs = ndi.zoom(probs, (1.0 / self.zoom, 1.0 / self.zoom, 1.0), order=1)
         self.probs = probs
@@ -506,7 +507,7 @@ def train(
     epochs: int = 200,
     display: bool = False,
     shuffle: int = 1000,
-    model: str = "segmentation_model_210113",
+    model: str = "segmentation_model_210117",
     test: str = None,
     test_bs: int = 2,
     test_args: str = "",
@@ -592,6 +593,7 @@ def train(
             "lr",
             trainer.last_lr,
         )
+    print(model)
 
 
 @app.command()

@@ -50,7 +50,7 @@ rottrain.sqlite3:
 	mv rottrain.sqlite3.temp rottrain.sqlite3
 
 segtrain.sqlite3: uw3-seg.tar
-	$(ocropus) ocroseg train uw3-seg.tar --display --log-to segtrain.sqlite3.temp --epochs 3 # --weightmask 20
+	$(ocropus) ocroseg train uw3-seg.tar --display --log-to segtrain.sqlite3.temp --epochs 2 # --weightmask 20
 	mv segtrain.sqlite3.temp segtrain.sqlite3
 
 linetrain.sqlite3: uw3-lines.tar

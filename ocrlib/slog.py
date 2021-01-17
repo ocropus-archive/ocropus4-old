@@ -308,15 +308,18 @@ def getstep(fname, step: int, output=None):
 
 
 def gettrained(fname, query, output=None):
-    assert output is not None
-    assert not os.path.exists(output)
     con = sqlite3.connect(fname)
     result = list(con.execute(query))
     assert len(result) > 0, "found no model"
     mbuf = result[0][0]
     print(f"saving step {result[0][1]} scalar {result[0][2]}")
-    with open(output, "wb") as stream:
-        stream.write(mbuf)
+    if output is None:
+        model = loading.dict_to_model(loading.torch_loads(mbuf))
+        print(model)
+    else:
+        assert not os.path.exists(output)
+        with open(output, "wb") as stream:
+            stream.write(mbuf)
 
 
 @app.command()
