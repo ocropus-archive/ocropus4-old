@@ -6,6 +6,7 @@ import typer
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import itertools as itt
 from numpy import amin, median, mean
 from scipy import ndimage as ndi
 from torch import nn, optim
@@ -286,11 +287,11 @@ class SegTrainer:
         self.losses = []
         self.last_lr = None
         self.set_lr(lr)
+        self.lr_schedule = None
         self.clip_gradient = maxgrad
         self.charset = None
         self.margin = margin
         self.last_display = 0
-        self.every_batch = []
         self.nsamples = 0
         self.nbatches = 0
         self.weightmask = weightmask
@@ -307,6 +308,10 @@ class SegTrainer:
             )
             self.last_lr = lr
 
+    def set_lr_schedule(self, f):
+        assert callable(f)
+        self.lr_schedule = f
+
     def train_batch(self, inputs, targets):
         """All the steps necessary for training a batch.
 
@@ -314,6 +319,8 @@ class SegTrainer:
         Adds the loss to self.losses.
         Clips the gradient if self.clip_gradient is not None.
         """
+        if self.lr_schedule:
+            self.set_lr(self.lr_schedule(self.nsamples))
         self.model.train()
         self.optimizer.zero_grad()
         if self.device is not None:
@@ -342,7 +349,9 @@ class SegTrainer:
         )
         self.nsamples += len(inputs)
         self.nbatches += 1
-        return loss.detach().item()
+        loss = loss.detach().item()
+        self.losses.append(loss)
+        return loss
 
     def compute_loss(self, outputs, targets):
         """Compute loss taking a margin into account."""
@@ -360,18 +369,6 @@ class SegTrainer:
             targets = targets[:, m:-m, m:-m]
         loss = self.lossfn(outputs, targets.to(outputs.device))
         return loss
-
-    def train_epoch(self, loader, ntrain=int(1e12)):
-        """Train over a dataloader for the given number of epochs."""
-        start = self.nsamples
-        for sample in loader:
-            images, targets = sample
-            loss = self.train_batch(images, targets)
-            self.losses.append(float(loss))
-            for f in self.every_batch:
-                f(self)
-            if self.nsamples - start >= ntrain:
-                break
 
     def probs_batch(self, inputs):
         """Compute probability outputs for the batch."""
@@ -453,7 +450,6 @@ class Segmenter:
                 .numpy()[0]
                 .transpose(1, 2, 0)
             )
-        self.probs = probs
         if unzoom:
             probs = ndi.zoom(probs, (1.0 / self.zoom, 1.0 / self.zoom, 1.0), order=1)
         self.probs = probs
@@ -494,6 +490,39 @@ def extract_boxes(page, boxes, pad=5):
         yield word
 
 
+class Schedule:
+    def __init__(self):
+        self.jobs = {}
+
+    def __call__(self, key, seconds, initial=False):
+        now = time.time()
+        last = self.jobs.setdefault(key, 0 if initial else now)
+        if now - last > seconds:
+            self.jobs[key] = now
+            return True
+        else:
+            return False
+
+
+def repeatedly(loader, nepochs=999999999, nbatches=999999999999):
+    for epoch in range(nepochs):
+        for sample in itt.islice(loader, nbatches):
+            yield sample
+
+
+def save_model(logger, trainer, test_dl, ntest=999999):
+    model = trainer.model
+    if test_dl is not None:
+        print("# testing", file=sys.stderr)
+        err = trainer.errors(test_dl, ntest=ntest)
+        logger.scalar("val/err", err, step=trainer.nsamples)
+    else:
+        err = np.mean(trainer.losses[-100:])
+    print(f"# saving {trainer.nsamples}", file=sys.stderr)
+    print(model)
+    loading.log_model(logger, model, loss=err, step=trainer.nsamples)
+
+
 ###
 # Command Line
 ###
@@ -522,6 +551,7 @@ def train(
     num_workers: int = 1,
     log_to: str = "",
     parallel: bool = False,
+    save_interval: float = 30*60,
 ):
     global logger
 
@@ -552,13 +582,12 @@ def train(
         num_workers=num_workers,
         **kw,
     )
-    (
-        images,
-        targets,
-    ) = next(iter(training_dl))
+    (images, targets,) = next(iter(training_dl))
     if test is not None:
         kw = eval(f"dict({test_args})")
         test_dl = make_loader(test, batch_size=test_bs, **kw)
+    else:
+        test_dl = None
 
     model = loading.load_or_construct_model(model)
     model.cuda()
@@ -567,33 +596,24 @@ def train(
     print(model)
 
     trainer = SegTrainer(model, zoom=zoom, weightmask=weightmask)
-    trainer.schedule = eval(f"lambda n: {schedule}")
-    trainer.every_batch.append(log_progress)
-    trainer.every_batch.append(print_progress)
-    # trainer.every_batch.append(memsum)
-    if display:
-        trainer.every_batch.append(display_progress)
-    for epoch in range(epochs):
-        print("=== training")
-        trainer.train_epoch(training_dl, ntrain=ntrain)
-        if test is not None:
-            print("=== testing")
-            err = trainer.errors(test_dl, ntest=ntest)
-            logger.scalar("val/err", err, step=trainer.nsamples)
-        else:
-            err = np.mean(trainer.losses[-100:])
-        loading.log_model(logger, model, loss=err, step=trainer.nsamples)
-        print(
-            "epoch",
-            epoch,
-            "nsamples",
-            trainer.nsamples,
-            "err",
-            err,
-            "lr",
-            trainer.last_lr,
-        )
-    print(model)
+    trainer.set_lr_schedule(eval(f"lambda n: {schedule}"))
+
+    schedule = Schedule()
+
+    for images, targets in repeatedly(training_dl):
+        if trainer.nsamples >= ntrain:
+            break
+        trainer.train_batch(images, targets)
+        if schedule("progress", 60, initial=True):
+            print_progress(trainer)
+        if schedule("log", 600):
+            log_progress(trainer)
+        if schedule("save", save_interval, initial=True):
+            save_model(logger, trainer, test_dl)
+        if display and schedule("display", 15):
+            display_progress(trainer)
+
+    save_model(logger, trainer, test_dl)
 
 
 @app.command()

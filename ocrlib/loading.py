@@ -103,6 +103,7 @@ def dict_to_model(state, module_path=module_path):
     model.margs_ = state["margs"]
     model.step_ = state.get("step", 0)
     model.extra_ = state.get("extra", {})
+    model.load_state_dict(state["mstate"])
     return model
 
 
