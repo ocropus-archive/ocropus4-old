@@ -6,7 +6,6 @@ import typer
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import itertools as itt
 from numpy import amin, median, mean
 from scipy import ndimage as ndi
 from torch import nn, optim
@@ -15,6 +14,7 @@ from webdataset import Dataset
 import torchmore.layers
 
 import ocrlib.patches
+from ocrlib.utils import Schedule, repeatedly
 from . import slog
 from . import utils
 from . import loading
@@ -534,26 +534,6 @@ def extract_boxes(page, boxes, pad=5):
             order=0,
         )
         yield word
-
-
-class Schedule:
-    def __init__(self):
-        self.jobs = {}
-
-    def __call__(self, key, seconds, initial=False):
-        now = time.time()
-        last = self.jobs.setdefault(key, 0 if initial else now)
-        if now - last > seconds:
-            self.jobs[key] = now
-            return True
-        else:
-            return False
-
-
-def repeatedly(loader, nepochs=999999999, nbatches=999999999999):
-    for epoch in range(nepochs):
-        for sample in itt.islice(loader, nbatches):
-            yield sample
 
 
 def save_model(logger, trainer, test_dl, ntest=999999):
