@@ -559,7 +559,6 @@ def train(
     training,
     training_args: str = "",
     training_bs: int = 2,
-    epochs: int = 200,
     display: bool = False,
     shuffle: int = 1000,
     model: str = "segmentation_model_210118",
@@ -588,7 +587,6 @@ def train(
     logger.json(
         "args",
         dict(
-            epochs=epochs,
             model=model,
             training=training,
             training_args=training_args,
