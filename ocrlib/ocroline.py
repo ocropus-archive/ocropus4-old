@@ -120,6 +120,7 @@ class LineTrainer:
         self.schedule = lambda n: None
         self.charset = None
         self.dewarp_to = None
+        self.lr_schedule = None
 
     def set_lr(self, lr, momentum=0.9):
         """Set the learning rate.
@@ -134,6 +135,9 @@ class LineTrainer:
             )
             self.last_lr = lr
 
+    def set_lr_schedule(self, f):
+        self.lr_schedule = f
+
     def train_batch(self, inputs, targets):
         """All the steps necessary for training a batch.
 
@@ -141,6 +145,8 @@ class LineTrainer:
         Adds the loss to self.losses.
         Clips the gradient if self.clip_gradient is not None.
         """
+        if self.lr_schedule:
+            self.set_lr(self.lr_schedule(self.nsamples))
         self.model.train()
         self.set_lr(self.schedule(self.nsamples))
         self.nbatches += 1
@@ -156,7 +162,9 @@ class LineTrainer:
             nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_gradient)
         self.optimizer.step()
         self.last_batch = (inputs.detach().cpu(), targets, outputs.detach().cpu())
-        return loss.detach().item()
+        loss = float(loss)
+        self.losses.append(loss)
+        return loss
 
     def probs_batch(self, inputs):
         """Compute probability outputs for the batch. Uses `probfn`."""
@@ -164,20 +172,6 @@ class LineTrainer:
         with torch.no_grad():
             outputs = self.model.forward(inputs.to(self.device))
         return outputs.detach().cpu().softmax(1)
-
-    def train(self, loader, epochs=1, learning_rates=None):
-        """Train over a dataloader for the given number of epochs."""
-        if learning_rates is None:
-            learning_rates = [self.last_lr] * epochs
-        for epoch, lr in enumerate(learning_rates):
-            self.set_lr(lr)
-            self.epoch = epoch
-            for sample in loader:
-                images, targets = sample
-                loss = self.train_batch(images, targets)
-                self.losses.append(float(loss))
-                for f in self.every_batch:
-                    f(self)
 
     def errors(self, loader, ntest=999999999):
         """Compute OCR errors using edit distance."""
@@ -389,6 +383,18 @@ def load_model(fname):
     return mod, src
 
 
+def save_model(logger, trainer, test_dl, ntest=999999999):
+    if test_dl is not None:
+        errors, total = trainer.errors(test_dl, ntest=ntest)
+        err = float(errors) / total
+        logger.scalar("val/err", err, step=trainer.nsamples)
+        print("test set:", err, errors, total)
+        loss = err
+    else:
+        loss = np.mean(trainer.losses[-100:])
+    loading.log_model(logger, trainer.model, step=trainer.nsamples, loss=loss)
+
+
 @app.command()
 def train(
     training: str,
@@ -397,17 +403,17 @@ def train(
     display: bool = False,
     invert: bool = False,
     normalize_intensity: bool = False,
-    model: str = "text_model_210113",
+    model: str = "text_model_210118",
     test: str = None,
     test_bs: int = 20,
     ntest: int = int(1e12),
     schedule: str = "1e-3 * (0.9**((n//100000)**.5))",
     # lr: float = 1e-3,
-    ntrain: int = -1,
     checkerr: float = 1e12,
     charset_file: str = None,
     dewarp_to: int = -1,
     log_to: str = "",
+    ntrain: int = (1 << 31),
 ):
 
     charset = Charset(chardef=charset_file)
@@ -448,6 +454,8 @@ def train(
             dewarp_to=dewarp_to,
             mode="test",
         )
+    else:
+        test_dl = None
 
     model = loading.load_or_construct_model(model, len(charset))
     if not hasattr(model, "extra_"):
@@ -459,20 +467,23 @@ def train(
 
     trainer = LineTrainer(model)
     trainer.charset = charset
-    trainer.schedule = eval(f"lambda n: {schedule}")
-    trainer.every_batch.append(log_progress)
-    trainer.every_batch.append(display_progress if display else print_progress)
+    trainer.set_lr_schedule(eval(f"lambda n: {schedule}"))
+
+    schedule = utils.Schedule()
     print("starting training")
-    for epoch in range(epochs):
-        trainer.train(training_dl)
-        loss = np.mean(trainer.losses[-100:])
-        if test is not None:
-            errors, total = trainer.errors(test_dl, ntest=ntest)
-            err = float(errors) / total
-            logger.scalar("val/err", err, step=trainer.nsamples)
-            print("test set:", err, errors, total)
-            loss = err
-        loading.log_model(logger, model, step=trainer.nsamples, loss=loss)
+    for images, targets in utils.repeatedly(training_dl):
+        if trainer.nsamples >= ntrain:
+            break
+        trainer.train_batch(images, targets)
+        if schedule("progress", 60):
+            print_progress(trainer)
+        if schedule("display", 15):
+            display_progress(trainer)
+        if schedule("log", 600):
+            log_progress(trainer)
+        if schedule("save", 15 * 60, initial=True):
+            save_model(logger, trainer, test_dl)
+    save_model(logger, trainer, test_dl)
 
 
 @app.command()
