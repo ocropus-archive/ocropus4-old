@@ -1,4 +1,3 @@
-# hocr=/sdata/ocropus4/uw3/uw3-hocr.tar
 hocr=./uw3-hocr.tar
 
 # ocropus=env python3="coverage run -a" vocropus
