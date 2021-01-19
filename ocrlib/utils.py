@@ -1,3 +1,4 @@
+import itertools as itt
 import os
 import sys
 import time
@@ -232,3 +233,23 @@ class BBox:
 
     def coords(self):
         return tuple(int(x) for x in [self.y0, self.y1, self.x0, self.x1])
+
+
+class Schedule:
+    def __init__(self):
+        self.jobs = {}
+
+    def __call__(self, key, seconds, initial=False):
+        now = time.time()
+        last = self.jobs.setdefault(key, 0 if initial else now)
+        if now - last > seconds:
+            self.jobs[key] = now
+            return True
+        else:
+            return False
+
+
+def repeatedly(loader, nepochs=999999999, nbatches=999999999999):
+    for epoch in range(nepochs):
+        for sample in itt.islice(loader, nbatches):
+            yield sample

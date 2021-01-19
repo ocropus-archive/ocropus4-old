@@ -6,7 +6,6 @@ import typer
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import itertools as itt
 from numpy import amin, median, mean
 from scipy import ndimage as ndi
 from torch import nn, optim
@@ -15,6 +14,7 @@ from webdataset import Dataset
 import torchmore.layers
 
 import ocrlib.patches
+from ocrlib.utils import Schedule, repeatedly
 from . import slog
 from . import utils
 from . import loading
@@ -405,17 +405,77 @@ class SegTrainer:
 ###
 
 
+def spread_labels(labels, maxdist=9999999):
+    """Spread the given labels to the background"""
+    distances, features = ndi.distance_transform_edt(
+        labels == 0, return_distances=1, return_indices=1
+    )
+    indexes = features[0] * labels.shape[1] + features[1]
+    spread = labels.ravel()[indexes.ravel()].reshape(*labels.shape)
+    spread *= distances < maxdist
+    return spread
+
+
+def marker_segmentation(markers, regions, maxdist=100):
+    labels, _ = ndi.label(markers)
+    spread = spread_labels(labels, maxdist=maxdist)
+    segmented = np.where(np.maximum(markers, regions), spread, 0)
+    return segmented
+
+
+def smooth_probabilities(probs, smooth):
+    if smooth == 0.0:
+        return probs
+    if isinstance(smooth, (int, float)):
+        smooth = (float(smooth), float(smooth), 0)
+    else:
+        assert len(smooth) == 2
+        smooth = list(smooth) + [0]
+    maxima = np.amax(np.amax(probs, 0), 0)
+    assert maxima.shape == (4,)
+    gprobs = ndi.gaussian_filter(probs, smooth)
+    gmaxima = np.amax(np.amax(gprobs, 0), 0)
+    gprobs /= (maxima / gmaxima)[np.newaxis, np.newaxis, :]
+    gprobs = gprobs / gprobs.sum(2)[:, :, np.newaxis]
+    return gprobs
+
+
+def full_inference(batch, model, *args, **kw):
+    with torch.no_grad():
+        return model(batch).detach().softmax(1).cpu()
+
+
+def patchwise_inference(batch, model, size=(400, 1600), overlap=0):
+    if np.prod(batch.shape[-2:]) <= np.prod(size):
+        return full_inference(batch, model)
+    assert overlap == 0, "nonzero overlap not implemented yet"
+    h, w = batch.shape[-2:]
+    result = None
+    for y in range(0, h, size[0]):
+        for x in range(0, w, size[1]):
+            patch = batch[..., y : y + size[0], x : x + size[1]]
+            print("patch", patch.shape)
+            probs = full_inference(patch, model)
+            if result is None:
+                nshape = list(probs.shape[:-2]) + list(batch.shape[-2:])
+                print("*", nshape)
+                result = torch.zeros(nshape)
+            print("probs", probs.shape)
+            print(result.shape, y, x)
+            result[..., y : y + size[0], x : x + size[1]] = probs.detach().cpu()
+    return result
+
+
 class Segmenter:
-    def __init__(self, model, smooth=1.0, scale=0.5, preproc=None):
-        if isinstance(smooth, (int, float)):
-            self.smooth = (float(smooth), float(smooth), 0)
-        else:
-            assert len(smooth) == 2
-            self.smooth = list(smooth) + [0]
+    def __init__(self, model, scale=0.5, preproc=None):
+        self.smooth = 0.0
         self.zoom = scale
         self.preproc = preproc or torchmore.layers.ModPad(8)
         self.preproc.eval()
         self.model = model
+        self.marker_threshold = 0.3
+        self.region_threshold = 0.3
+        self.maxdist = 100
         self.activate()
 
     def activate(self, yes=True):
@@ -425,9 +485,6 @@ class Segmenter:
         else:
             self.model.cpu()
             self.model.cpu()
-
-    def get_targets(self, classes):
-        return classes >= 2
 
     def segment(self, page, nocheck=False, unzoom=True):
         assert page.ndim == 2
@@ -441,31 +498,20 @@ class Segmenter:
         batch = torch.FloatTensor(zoomed).unsqueeze(0).unsqueeze(0)
         batch = batch.cuda()
         batch = self.preproc(batch)
-        with torch.no_grad():
-            probs = (
-                self.model(batch)
-                .softmax(1)
-                .detach()
-                .cpu()
-                .numpy()[0]
-                .transpose(1, 2, 0)
-            )
+        probs = patchwise_inference(batch, self.model)
+        probs = probs.numpy()[0].transpose(1, 2, 0)
         if unzoom:
             probs = ndi.zoom(probs, (1.0 / self.zoom, 1.0 / self.zoom, 1.0), order=1)
         self.probs = probs
-        maxima = np.amax(np.amax(probs, 0), 0)
-        assert maxima.shape == (4,)
-        gprobs = ndi.gaussian_filter(probs, self.smooth)
-        gmaxima = np.amax(np.amax(gprobs, 0), 0)
-        gprobs /= (maxima / gmaxima)[np.newaxis, np.newaxis, :]
-        gprobs = gprobs / gprobs.sum(2)[:, :, np.newaxis]
-        self.gprobs = gprobs
-        classes = np.argmax(gprobs, 2)
-        self.segments = self.get_targets(classes)
-        labels, n = ndi.label(self.segments)
+        self.gprobs = smooth_probabilities(probs, self.smooth)
+        self.segments = marker_segmentation(
+            self.gprobs[..., 3] > self.marker_threshold,
+            self.gprobs[..., 2] > self.region_threshold,
+            self.maxdist,
+        )
         return [
             (obj[0].start, obj[0].stop, obj[1].start, obj[1].stop)
-            for obj in ndi.find_objects(labels)
+            for obj in ndi.find_objects(self.segments)
         ]
 
 
@@ -488,26 +534,6 @@ def extract_boxes(page, boxes, pad=5):
             order=0,
         )
         yield word
-
-
-class Schedule:
-    def __init__(self):
-        self.jobs = {}
-
-    def __call__(self, key, seconds, initial=False):
-        now = time.time()
-        last = self.jobs.setdefault(key, 0 if initial else now)
-        if now - last > seconds:
-            self.jobs[key] = now
-            return True
-        else:
-            return False
-
-
-def repeatedly(loader, nepochs=999999999, nbatches=999999999999):
-    for epoch in range(nepochs):
-        for sample in itt.islice(loader, nbatches):
-            yield sample
 
 
 def save_model(logger, trainer, test_dl, ntest=999999):
@@ -551,7 +577,7 @@ def train(
     num_workers: int = 1,
     log_to: str = "",
     parallel: bool = False,
-    save_interval: float = 30*60,
+    save_interval: float = 30 * 60,
 ):
     global logger
 
@@ -582,7 +608,10 @@ def train(
         num_workers=num_workers,
         **kw,
     )
-    (images, targets,) = next(iter(training_dl))
+    (
+        images,
+        targets,
+    ) = next(iter(training_dl))
     if test is not None:
         kw = eval(f"dict({test_args})")
         test_dl = make_loader(test, batch_size=test_bs, **kw)
