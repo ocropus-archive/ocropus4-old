@@ -97,9 +97,10 @@ def page_skew_210113(noutput, size=256, r=5, nf=8, r2=5, nf2=4):
     return model
 
 
-def text_model_210113(noutput):
+def text_model_210118(noutput):
     model = nn.Sequential(
         layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
+        inputstats.InputStats("textmodel"),
         *combos.conv2d_block(32, 3, mp=(2, 1), repeat=2),
         *combos.conv2d_block(48, 3, mp=(2, 1), repeat=2),
         *combos.conv2d_block(64, 3, mp=2, repeat=2),
@@ -119,29 +120,10 @@ def text_model_210113(noutput):
     return model
 
 
-def segmentation_model_210113(noutput=4):
+def segmentation_model_210118(noutput=4):
     model = nn.Sequential(
         layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
-        layers.ModPad(8),
-        layers.KeepSize(
-            sub=nn.Sequential(
-                *combos.conv2d_block(32, 3, mp=2, repeat=2),
-                *combos.conv2d_block(48, 3, mp=2, repeat=2),
-                *combos.conv2d_block(96, 3, mp=2, repeat=2),
-                flex.BDHW_LSTM(100),
-            )
-        ),
-        flex.BDHW_LSTM(40),
-        flex.Conv2d(noutput, 3, padding=1),
-    )
-    flex.shape_inference(model, (1, 1, 256, 256))
-    return model
-
-
-def segmentation_model_210117(noutput=4):
-    model = nn.Sequential(
         inputstats.InputStats("segmodel"),
-        layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
         layers.ModPad(8),
         layers.KeepSize(
             sub=nn.Sequential(
