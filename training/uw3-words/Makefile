@@ -8,7 +8,9 @@ ocropus=vocropus
 %.pth: %.sqlite3
 	$(ocropus) slog getlast $< --output $@
 
-models: wordtrain.pth segtrain.pth
+models: segtrain.pth # wordtrain.pth
+
+tars: uw3-words.tar uw3-seg.tar
 
 # wordtrain.sqlite3: uw3-words.tar
 # 	$(ocropus) ocroline train uw3-words.tar --log-to wordtrain.sqlite3.temp --epochs 10
@@ -18,15 +20,16 @@ segtrain.sqlite3: uw3-seg.tar
 	$(ocropus) ocroseg train uw3-seg.tar --display --log-to segtrain.sqlite3.temp --epochs 10 # --weightmask 20
 	mv segtrain.sqlite3.temp segtrain.sqlite3
 
-uw3-words.tar:
+uw3-words.tar: uw3-tess.tar
 	$(ocropus) extract-lines hocr2rec $(hocr) --output uw3-words.tar.temp --element ocrx_word --extensions 'page.jpg tess.hocr' --bounds 10,10,500,100 --show 100 --dictionary /usr/share/dict/american-english-huge
 	mv uw3-words.tar.temp uw3-words.tar
 
-uw3-seg.tar:
+uw3-seg.tar: uw3-tess.tar
 	$(ocropus) extract-seg hocr2seg $(hocr) --output uw3-seg.tar.temp --element ocrx_word --extensions 'page.jpg tess.hocr' --invert True --show 100 --labels='1, 2, 3' --acceptable "10, 10, 500, 200"
 	mv uw3-seg.tar.temp uw3-seg.tar
 
 uw3-tess.tar: uw3-framed.tar
+	rebuild=y dtess --help
 	tarp proc -c $(shell pwd)/'dtess sample.page.jpg sample.tess -l eng hocr' uw3-framed.tar -o uw3-tess.tar.temp
 	mv uw3-tess.tar.temp uw3-tess.tar
 
