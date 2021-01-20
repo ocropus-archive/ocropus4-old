@@ -322,7 +322,7 @@ def print_progress(trainer):
         return
     avgloss = mean(trainer.losses[-100:]) if len(trainer.losses) > 0 else 0.0
     print(
-        f"{trainer.epoch:3d} {trainer.nbatches:9d} {avgloss:10.4f}",
+        f"{trainer.nsamples:3d} {trainer.nbatches:9d} {avgloss:10.4f}",
         file=sys.stderr,
         flush=True,
     )
@@ -341,8 +341,6 @@ def log_progress(trainer):
 
 
 def display_progress(trainer):
-    if trainer.nbatches % 50 != 0:
-        return
     import matplotlib.pyplot as plt
 
     inputs, targets, outputs = trainer.last_batch
@@ -399,8 +397,6 @@ def save_model(logger, trainer, test_dl, ntest=999999999):
 def train(
     training: str,
     training_bs: int = 3,
-    epochs: int = 200,
-    display: bool = False,
     invert: bool = False,
     normalize_intensity: bool = False,
     model: str = "text_model_210118",
@@ -414,6 +410,7 @@ def train(
     dewarp_to: int = -1,
     log_to: str = "",
     ntrain: int = (1 << 31),
+    display: bool = False,
 ):
 
     charset = Charset(chardef=charset_file)
@@ -425,7 +422,6 @@ def train(
     logger.json(
         "args",
         dict(
-            epochs=epochs,
             mdef=model,
             training=training,
             training_bs=training_bs,
@@ -475,11 +471,11 @@ def train(
         if trainer.nsamples >= ntrain:
             break
         trainer.train_batch(images, targets)
-        if schedule("progress", 60):
+        if schedule("progress", 60, initial=True):
             print_progress(trainer)
-        if schedule("display", 15):
+        if schedule("display", 15, initial=True):
             display_progress(trainer)
-        if schedule("log", 600):
+        if schedule("log", 600, initial=True):
             log_progress(trainer)
         if schedule("save", 15 * 60, initial=True):
             save_model(logger, trainer, test_dl)
