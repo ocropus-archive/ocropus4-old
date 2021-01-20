@@ -12,12 +12,12 @@ models: segtrain.pth # wordtrain.pth
 
 tars: uw3-words.tar uw3-seg.tar
 
-# wordtrain.sqlite3: uw3-words.tar
-# 	$(ocropus) ocroline train uw3-words.tar --log-to wordtrain.sqlite3.temp --epochs 10
-# 	mv wordtrain.sqlite3.temp wordtrain.sqlite3
+wordtrain.sqlite3: uw3-words.tar
+	$(ocropus) ocroline train uw3-words.tar --log-to wordtrain.sqlite3.temp --ntrain 1000000 --display
+	mv wordtrain.sqlite3.temp wordtrain.sqlite3
 
 segtrain.sqlite3: uw3-seg.tar
-	$(ocropus) ocroseg train uw3-seg.tar --display --log-to segtrain.sqlite3.temp --epochs 10 # --weightmask 20
+	$(ocropus) ocroseg train uw3-seg.tar --display 10.0 --log-to segtrain.sqlite3.temp --ntrain 1000000 # --weightmask 20
 	mv segtrain.sqlite3.temp segtrain.sqlite3
 
 uw3-words.tar: uw3-tess.tar

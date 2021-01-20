@@ -559,7 +559,7 @@ def train(
     training,
     training_args: str = "",
     training_bs: int = 2,
-    display: bool = False,
+    display: float = -1.0,
     shuffle: int = 1000,
     model: str = "segmentation_model_210118",
     test: str = None,
@@ -637,7 +637,7 @@ def train(
             log_progress(trainer)
         if schedule("save", save_interval, initial=True):
             save_model(logger, trainer, test_dl)
-        if display and schedule("display", 15):
+        if display > 0 and schedule("display", display):
             display_progress(trainer)
 
     save_model(logger, trainer, test_dl)
