@@ -3,7 +3,6 @@ import random as pyrand
 from functools import partial
 from math import cos, exp, log, sin
 from typing import List
-import time
 from itertools import islice
 
 import matplotlib.pyplot as plt
@@ -323,14 +322,13 @@ class PageScale:
 @app.command()
 def train_rot(
     urls: List[str],
-    nepochs: int = 100,
+    nsamples: int = 1000000,
     num_workers: int = 8,
     replicate: int = 1,
     bs: int = 64,
     prefix: str = "rot",
     lrfun="0.3**(3+n//5000000)",
     output: str = "",
-    limit: int = 999999999,
     model: str = "page_orientation_210113",
 ):
     logger = slog.Logger(fname=output, prefix=prefix)
@@ -341,7 +339,7 @@ def train_rot(
     print(model)
     urls = urls * replicate
     training = make_loader(
-        urls, shuffle=10000, num_workers=num_workers, batch_size=bs, limit=limit
+        urls, shuffle=10000, num_workers=num_workers, batch_size=bs
     )
     criterion = nn.CrossEntropyLoss().cuda()
     lrfun = eval(f"lambda n: {lrfun}")
@@ -349,7 +347,6 @@ def train_rot(
     optimizer = optim.SGD(model.parameters(), lr=lr)
     count = 0
     losses = []
-    last = time.time()
 
     def save():
         state = dict(
@@ -361,48 +358,45 @@ def train_rot(
         avgloss = np.mean(losses[-100:])
         logger.save("model", state, scalar=avgloss, step=count)
         logger.flush()
+        print("\nsaved at", count)
 
-    for epoch in range(nepochs):
-        for patches, targets in islice(iter(training), limit):
-            patches = patches.type(torch.float).unsqueeze(1).cuda()
-            optimizer.zero_grad()
-            outputs = model(patches)
-            loss = criterion(outputs, targets.cuda())
-            loss.backward()
-            optimizer.step()
-            count += len(patches)
-            losses.append(float(loss))
-            print(
-                epoch,
-                count,
-                np.mean(losses[-50:]),
-                lr,
-                "          ",
-                end="\r",
-                flush=True,
+    schedule = utils.Schedule()
+
+    for patches, targets in utils.repeatedly(training):
+        if count > nsamples:
+            break
+        patches = patches.type(torch.float).unsqueeze(1).cuda()
+        optimizer.zero_grad()
+        outputs = model(patches)
+        loss = criterion(outputs, targets.cuda())
+        loss.backward()
+        optimizer.step()
+        count += len(patches)
+        losses.append(float(loss))
+        if schedule("info", 60, initial=True):
+            print(count, np.mean(losses[-50:]), lr, flush=True)
+        if schedule("log", 15*60):
+            avgloss = np.mean(losses[-100:])
+            logger.scalar(
+                "train/loss",
+                avgloss,
+                step=count,
+                json=dict(lr=lr),
             )
-            if len(losses) % 100 == 0:
-                avgloss = np.mean(losses[-100:])
-                logger.scalar(
-                    "train/loss",
-                    avgloss,
-                    step=count,
-                    json=dict(lr=lr),
-                )
-                logger.flush()
-            if time.time() - last > 900.0:
-                loading.log_model(logger, model, step=count, loss=np.mean(losses[-100:]))
-                last = time.time()
-            if lrfun(count) != lr:
-                lr = lrfun(count)
-                optimizer = optim.SGD(model.parameters(), lr=lr)
-    loading.log_model(logger, model, step=count, loss=np.mean(losses[-100:]))
+            logger.flush()
+        if schedule("save", 15*60):
+            save()
+        if lrfun(count) != lr:
+            lr = lrfun(count)
+            optimizer = optim.SGD(model.parameters(), lr=lr)
+
+    save()
 
 
 @app.command()
 def train_skew(
     urls: List[str],
-    nepochs: int = 100,
+    nsamples: int = 1000000,
     num_workers: int = 8,
     bins: str = "np.linspace(-0.1, 0.1, 21)",
     alpha: str = "-0.1, 0.1",
@@ -445,7 +439,7 @@ def train_skew(
     optimizer = optim.SGD(model.parameters(), lr=lr)
     count = 0
     losses = []
-    last = time.time()
+    schedule = utils.Schedule()
 
     def save():
         state = dict(
@@ -459,49 +453,43 @@ def train_skew(
         logger.save("model", state, scalar=avgloss, step=count)
         logger.flush()
 
-    for epoch in range(nepochs):
-        for patches, angles, scales in training:
-            targets = angles if not do_scale else scales
-            targets = torch.tensor([binned(float(t), bins) for t in targets])
-            patches = patches.type(torch.float).unsqueeze(1).cuda()
-            optimizer.zero_grad()
-            outputs = model(patches)
-            loss = criterion(outputs, targets.cuda())
-            loss.backward()
-            optimizer.step()
-            count += len(patches)
-            losses.append(float(loss))
-            print(
-                epoch,
-                count,
-                np.mean(losses[-50:]),
-                lr,
-                "          ",
-                end="\r",
-                flush=True,
+    for patches, angles, scales in utils.repeatedly(training, verbose=True):
+        if count >= nsamples:
+            print("# finished at", count)
+            break
+        targets = angles if not do_scale else scales
+        targets = torch.tensor([binned(float(t), bins) for t in targets])
+        patches = patches.type(torch.float).unsqueeze(1).cuda()
+        optimizer.zero_grad()
+        outputs = model(patches)
+        loss = criterion(outputs, targets.cuda())
+        loss.backward()
+        optimizer.step()
+        count += len(patches)
+        losses.append(float(loss))
+        if schedule("info", 60, initial=True):
+            print(count, np.mean(losses[-50:]), lr, flush=True)
+        if schedule("log", 10*60):
+            avgloss = np.mean(losses[-100:])
+            logger.scalar(
+                "train/loss",
+                avgloss,
+                step=count,
+                json=dict(lr=lr),
             )
-            if len(losses) % 100 == 0:
-                avgloss = np.mean(losses[-100:])
-                logger.scalar(
-                    "train/loss",
-                    avgloss,
-                    step=count,
-                    json=dict(lr=lr),
-                )
-                logger.flush()
-            if time.time() - last > 900.0:
-                save()
-                last = time.time()
-            if lrfun(count) != lr:
-                lr = lrfun(count)
-                optimizer = optim.SGD(model.parameters(), lr=lr)
+            logger.flush()
+        if schedule("save", 15*60):
+            save()
+        if lrfun(count) != lr:
+            lr = lrfun(count)
+            optimizer = optim.SGD(model.parameters(), lr=lr)
         save()
 
 
 @app.command()
 def train_scale(
     urls: List[str],
-    nepochs: int = 100,
+    nsamples: int = 1000000,
     num_workers: int = 8,
     alpha: str = "-0.1, 0.1",
     scale: str = "0.5, 2.0",
@@ -515,7 +503,7 @@ def train_scale(
 ):
     return train_skew(
         urls,
-        nepochs=nepochs,
+        nsamples=nsamples,
         num_workers=num_workers,
         bins=bins,
         alpha=alpha,

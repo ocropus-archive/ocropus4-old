@@ -26,10 +26,12 @@ case $library in
 
 # data extraction
 
-extract-seg)  # extract segmentation for deep learning
+extract-seg)  # extract segmentation for training segmenters
     $python3 -m ocrlib.extract_seg "$@"
     ;;
-extract-lines)  # extract lines for deep learning
+extract-rec)  # extract images for training recognizers
+    ;&
+extract-lines)
     $python3 -m ocrlib.extract_lines "$@"
     ;;
 
@@ -38,7 +40,9 @@ extract-lines)  # extract lines for deep learning
 ocroseg)  # page segmentation
     $python3 -m ocrlib.ocroseg "$@"
     ;;
-ocroline)  # line/word recognition
+ocrotext)  # line/word recognition
+    ;&
+ocroline)
     $python3 -m ocrlib.ocroline "$@"
     ;;
 ocrobin)   # binarization

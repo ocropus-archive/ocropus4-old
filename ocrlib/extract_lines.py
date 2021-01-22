@@ -38,6 +38,8 @@ def hocr2images(
     unicodedammit=False,
     acceptable_size=lambda x: True,
     acceptable_text=lambda x: True,
+    acceptable_conf=-1,
+    conf_tag="x_wconf",
 ):
     assert isinstance(image, np.ndarray), type(image)
     assert isinstance(hocr, (bytes, str))
@@ -61,6 +63,11 @@ def hocr2images(
     lines = list(page.xpath("//*[@class='%s']" % element))
     print(f"# got {len(lines)} elements of class {element}", file=sys.stderr)
     for line in lines:
+        if acceptable_conf >= 0:
+            conf = float(get_prop(line, "x_wconf"))
+            if conf < acceptable_conf:
+                print(f"# confidence {conf} < acceptable confidence {acceptable_conf}", file=sys.stderr)
+                continue
         bbox = [int(x) for x in get_prop(line, "bbox").split()]
         x0, y0, x1, y1 = bbox
         if padding is not None:
@@ -213,6 +220,8 @@ def hocr2rec(
     dictionary: str = "NONE",
     bounds: str = "50,1000,50,200",
     invert: str = "Auto",
+    acceptable_conf: float = -1,
+    conf_tag: str = "x_wconf",
 ):
     """Extract recognizable segments from training data.
 
@@ -258,6 +267,8 @@ def hocr2rec(
                 unicodedammit=False,
                 acceptable_text=acceptable_text,
                 acceptable_size=acceptable_size,
+                acceptable_conf=acceptable_conf,
+                conf_tag=conf_tag,
             ):
                 if count >= maxcount:
                     print("MAXCOUNT REACHED", file=sys.stderr)

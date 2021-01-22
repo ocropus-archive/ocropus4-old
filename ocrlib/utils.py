@@ -249,7 +249,9 @@ class Schedule:
             return False
 
 
-def repeatedly(loader, nepochs=999999999, nbatches=999999999999):
+def repeatedly(loader, nepochs=999999999, nbatches=999999999999, verbose=False):
     for epoch in range(nepochs):
+        if verbose:
+            print("# epoch", epoch, file=sys.stderr)
         for sample in itt.islice(loader, nbatches):
             yield sample

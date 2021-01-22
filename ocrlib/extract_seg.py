@@ -14,6 +14,10 @@ from . import utils
 
 import typer
 
+
+# FIXME move this into the function, make it a command line argument
+# FIXME ditto for confidence
+
 debug = int(os.environ.get("EXTRACT_SEG_DEBUG", "0"))
 acceptable_bboxes = list(
     map(float, os.environ.get("EXTRACT_SEG_ACCEPTABLE", "5 5 8000 8000").split())
@@ -117,7 +121,7 @@ def mask_with_boxes(image, bboxes, dilate=50, background=0):
     return image
 
 
-def bboxes_for_hocr(image, hocr, element="ocrx_word"):
+def bboxes_for_hocr(image, hocr, acceptable_conf=50, conf_prop="x_wconf", element="ocrx_word"):
     """
     Generate a segmentation target given an image and hOCR segmentation info.
         :param image: page image
@@ -140,11 +144,25 @@ def bboxes_for_hocr(image, hocr, element="ocrx_word"):
             )
     # print(page.get("title"))
     bboxes = []
+    bad_conf = 0
+    no_conf = 0
+    count = 0
     for word in page.xpath(f"//*[@class='{element}']"):
+        count += 1
+        if acceptable_conf >= 0:
+            conf = get_prop(word, "x_wconf")
+            if conf is not None:
+                conf = float(conf)
+                if conf < acceptable_conf:
+                    bad_conf += 1
+                    continue
+            else:
+                no_conf += 1
         bbox = [int(x) for x in get_prop(word, "bbox").split()]
         if not acceptable(bbox):
             continue
         bboxes.append(bbox)
+    print(f"# {bad_conf} bad bboxes, {no_conf} no confidence, {len(bboxes)} good, {count} total")
     return bboxes
 
 

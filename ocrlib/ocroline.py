@@ -318,8 +318,6 @@ def make_loader(
 
 
 def print_progress(trainer):
-    if trainer.nbatches % 50 != 0:
-        return
     avgloss = mean(trainer.losses[-100:]) if len(trainer.losses) > 0 else 0.0
     print(
         f"{trainer.nsamples:3d} {trainer.nbatches:9d} {avgloss:10.4f}",
@@ -410,7 +408,7 @@ def train(
     dewarp_to: int = -1,
     log_to: str = "",
     ntrain: int = (1 << 31),
-    display: bool = False,
+    display: float = -1.0,
 ):
 
     charset = Charset(chardef=charset_file)
@@ -473,7 +471,7 @@ def train(
         trainer.train_batch(images, targets)
         if schedule("progress", 60, initial=True):
             print_progress(trainer)
-        if schedule("display", 15, initial=True):
+        if display > 0 and schedule("display", display, initial=True):
             display_progress(trainer)
         if schedule("log", 600, initial=True):
             log_progress(trainer)
