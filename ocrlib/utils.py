@@ -53,6 +53,11 @@ def enumerated(source, start=0, limit=999999999999, message=None):
         yield count, x
 
 
+class Record:
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
 class Every(object):
     """Trigger an action every given number of seconds."""
 

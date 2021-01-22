@@ -6,9 +6,15 @@ import argparse
 
 import PIL
 import numpy as np
+import typer
 import matplotlib.pyplot as plt
 from scipy.ndimage import filters, interpolation, morphology
 from scipy import stats
+import webdataset as wds
+from . import utils
+
+
+app = typer.Typer()
 
 
 parser = argparse.ArgumentParser(
@@ -19,93 +25,6 @@ This is a compute-intensive binarization method that works on degraded
 and historical book pages.
 """
 )
-
-parser.add_argument(
-    "-n", "--nocheck", action="store_true", help="disable error checking on inputs"
-)
-parser.add_argument(
-    "-t",
-    "--threshold",
-    type=float,
-    default=-1,
-    help="threshold, determines lightness, default: %(default)s",
-)
-parser.add_argument(
-    "-z",
-    "--zoom",
-    type=float,
-    default=0.5,
-    help="zoom for page background estimation, smaller=faster, default: %(default)s",
-)
-parser.add_argument(
-    "-e",
-    "--escale",
-    type=float,
-    default=1.0,
-    help="scale for estimating a mask over the text region, default: %(default)s",
-)
-parser.add_argument(
-    "-b",
-    "--bignore",
-    type=float,
-    default=0.1,
-    help="ignore this much of the border for threshold estimation, default: %(default)s",
-)
-parser.add_argument(
-    "-p",
-    "--perc",
-    type=float,
-    default=80,
-    help="percentage for filters, default: %(default)s",
-)
-parser.add_argument(
-    "-r",
-    "--range",
-    type=int,
-    default=20,
-    help="range for filters, default: %(default)s",
-)
-parser.add_argument(
-    "-m",
-    "--maxskew",
-    type=float,
-    default=2,
-    help="skew angle estimation parameters (degrees), default: %(default)s",
-)
-parser.add_argument(
-    "-g",
-    "--gray",
-    action="store_true",
-    help="force grayscale processing even if image seems binary",
-)
-parser.add_argument(
-    "--lo",
-    type=float,
-    default=5,
-    help="percentile for black estimation, default: %(default)s",
-)
-parser.add_argument(
-    "--hi",
-    type=float,
-    default=90,
-    help="percentile for white estimation, default: %(default)s",
-)
-parser.add_argument(
-    "--skewsteps",
-    type=int,
-    default=8,
-    help="steps for skew angle estimation (per degree), default: %(default)s",
-)
-parser.add_argument(
-    "--debug",
-    type=float,
-    default=0,
-    help="display intermediate results, default: %(default)s",
-)
-parser.add_argument("-o", "--output", default=None, help="output file")
-parser.add_argument("fname", help="input file")
-
-default_args = parser.parse_args(["___.jpg"])
 
 debug_nlbin = False
 
@@ -170,15 +89,15 @@ def normalize_raw_image(raw):
     return image
 
 
-def estimate_local_whitelevel(image, zoom=0.5, perc=80, range=20, debug=0):
+def estimate_local_whitelevel(image, zoom=0.5, perc=80, dist=20, debug=0):
     """flatten it by estimating the local whitelevel
     zoom for page background estimation, smaller=faster, default: %(default)s
     percentage for filters, default: %(default)s
-    range for filters, default: %(default)s
+    dist for filters, default: %(default)s
     """
     m = interpolation.zoom(image, zoom)
-    m = filters.percentile_filter(m, perc, size=(range, 2))
-    m = filters.percentile_filter(m, perc, size=(2, range))
+    m = filters.percentile_filter(m, perc, size=(dist, 2))
+    m = filters.percentile_filter(m, perc, size=(2, dist))
     m = interpolation.zoom(m, 1.0 / zoom)
     if debug > 0:
         plt.clf()
@@ -238,11 +157,11 @@ def estimate_thresholds(flat, bignore=0.1, escale=1.0, lo=5, hi=90, debug=0):
     return lo, hi
 
 
-def nlbin(raw, args=default_args):
+def nlbin(raw, args):
     assert raw.dtype == np.float
     image = normalize_raw_image(raw)
     flat = estimate_local_whitelevel(
-        image, args.zoom, args.perc, args.range, debug_nlbin
+        image, args.zoom, args.perc, args.dist, debug_nlbin
     )
     flat, angle = estimate_skew(flat, args.bignore, args.maxskew, args.skewsteps)
     lo, hi = estimate_thresholds(
@@ -254,9 +173,24 @@ def nlbin(raw, args=default_args):
     return flat
 
 
-def main():
-    args = parser.parse_args()
-    assert args.output is not None
+@app.command()
+def binarize1(
+    fname: str,
+    threshold: float = -1,
+    zoom: float = 0.5,
+    escale: float = 1.0,
+    bignore: float = 0.1,
+    perc: float = 80,
+    dist: int = 20,
+    maxskew: float = 2,
+    gray: bool = False,
+    lo: float = 5,
+    hi: float = 90,
+    skewsteps: int = 8,
+    debug: float = 0,
+    output: str = "",
+):
+    args = utils.Record(**locals())
     image = PIL.Image.open(args.fname)
     image = image.convert("L")
     image = np.asarray(image)
@@ -272,5 +206,40 @@ def main():
     result.save(args.output)
 
 
+@app.command()
+def binarize(
+    fname: str,
+    extensions: str = "jpg;jpeg;png",
+    threshold: float = -1,
+    zoom: float = 0.5,
+    escale: float = 1.0,
+    bignore: float = 0.1,
+    perc: float = 80,
+    dist: int = 20,
+    maxskew: float = 2,
+    gray: bool = False,
+    lo: float = 5,
+    hi: float = 90,
+    skewsteps: int = 8,
+    debug: float = 0,
+    output: str = "",
+):
+    args = utils.Record(**locals())
+    ds = wds.WebDataset(fname).decode("l8").to_tuple("__key__", extensions)
+    sink = wds.TarWriter(output)
+    for key, image in ds:
+        print(key)
+        assert image.dtype == np.uint8
+        image = image / 255.0
+        flat = nlbin(image, args)
+        assert flat.dtype == np.float
+        result = dict(__key__=key)
+        if threshold >= 0:
+            result["bin.png"] = np.array(flat > args.threshold, dtype=np.uint8) * 255
+        result["nrm.jpg"] = np.array(flat * 255, dtype=np.uint8)
+        sink.write(result)
+    sink.close()
+
+
 if __name__ == "__main__":
-    main()
+    app()
