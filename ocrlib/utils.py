@@ -3,6 +3,7 @@ import os
 import sys
 import time
 from functools import wraps
+import re
 
 import numpy as np
 import torch
@@ -76,9 +77,18 @@ class Every(object):
         return False
 
 
+def fix_quotes(s):
+    assert isinstance(s, str)
+    s, = re.sub("[\u201c\u201d]", '"', s),
+    s, = re.sub("[\u2018\u2019]", "'", s),
+    s, = re.sub("[\u2014]", "-", s),
+    return s
+
+
 class Charset:
     def __init__(self, *, charset=None, chardef=None):
         self.charset = "".join([chr(i) for i in range(32, 128)])
+        self.normalize = [fix_quotes]
 
     def __len__(self):
         return len(self.charset)
@@ -92,6 +102,8 @@ class Charset:
         return index + 1
 
     def encode_str(self, s):
+        for f in self.normalize:
+            s = f(s)
         return [self.encode_chr(c) for c in s]
 
     def decode_chr(self, k):

@@ -136,7 +136,7 @@ def skew_pipe(source, shape=(256, 256), alpha=(-0.1, 0.1), scale=(0.5, 2.0)):
 def make_loader(
     urls,
     batch_size=16,
-    extensions="image.png;framed.png;page.png;png;page.jpg;jpg;jpeg",
+    extensions="nrm.jpg;image.png;framed.png;page.png;png;page.jpg;jpg;jpeg",
     shuffle=0,
     num_workers=4,
     pipe=rot_pipe,
@@ -319,6 +319,11 @@ class PageScale:
         return ndi.rotate(page, self.angle, order=1)
 
 
+default_extensions = (
+    "bin.png;nrm.jpg;nrm.png;image.png;framed.png;page.png;png;page.jpg;jpg;jpeg"
+)
+
+
 @app.command()
 def train_rot(
     urls: List[str],
@@ -330,6 +335,7 @@ def train_rot(
     lrfun="0.3**(3+n//5000000)",
     output: str = "",
     model: str = "page_orientation_210113",
+    extensions: str = default_extensions,
 ):
     logger = slog.Logger(fname=output, prefix=prefix)
     logger.sysinfo()
@@ -339,7 +345,11 @@ def train_rot(
     print(model)
     urls = urls * replicate
     training = make_loader(
-        urls, shuffle=10000, num_workers=num_workers, batch_size=bs
+        urls,
+        shuffle=10000,
+        num_workers=num_workers,
+        batch_size=bs,
+        extensions=extensions,
     )
     criterion = nn.CrossEntropyLoss().cuda()
     lrfun = eval(f"lambda n: {lrfun}")
@@ -375,7 +385,7 @@ def train_rot(
         losses.append(float(loss))
         if schedule("info", 60, initial=True):
             print(count, np.mean(losses[-50:]), lr, flush=True)
-        if schedule("log", 15*60):
+        if schedule("log", 15 * 60):
             avgloss = np.mean(losses[-100:])
             logger.scalar(
                 "train/loss",
@@ -384,7 +394,7 @@ def train_rot(
                 json=dict(lr=lr),
             )
             logger.flush()
-        if schedule("save", 15*60):
+        if schedule("save", 15 * 60):
             save()
         if lrfun(count) != lr:
             lr = lrfun(count)
@@ -409,6 +419,7 @@ def train_skew(
     output: str = "",
     limit: int = -1,
     model: str = "page_skew_210113",
+    extensions: str = default_extensions,
 ):
     """Trains either skew (=small rotation) or scale models."""
 
@@ -432,6 +443,7 @@ def train_skew(
         batch_size=bs,
         pipe=pipe,
         limit=limit,
+        extensions=extensions,
     )
     criterion = nn.CrossEntropyLoss().cuda()
     lrfun = eval(f"lambda n: {lrfun}")
@@ -469,7 +481,7 @@ def train_skew(
         losses.append(float(loss))
         if schedule("info", 60, initial=True):
             print(count, np.mean(losses[-50:]), lr, flush=True)
-        if schedule("log", 10*60):
+        if schedule("log", 10 * 60):
             avgloss = np.mean(losses[-100:])
             logger.scalar(
                 "train/loss",
@@ -478,7 +490,7 @@ def train_skew(
                 json=dict(lr=lr),
             )
             logger.flush()
-        if schedule("save", 15*60):
+        if schedule("save", 15 * 60):
             save()
         if lrfun(count) != lr:
             lr = lrfun(count)
@@ -500,6 +512,7 @@ def train_scale(
     lrfun: str = "0.3**(3+n//5000000)",
     output: str = "",
     limit: int = -1,
+    extensions: str = default_extensions,
 ):
     return train_skew(
         urls,
@@ -515,6 +528,7 @@ def train_scale(
         output=output,
         do_scale=True,
         limit=limit,
+        extensions=extensions,
     )
 
 
@@ -523,7 +537,7 @@ def predict(
     urls: List[str],
     rotmodel: str = "",
     skewmodel: str = "",
-    extensions: str = "page.jpg;page.png;jpg;png",
+    extensions: str = default_extensions,
     limit: int = 999999999,
     invert: str = "Auto",
 ):
