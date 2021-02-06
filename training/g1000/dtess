@@ -1,0 +1,20 @@
+#!/bin/bash
+
+if test "$rebuild" == "y"; then
+docker build -t tess - <<'EOF'
+FROM ubuntu:20.04
+RUN date
+RUN apt-get update && apt-get install -y tesseract-ocr-all
+RUN mkdir /work
+WORKDIR /work
+EOF
+fi
+
+docker run -t \
+    -u $(id -u):$(id -g) \
+    -v /etc/passwd:/etc/passwd \
+    -v /etc/group:/etc/group \
+    -v $(pwd):/work \
+    -w /work \
+    tess \
+    tesseract "$@"
