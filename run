@@ -78,6 +78,7 @@ cmd_venv() { # set up a virtualenv
         pip3 install sos-notebook
         pip3 install jupyterlab-sos
         pip3 install -e git://github.com/vatlab/transient-display-data#egg=transient-display-data
+        python -m sos_notebook.install
         jupyter labextension install transient-display-data
         jupyter labextension install jupyterlab-sos
         pip3 install papermill

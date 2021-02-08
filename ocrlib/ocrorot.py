@@ -464,6 +464,7 @@ def train_skew(
         avgloss = np.mean(losses[-100:])
         logger.save("model", state, scalar=avgloss, step=count)
         logger.flush()
+        print("# saved", count, file=sys.stderr)
 
     for patches, angles, scales in utils.repeatedly(training, verbose=True):
         if count >= nsamples:
@@ -495,7 +496,7 @@ def train_skew(
         if lrfun(count) != lr:
             lr = lrfun(count)
             optimizer = optim.SGD(model.parameters(), lr=lr)
-        save()
+    save()
 
 
 @app.command()

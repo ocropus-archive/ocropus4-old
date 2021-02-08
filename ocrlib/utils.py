@@ -256,10 +256,12 @@ class Schedule:
     def __init__(self):
         self.jobs = {}
 
-    def __call__(self, key, seconds, initial=False):
+    def __call__(self, key, seconds, initial=False, verbose=False):
         now = time.time()
         last = self.jobs.setdefault(key, 0 if initial else now)
         if now - last > seconds:
+            if verbose:
+                print("# Schedule", now, last, seconds, file=sys.stderr)
             self.jobs[key] = now
             return True
         else:
