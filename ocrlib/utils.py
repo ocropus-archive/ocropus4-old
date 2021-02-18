@@ -6,6 +6,7 @@ from functools import wraps
 import re
 
 import numpy as np
+import scipy.ndimage as ndi
 import torch
 from torchmore import layers
 
@@ -274,3 +275,33 @@ def repeatedly(loader, nepochs=999999999, nbatches=999999999999, verbose=False):
             print("# epoch", epoch, file=sys.stderr)
         for sample in itt.islice(loader, nbatches):
             yield sample
+
+
+def label_correspondences(nlabels, olabels):
+    n = np.amax(olabels) + 1
+    m = 1000000
+    assert n < m
+    assert nlabels.shape == olabels.shape
+    a = nlabels.ravel() * m + olabels.shape()
+    a = np.unique(a)
+    result = np.zeros(n, dtype="i")
+    for p in a:
+        result[p % m] = p // m
+    return result
+
+
+def fix_bounding_boxes(bimage, bboxes, yfrac=0.2, xfrac=0.98):
+    components, _ = ndi.label(bimage)
+    markers = np.zeros_like(bimage, dtype="i")
+    for x0, y0, x1, y1 in bboxes:
+        ym, xm = np.mean([y1, y0]), np.mean([x1, x0])
+        dy = max(1, (y1 - y0) * yfrac)
+        dx = max(1, (x1 - x0) * xfrac)
+        markers[max(0, ym - dy) : ym + dy, max(0, xm - dx) : xm + dx] = 1
+    mcomponents, _ = ndi.label(markers)
+    remap = label_correspondences(mcomponents, components)
+    components = remap[components]
+    result = []
+    for y, x in ndi.find_objects(components):
+        result.append((x.start, y.start, x.stop, y.stop))
+    return result

@@ -66,7 +66,16 @@ def acceptable(bbox, minw=10, maxw=1000, minh=10, maxh=100):
     return aspect <= max_aspect and bw >= w0 and bw <= w1 and bh >= h0 and bh <= h1
 
 
-def marker_segmentation_target_for_bboxes(image, bboxes, labels=[1, 0, 2]):
+def marker_segmentation_target_for_bboxes(
+    image,
+    bboxes,
+    labels=[1, 0, 2],
+    sep_margin=0.4,
+    region_margin_y=-0.05,
+    region_margin_x=-0.05,
+    center_margin_y=-0.2,
+    center_margin_x=-0.2,
+):
     """
     Generate a segmentation target given an image and target bounding boxes.
     This generates a central marker and a separator for each bounding box.
@@ -74,27 +83,26 @@ def marker_segmentation_target_for_bboxes(image, bboxes, labels=[1, 0, 2]):
         :param bboxes: list of (x0, y0, x1, y1) bounding boxes for marker generation
         :param labels: list of labels for marker, inside, separator (default: [1, 0, 2])
     """
-    fa, fb, fc, fd = map(
-        float, os.environ.get("marker_segmentation", "0.4 0.05 0.2 0.0").split()
-    )
+
     h, w = image.shape[:2]
     target = np.zeros((h, w), dtype="uint8")
     for bbox in bboxes:
         x0, y0, x1, y1 = bbox
         bw, bh = dims(bbox)
-        a = int(bh * fa)
+        a = int(bh * sep_margin)
         target[y0 - a : y1 + a, x0 - a : x1 + a] = labels[0]
     for bbox in bboxes:
         x0, y0, x1, y1 = bbox
         bw, bh = dims(bbox)
-        b = int(-bh * fb)
-        target[y0 - b : y1 + b, x0 - b : x1 + b] = labels[1]
+        by = int(bh * region_margin_y)
+        bx = int(bw * region_margin_x)
+        target[y0 - by : y1 + by, x0 - bx : x1 + bx] = labels[1]
     for bbox in bboxes:
         x0, y0, x1, y1 = bbox
         xc, yc = center(bbox)
         bw, bh = dims(bbox)
-        c = int(bh * fc)
-        d = int(bh * fd)
+        c = int(bh * center_margin_y)
+        d = int(bh * center_margin_x)
         target[yc - c : yc + c, x0 + d : x1 - d] = labels[2]
     return target
 
@@ -121,7 +129,9 @@ def mask_with_boxes(image, bboxes, dilate=50, background=0):
     return image
 
 
-def bboxes_for_hocr(image, hocr, acceptable_conf=50, conf_prop="x_wconf", element="ocrx_word"):
+def bboxes_for_hocr(
+    image, hocr, acceptable_conf=50, conf_prop="x_wconf", element="ocrx_word"
+):
     """
     Generate a segmentation target given an image and hOCR segmentation info.
         :param image: page image
@@ -162,7 +172,9 @@ def bboxes_for_hocr(image, hocr, acceptable_conf=50, conf_prop="x_wconf", elemen
         if not acceptable(bbox):
             continue
         bboxes.append(bbox)
-    print(f"# {bad_conf} bad bboxes, {no_conf} no confidence, {len(bboxes)} good, {count} total")
+    print(
+        f"# {bad_conf} bad bboxes, {no_conf} no confidence, {len(bboxes)} good, {count} total"
+    )
     return bboxes
 
 
@@ -180,6 +192,8 @@ def segmentation_patches(
     minmark=0,
     mask=(lambda image, bboxes: image),
     labels=[1, 0, 2],
+    params="",
+    fix_boxes=False,
 ):
     """Extract training patches for segmentation."""
     assert page is not None
@@ -187,10 +201,14 @@ def segmentation_patches(
     if page.ndim == 3:
         page = np.mean(page, 2)
     bboxes = bboxes_for_hocr(page, hocr, element=element)
+    if fix_boxes:
+        binary = (page > np.mean([np.amax(page), np.amin(page)]))
+        bboxes = utils.fix_bounding_boxes(binary, bboxes)
     page = mask(page, bboxes)
     if degrade is not None:
         page = degrade(page)
-    seg = marker_segmentation_target_for_bboxes(page, bboxes, labels=labels)
+    kw = eval(f"dict({params})")
+    seg = marker_segmentation_target_for_bboxes(page, bboxes, labels=labels, **kw)
     if np.sum(seg) <= minmark:
         print(f"didn't get any {element}", file=sys.stderr)
         return
@@ -239,6 +257,7 @@ def hocr2seg(
     mask: str = "boxes",
     labels: str = "1, 2, 3",
     acceptable: str = "5, 5, 9999, 9999",
+    fix_boxes: bool = False,
 ):
     """Extract segmentation patches from src and send them to output."""
     global acceptable_bboxes
@@ -294,6 +313,7 @@ def hocr2seg(
                         rotation=(-randrot, randrot),
                         mask=eval(f"mask_with_{mask}"),
                         labels=labels,
+                        fix_boxes=fix_boxes,
                     )
                 except ValueError as exn:
                     if ignore_errors:

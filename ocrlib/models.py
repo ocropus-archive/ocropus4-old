@@ -123,7 +123,7 @@ def text_model_210218(noutput):
     return model
 
 
-def segmentation_model_210218(noutput=4):
+def segmentation_model_210218x(noutput=4):
     model = nn.Sequential(
         ocrlayers.GrayDocument(),
         # ocrlayers.Zoom(0.5),
@@ -139,6 +139,22 @@ def segmentation_model_210218(noutput=4):
             )
         ),
         flex.BDHW_LSTM(40),
+        flex.Conv2d(noutput, 3, padding=1),
+    )
+    flex.shape_inference(model, (1, 1, 512, 512))
+    return model
+
+
+def segmentation_model_210218(noutput=4):
+    model = nn.Sequential(
+        ocrlayers.GrayDocument(),
+        # ocrlayers.Zoom(0.5),
+        layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
+        inputstats.InputStats("segmodel"),
+        layers.ModPad(8),
+        combos.make_unet([32, 64, 96], sub=flex.BDHW_LSTM(100)),
+        *combos.conv2d_block(48, 3, repeat=2),
+        flex.BDHW_LSTM(32),
         flex.Conv2d(noutput, 3, padding=1),
     )
     flex.shape_inference(model, (1, 1, 512, 512))
