@@ -126,7 +126,7 @@ def text_model_210218(noutput):
 def segmentation_model_210218(noutput=4):
     model = nn.Sequential(
         ocrlayers.GrayDocument(),
-        ocrlayers.Zoom(0.5),
+        # ocrlayers.Zoom(0.5),
         layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
         inputstats.InputStats("segmodel"),
         layers.ModPad(8),
