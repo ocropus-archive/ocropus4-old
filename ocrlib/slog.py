@@ -20,7 +20,7 @@ from . import loading
 
 app = typer.Typer()
 
-schema = """
+log_schema = """
 create table if not exists log (
     step real,
     logtime real,
@@ -75,7 +75,7 @@ class Logger:
             print(f"log is {fname}", file=sys.stderr)
         self.fname = fname
         self.con = sqlite3.connect(fname)
-        self.con.execute(schema)
+        self.con.execute(log_schema)
         self.last = 0
         self.interval = 10
         if sysinfo:

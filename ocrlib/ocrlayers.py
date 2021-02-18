@@ -9,7 +9,7 @@ from torch import nn
 import torch.nn.functional as F
 
 
-class Zoom(nn.Moduel):
+class Zoom(nn.Module):
     def __init__(self, zoom=1.0):
         super().__init__()
         self.zoom = zoom
@@ -21,7 +21,7 @@ class Zoom(nn.Moduel):
         assert a.ndim == 4
         if self.zoom == 1.0:
             return a
-        return F.interpolate(a, self.zoom)
+        return F.interpolate(a, scale_factor=self.zoom, recompute_scale_factor=False)
 
 
 class GrayDocument(nn.Module):

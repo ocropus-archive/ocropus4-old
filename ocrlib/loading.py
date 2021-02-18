@@ -148,7 +148,7 @@ def load_only_model(fname, *args, module_path=module_path, **kw):
 
 
 def load_or_construct_model(path, *args, module_path=module_path, **kw):
-    _, ext = os.path.splitext(path)[1]
+    _, ext = os.path.splitext(path)
     if ext in ["py", "sqlite3", "pth"]:
         return load_only_model(path, *args, module_path=module_path, **kw)
     else:
