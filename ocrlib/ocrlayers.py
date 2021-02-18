@@ -14,8 +14,11 @@ class Zoom(nn.Module):
         super().__init__()
         self.zoom = zoom
 
-    def __str__(self):
+    def __repr__(self):
         return f"Zoom({self.zoom})"
+
+    def __str__(self):
+        return repr(self)
 
     def forward(self, a):
         assert a.ndim == 4
@@ -30,8 +33,11 @@ class GrayDocument(nn.Module):
         self.noise = noise
         self.autoinvert = autoinvert
 
-    def __str__(self):
+    def __repr__(self):
         return f"GrayDocument(noise={self.noise}, autoinvert={self.autoinvert})"
+
+    def __str__(self):
+        return repr(self)
 
     def forward(self, a):
         assert a.ndim == 3 or a.ndim == 4
