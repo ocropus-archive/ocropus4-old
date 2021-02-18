@@ -397,7 +397,7 @@ def train(
     training_bs: int = 3,
     invert: bool = False,
     normalize_intensity: bool = False,
-    model: str = "text_model_210118",
+    model: str = "text_model_210218",
     test: str = None,
     test_bs: int = 20,
     ntest: int = int(1e12),

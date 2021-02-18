@@ -9,6 +9,7 @@ import torch
 from numpy import amin, median, mean
 from scipy import ndimage as ndi
 from torch import nn, optim
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from webdataset import Dataset
 import torchmore.layers
@@ -60,8 +61,6 @@ def preproc(scale, extra_target_scale=1.0, mod=16):
         if seg.ndim == 3:
             seg = seg[:, :, 0]
         assert np.amax(seg) < 16, "max # classes for segmentation is set to 16"
-        image = ndi.zoom(image, scale, order=1)
-        seg = ndi.zoom(seg, scale * extra_target_scale, order=0)
         image = torch.tensor(image).unsqueeze(0)
         seg = torch.tensor(seg).long()
         # return modimage(image, mod), modimage(seg, mod)
@@ -326,6 +325,11 @@ class SegTrainer:
         if self.device is not None:
             inputs = inputs.to(self.device)
         outputs = self.model.forward(inputs)
+        if outputs.shape != inputs.shape:
+            assert outputs.shape[0] == inputs.shape[0]
+            assert outputs.ndim == 4
+            bs, h, w = targets.shape
+            outputs = F.interpolate(outputs, size=(h, w))
         if self.weightmask >= 0:
             mask = targets.detach().numpy()
             assert mask.ndim == 3
@@ -469,7 +473,6 @@ def patchwise_inference(batch, model, size=(400, 1600), overlap=0):
 class Segmenter:
     def __init__(self, model, scale=0.5, preproc=None):
         self.smooth = 0.0
-        self.zoom = scale
         self.preproc = preproc or torchmore.layers.ModPad(8)
         self.preproc.eval()
         self.model = model
@@ -486,7 +489,7 @@ class Segmenter:
             self.model.cpu()
             self.model.cpu()
 
-    def segment(self, page, nocheck=False, unzoom=True):
+    def segment(self, page, nocheck=False):
         assert page.ndim == 2
         assert page.shape[0] >= 100 and page.shape[0] < 20000
         assert page.shape[1] >= 100 and page.shape[1] < 20000
@@ -494,15 +497,12 @@ class Segmenter:
         if not nocheck:
             assert np.median(page) < 0.5, "text should be white on black"
         self.activate()
-        zoomed = ndi.zoom(page, self.zoom, order=1)
-        batch = torch.FloatTensor(zoomed).unsqueeze(0).unsqueeze(0)
+        batch = torch.FloatTensor(page).unsqueeze(0).unsqueeze(0)
         batch = batch.cuda()
         batch = self.preproc(batch)
         self.model.eval()
         probs = patchwise_inference(batch, self.model)
         probs = probs.numpy()[0].transpose(1, 2, 0)
-        if unzoom:
-            probs = ndi.zoom(probs, (1.0 / self.zoom, 1.0 / self.zoom, 1.0), order=1)
         self.probs = probs
         self.gprobs = smooth_probabilities(probs, self.smooth)
         self.segments = marker_segmentation(
@@ -562,14 +562,13 @@ def train(
     training_bs: int = 2,
     display: float = -1.0,
     shuffle: int = 1000,
-    model: str = "segmentation_model_210118",
+    model: str = "segmentation_model_210218",
     test: str = None,
     test_bs: int = 2,
     test_args: str = "",
     ntrain: int = int(1e12),
     ntest: int = int(1e12),
     schedule: str = "1e-3 * (0.9 ** (n//100000))",
-    zoom: float = 0.5,
     augmentation: str = "none",
     extensions: str = "png;image.png;framed.png;ipatch.png seg.png;target.png;lines.png;spatch.png",
     prefix: str = "ocroseg",
@@ -620,7 +619,7 @@ def train(
         model = torch.nn.DataParallel(model)
     print(model)
 
-    trainer = SegTrainer(model, zoom=zoom, weightmask=weightmask)
+    trainer = SegTrainer(model, weightmask=weightmask)
     trainer.set_lr_schedule(eval(f"lambda n: {schedule}"))
 
     schedule = Schedule()
@@ -648,7 +647,6 @@ def predict(
     extensions: str = "png;image.png;framed.png;ipatch.png seg.png;target.png;lines.png;spatch.png",
     prefix: str = "ocroseg",
     output: str = "",
-    zoom: float = 0.5,
 ):
     training_dl = make_loader(
         fname, batch_size=1, extensions=extensions, num_workers=1,
@@ -656,7 +654,7 @@ def predict(
     model = loading.load_only_model(model)
     model.cuda()
 
-    segmenter = Segmenter(model, scale=zoom)
+    segmenter = Segmenter(model)
 
     for images, targets in training_dl:
         result = segmenter.segment(images[0])
