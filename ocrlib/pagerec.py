@@ -14,7 +14,7 @@ import json
 import webdataset as wds
 
 from ocrlib.utils import BBox
-from . import ocroline, ocroseg
+from . import ocroline, ocroseg, utils, loading
 
 Charset = ocroline.Charset
 
@@ -95,14 +95,14 @@ class BasicRecognizer:
 
     def load_segmenter(self, fname):
         print(f"# loading segmenter {fname}", file=sys.stderr)
-        self.segmenter = ocroseg.Segmenter()
-        self.segmenter.load_from_save(fname)
+        model = loading.load_only_model(fname)
+        self.segmenter = ocroseg.Segmenter(model)
         self.segmenter.activate(False)
 
     def load_recognizer(self, fname):
         print(f"# loading recognizer {fname}", file=sys.stderr)
-        self.recognizer = ocroline.LineRec()
-        self.recognizer.load_from_save(fname)
+        model = loading.load_only_model(fname)
+        self.recognizer = ocroline.LineRec(model)
         self.recognizer.activate(False)
 
     def run_recognizers(self, image):

@@ -11,6 +11,8 @@ import importlib.util
 import tempfile
 from typing import List
 from tabulate import tabulate
+import numpy as np
+import matplotlib.pyplot as plt
 
 import torch
 
@@ -334,9 +336,7 @@ def getbest(fname, output=None):
 @app.command()
 def getlast(fname, output=None):
     """Get the last model from a log."""
-    query = (
-        "select obj, step, scalar from log where key='model' order by logtime desc limit 1"
-    )
+    query = "select obj, step, scalar from log where key='model' order by logtime desc limit 1"
     return gettrained(fname, query, output=output)
 
 
@@ -354,6 +354,28 @@ def val2model(fname):
         con.execute(query)
         con.commit()
     con.close()
+
+
+@app.command()
+def schema(fname):
+    con = sqlite3.connect(fname)
+    print(list(con.execute("select sql from sqlite_master where name = 'log'"))[0][0])
+    print(list(con.execute("select distinct(key) from log")))
+
+
+@app.command()
+def show(fname, keys="model", xscale="linear", yscale="linear"):
+    plt.title(fname)
+    con = sqlite3.connect(fname)
+    plt.xscale(xscale)
+    plt.yscale(yscale)
+    for k in keys.split(","):
+        values = list(con.execute(f"select step, scalar from log where key = '{k}'"))
+        xs, ys = zip(*values)
+        plt.ylim(np.amin(ys), min(np.amax(ys), 6*np.median(ys)))
+        plt.plot(xs, ys, label=k)
+    plt.legend()
+    plt.show()
 
 
 @app.command()

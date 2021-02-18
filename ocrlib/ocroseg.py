@@ -498,6 +498,7 @@ class Segmenter:
         batch = torch.FloatTensor(zoomed).unsqueeze(0).unsqueeze(0)
         batch = batch.cuda()
         batch = self.preproc(batch)
+        self.model.eval()
         probs = patchwise_inference(batch, self.model)
         probs = probs.numpy()[0].transpose(1, 2, 0)
         if unzoom:
@@ -606,10 +607,7 @@ def train(
         num_workers=num_workers,
         **kw,
     )
-    (
-        images,
-        targets,
-    ) = next(iter(training_dl))
+    (images, targets,) = next(iter(training_dl))
     if test is not None:
         kw = eval(f"dict({test_args})")
         test_dl = make_loader(test, batch_size=test_bs, **kw)
@@ -641,6 +639,34 @@ def train(
             display_progress(trainer)
 
     save_model(logger, trainer, test_dl)
+
+
+@app.command()
+def predict(
+    fname: str,
+    model: str,
+    extensions: str = "png;image.png;framed.png;ipatch.png seg.png;target.png;lines.png;spatch.png",
+    prefix: str = "ocroseg",
+    output: str = "",
+    zoom: float = 0.5,
+):
+    training_dl = make_loader(
+        fname, batch_size=1, extensions=extensions, num_workers=1,
+    )
+    model = loading.load_only_model(model)
+    model.cuda()
+
+    segmenter = Segmenter(model, scale=zoom)
+
+    for images, targets in training_dl:
+        result = segmenter.segment(images[0])
+        plt.subplot(131)
+        plt.imshow(images[0])
+        plt.imshow(132)
+        plt.imshow(targets[0, :, :, 1:])
+        plt.imshow(133)
+        plt.imshow(result[0, :, :, 1:])
+        plt.show()
 
 
 @app.command()
