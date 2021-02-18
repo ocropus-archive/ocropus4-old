@@ -141,5 +141,5 @@ def segmentation_model_210218(noutput=4):
         flex.BDHW_LSTM(40),
         flex.Conv2d(noutput, 3, padding=1),
     )
-    flex.shape_inference(model, (1, 1, 256, 256))
+    flex.shape_inference(model, (1, 1, 512, 512))
     return model

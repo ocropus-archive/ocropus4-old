@@ -46,29 +46,6 @@ def simple_bg_fg(binimage, amplitude=0.3, imsigma=1.0, sigma=3.0):
     return mask * fg + (1.0 - mask) * bg
 
 
-def preproc(scale, extra_target_scale=1.0, mod=16):
-    def f(pair):
-        image, seg = pair
-        if image.ndim == 3:
-            image = np.mean(image, axis=2)
-        if image.dtype == np.uint8:
-            image = image.astype(np.float32) / 255.0
-        elif image.dtype == np.float32:
-            pass
-        else:
-            raise ValueError(f"{image.dtype}: unknown dtype")
-        assert np.amax(image) <= 1.0
-        if seg.ndim == 3:
-            seg = seg[:, :, 0]
-        assert np.amax(seg) < 16, "max # classes for segmentation is set to 16"
-        image = torch.tensor(image).unsqueeze(0)
-        seg = torch.tensor(seg).long()
-        # return modimage(image, mod), modimage(seg, mod)
-        return image, seg
-
-    return f
-
-
 def augmentation_none(sample):
     image, target = sample
     if image.dtype == np.uint8:
@@ -158,7 +135,6 @@ def make_loader(
     augmentation=augmentation_none,
     output_scale=None,
     shuffle=0,
-    mod=16,
     num_workers=1,
 ):
     training = Dataset(urls).shuffle(shuffle).decode("rgb8").to_tuple(extensions)
@@ -471,10 +447,8 @@ def patchwise_inference(batch, model, size=(400, 1600), overlap=0):
 
 
 class Segmenter:
-    def __init__(self, model, scale=0.5, preproc=None):
+    def __init__(self, model, scale=0.5):
         self.smooth = 0.0
-        self.preproc = preproc or torchmore.layers.ModPad(8)
-        self.preproc.eval()
         self.model = model
         self.marker_threshold = 0.3
         self.region_threshold = 0.3
@@ -484,9 +458,7 @@ class Segmenter:
     def activate(self, yes=True):
         if yes:
             self.model.cuda()
-            self.preproc.cuda()
         else:
-            self.model.cpu()
             self.model.cpu()
 
     def segment(self, page, nocheck=False):
@@ -499,7 +471,6 @@ class Segmenter:
         self.activate()
         batch = torch.FloatTensor(page).unsqueeze(0).unsqueeze(0)
         batch = batch.cuda()
-        batch = self.preproc(batch)
         self.model.eval()
         probs = patchwise_inference(batch, self.model)
         probs = probs.numpy()[0].transpose(1, 2, 0)
