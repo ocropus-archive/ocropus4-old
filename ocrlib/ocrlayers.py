@@ -28,7 +28,7 @@ class Zoom(nn.Module):
 
 
 class GrayDocument(nn.Module):
-    def __init__(self, noise=0.03, autoinvert=True):
+    def __init__(self, noise=0.0, autoinvert=True):
         super().__init__()
         self.noise = noise
         self.autoinvert = autoinvert
@@ -53,6 +53,7 @@ class GrayDocument(nn.Module):
             a[i] /= max(0.5, a[i].max().item())
             if self.autoinvert and a[i].mean().item() > 0.5:
                 a[i] = 1.0 - a[i]
-            a[i] += self.noise * torch.randn(*a[i].shape)
+            if self.noise > 0:
+                a[i] += self.noise * torch.randn(*a[i].shape, device=a.device)
             a[i] = a[i].clip(0, 1)
         return a

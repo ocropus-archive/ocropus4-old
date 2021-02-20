@@ -4,6 +4,7 @@ import sys
 import time
 from functools import wraps
 import re
+import matplotlib.pyplot as plt
 
 import numpy as np
 import scipy.ndimage as ndi
@@ -158,13 +159,15 @@ def imshow_tensor(a, order, b=0, ax=None, **kw):
 
 
 def autoinvert(image, mode):
+    image = image - np.amin(image)
+    image /= max(0.1, np.amax(image))
     if mode == "False":
         return image
     elif mode == "True":
-        return np.amax(image) - image
+        return 1.0 - image
     elif mode == "Auto":
         if np.mean(image) > np.mean([np.amax(image), np.amin(image)]):
-            return np.amax(image) - image
+            return 1.0 - image
         else:
             return image
 
@@ -282,7 +285,7 @@ def label_correspondences(nlabels, olabels):
     m = 1000000
     assert n < m
     assert nlabels.shape == olabels.shape
-    a = nlabels.ravel() * m + olabels.shape()
+    a = nlabels.ravel() * m + olabels.ravel()
     a = np.unique(a)
     result = np.zeros(n, dtype="i")
     for p in a:
@@ -290,16 +293,22 @@ def label_correspondences(nlabels, olabels):
     return result
 
 
-def fix_bounding_boxes(bimage, bboxes, yfrac=0.2, xfrac=0.98):
+def fix_bounding_boxes(bimage, bboxes):
+    # global mcomponents, components, remap, markers
     components, _ = ndi.label(bimage)
     markers = np.zeros_like(bimage, dtype="i")
     for x0, y0, x1, y1 in bboxes:
-        ym, xm = np.mean([y1, y0]), np.mean([x1, x0])
-        dy = max(1, (y1 - y0) * yfrac)
-        dx = max(1, (x1 - x0) * xfrac)
-        markers[max(0, ym - dy) : ym + dy, max(0, xm - dx) : xm + dx] = 1
+        ym, _ = int(np.mean([y1, y0])), int(np.mean([x1, x0]))
+        xoff = 3
+        yoff = (y1 - y0) // 3
+        x0, x1 = x0 + xoff, x1 - xoff
+        y0, y1 = ym - yoff, ym + yoff
+        if y0 < 0 or x1 <= x0 or y1 <= y0:
+            continue
+        markers[y0:y1, x0:x1] = 1
     mcomponents, _ = ndi.label(markers)
     remap = label_correspondences(mcomponents, components)
+    remap[0] = 0
     components = remap[components]
     result = []
     for y, x in ndi.find_objects(components):

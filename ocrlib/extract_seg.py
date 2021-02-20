@@ -45,6 +45,13 @@ def get_prop(node, name):
             return args
     return None
 
+def get_bbox(node):
+    bbox = get_prop(node, "bbox")
+    if bbox is not None:
+        return [int(x) for x in bbox.split()]
+    else:
+        return 0, 0, -1, -1
+
 
 def center(bbox):
     """Compute the center of a bounding box."""
@@ -72,9 +79,11 @@ def marker_segmentation_target_for_bboxes(
     labels=[1, 0, 2],
     sep_margin=0.4,
     region_margin_y=-0.05,
-    region_margin_x=-0.05,
+    region_margin_x=-0.1,
     center_margin_y=-0.2,
     center_margin_x=-0.2,
+    min_center_y=4,
+    min_center_x_margin=6,
 ):
     """
     Generate a segmentation target given an image and target bounding boxes.
@@ -84,26 +93,32 @@ def marker_segmentation_target_for_bboxes(
         :param labels: list of labels for marker, inside, separator (default: [1, 0, 2])
     """
 
+    #print(labels); raise Exception()
     h, w = image.shape[:2]
     target = np.zeros((h, w), dtype="uint8")
+    bboxes = sorted(bboxes, key=lambda b: -dims(b)[0])
     for bbox in bboxes:
         x0, y0, x1, y1 = bbox
         bw, bh = dims(bbox)
-        a = int(bh * sep_margin)
+        a = int(min(bw, bh) * sep_margin)
         target[y0 - a : y1 + a, x0 - a : x1 + a] = labels[0]
     for bbox in bboxes:
         x0, y0, x1, y1 = bbox
         bw, bh = dims(bbox)
-        by = int(bh * region_margin_y)
-        bx = int(bw * region_margin_x)
+        by = int(min(bw, bh) * region_margin_y)
+        bx = int(min(bw, bh) * region_margin_x)
         target[y0 - by : y1 + by, x0 - bx : x1 + bx] = labels[1]
     for bbox in bboxes:
         x0, y0, x1, y1 = bbox
         xc, yc = center(bbox)
         bw, bh = dims(bbox)
-        c = int(bh * center_margin_y)
-        d = int(bh * center_margin_x)
-        target[yc - c : yc + c, x0 + d : x1 - d] = labels[2]
+        c = int(min(bw, bh) * center_margin_y)
+        d = min(int(min(bw, bh) * center_margin_x), -min_center_x_margin)
+        assert abs(c) < bh
+        assert abs(d) < bw
+        #print(c, d); raise Exception()
+        target[y0 - c : y0 + c, x0 - c : x1 + c] = labels[2]
+        target[yc - min_center_y : yc + min_center_y, x0 - c : x1 + c] = labels[2]
     return target
 
 
@@ -112,6 +127,8 @@ def mask_with_none(image, bboxes):
 
 
 def mask_with_bbox(image, bboxes, background=0):
+    if len(bboxes) == 0:
+        return image
     bboxes = np.array(bboxes, dtype=np.int)
     x0, y0 = np.amin(bboxes[:, :2], 0)
     x1, y1 = np.amax(bboxes[:, 2:], 0)
@@ -128,9 +145,23 @@ def mask_with_boxes(image, bboxes, dilate=50, background=0):
     image = np.where(mask, image, background)
     return image
 
+def check_text(b, char_height=1.0):
+    s = get_text(b)
+    if " " in s:
+        return False
+    x0, y0, x1, y1 = get_bbox(b)
+    est_max_width = len(s) * (y1 - y0) * char_height
+    actual_width = x1 - x0
+    #print(est_max_width, actual_width, repr(s))
+    if actual_width > est_max_width:
+        return False
+    return True
 
 def bboxes_for_hocr(
-    image, hocr, acceptable_conf=50, conf_prop="x_wconf", element="ocrx_word"
+    image, hocr, acceptable_conf=50, conf_prop="x_wconf", element="ocrx_word",
+    confidence_prop="x_wconf",
+    check_text=check_text,
+    max_bad_text_frac=0.2,
 ):
     """
     Generate a segmentation target given an image and hOCR segmentation info.
@@ -157,10 +188,14 @@ def bboxes_for_hocr(
     bad_conf = 0
     no_conf = 0
     count = 0
+    bad_text = 0
     for word in page.xpath(f"//*[@class='{element}']"):
         count += 1
+        if not check_text(word):
+            bad_text += 1
+            continue
         if acceptable_conf >= 0:
-            conf = get_prop(word, "x_wconf")
+            conf = get_prop(word, confidence_prop)
             if conf is not None:
                 conf = float(conf)
                 if conf < acceptable_conf:
@@ -172,8 +207,11 @@ def bboxes_for_hocr(
         if not acceptable(bbox):
             continue
         bboxes.append(bbox)
+    if bad_text >= max_bad_text_frac * len(bboxes):
+        print("# too many bad bounding boxes on this page")
+        return []
     print(
-        f"# {bad_conf} bad bboxes, {no_conf} no confidence, {len(bboxes)} good, {count} total"
+        f"# {bad_conf} bad bboxes, {no_conf} no confidence, {len(bboxes)} good, {bad_text} bad text, {count} total"
     )
     return bboxes
 
@@ -191,7 +229,7 @@ def segmentation_patches(
     element="ocrx_word",
     minmark=0,
     mask=(lambda image, bboxes: image),
-    labels=[1, 0, 2],
+    labels=[1, 2, 3],
     params="",
     fix_boxes=False,
 ):
@@ -254,7 +292,7 @@ def hocr2seg(
     ignore_errors=True,
     debug=False,
     invert: str = "Auto",
-    mask: str = "boxes",
+    mask: str = "bbox",
     labels: str = "1, 2, 3",
     acceptable: str = "5, 5, 9999, 9999",
     fix_boxes: bool = False,

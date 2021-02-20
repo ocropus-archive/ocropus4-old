@@ -420,29 +420,50 @@ def smooth_probabilities(probs, smooth):
     return gprobs
 
 
+def overlapping_tiles(image, r=(32, 32), s=(512, 512)):
+    h, w = image.shape[:2]
+    patches = []
+    for y in range(0, h, s[0]):
+        for x in range(0, w, s[1]):
+            patch = ndi.affine_transform(image, np.eye(3), offset=(y-r[0], x-r[1], 0),
+                                         output_shape=(s[0]+2*r[0], s[1]+2*r[1], image.shape[-1]), order=0)
+            patches.append(patch)
+    return patches
+
+
+def stuff_back(output, patches, r=(32, 32),  s=(512, 512)):
+    count = 0
+    h, w = output.shape[:2]
+    for y in range(0, h, s[0]):
+        for x in range(0, w, s[1]):
+            p = patches[count]
+            count += 1
+            ph, pw = min(s[0], h-y), min(s[1], w-x)
+            output[y:y+ph, x:x+pw, ...] = p[r[0]:r[0]+ph, r[1]:r[1]+pw, ...]
+    return output
+
+
 def full_inference(batch, model, *args, **kw):
     with torch.no_grad():
-        return model(batch).detach().softmax(1).cpu()
+        print(">", batch.shape)
+        result = model(batch).detach().softmax(1).cpu()
+        print("<", result.shape)
+    return result
 
 
-def patchwise_inference(batch, model, size=(400, 1600), overlap=0):
-    if np.prod(batch.shape[-2:]) <= np.prod(size):
-        return full_inference(batch, model)
-    assert overlap == 0, "nonzero overlap not implemented yet"
-    h, w = batch.shape[-2:]
-    result = None
-    for y in range(0, h, size[0]):
-        for x in range(0, w, size[1]):
-            patch = batch[..., y : y + size[0], x : x + size[1]]
-            print("patch", patch.shape)
-            probs = full_inference(patch, model)
-            if result is None:
-                nshape = list(probs.shape[:-2]) + list(batch.shape[-2:])
-                print("*", nshape)
-                result = torch.zeros(nshape)
-            print("probs", probs.shape)
-            print(result.shape, y, x)
-            result[..., y : y + size[0], x : x + size[1]] = probs.detach().cpu()
+def patchwise_inference(image, model, patchsize=(512, 512), overlap=(64, 64)):
+    patches = overlapping_tiles(image, r=overlap, s=patchsize)
+    outputs = []
+    for npatch in patches:
+        patch = torch.tensor(npatch).permute(2, 0, 1).unsqueeze(0)
+        probs = full_inference(patch, model)
+        if probs.shape[-2:] != patch.shape[-2:]:
+            print("# shape mismatch", probs.shape, patch.shape)
+            probs = F.interpolate(probs, size=patch.shape[-2:])
+        nprobs = probs[0].permute(1, 2, 0).numpy()
+        outputs.append(nprobs)
+    result = np.zeros(image.shape[:2] + (outputs[0].shape[-1],))
+    stuff_back(result, outputs, r=overlap, s=patchsize)
     return result
 
 
@@ -461,19 +482,16 @@ class Segmenter:
         else:
             self.model.cpu()
 
-    def segment(self, page, nocheck=False):
+    def segment(self, page):
         assert page.ndim == 2
         assert page.shape[0] >= 100 and page.shape[0] < 20000
         assert page.shape[1] >= 100 and page.shape[1] < 20000
         self.page = page
-        if not nocheck:
-            assert np.median(page) < 0.5, "text should be white on black"
         self.activate()
-        batch = torch.FloatTensor(page).unsqueeze(0).unsqueeze(0)
-        batch = batch.cuda()
         self.model.eval()
-        probs = patchwise_inference(batch, self.model)
-        probs = probs.numpy()[0].transpose(1, 2, 0)
+        if page.ndim == 2:
+            page = np.expand_dims(page, 2)
+        probs = patchwise_inference(page, self.model)
         self.probs = probs
         self.gprobs = smooth_probabilities(probs, self.smooth)
         self.segments = marker_segmentation(
