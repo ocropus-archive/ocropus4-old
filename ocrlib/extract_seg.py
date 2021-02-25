@@ -10,6 +10,7 @@ import scipy.ndimage as ndi
 
 import ocrlib.patches
 from . import utils
+from .utils import useopt
 
 import typer
 
@@ -102,7 +103,7 @@ def marker_segmentation_target_for_bboxes(
         target[y0 - by : y1 + by, x0 - bx : x1 + bx] = labels[1]
     for bbox in bboxes:
         x0, y0, x1, y1 = bbox
-        xc, yc = center(bbox)
+        _, yc = center(bbox)
         bw, bh = dims(bbox)
         c = int(min(bw, bh) * center_margin_y)
         d = min(int(min(bw, bh) * center_margin_x), -min_center_x_margin)
@@ -114,14 +115,16 @@ def marker_segmentation_target_for_bboxes(
     return target
 
 
+@useopt
 def mask_with_none(image, bboxes):
     return image
 
 
+@useopt
 def mask_with_bbox(image, bboxes, background=0):
     if len(bboxes) == 0:
         return image
-    bboxes = np.array(bboxes, dtype=np.int)
+    bboxes = np.array(bboxes, dtype=int)
     x0, y0 = np.amin(bboxes[:, :2], 0)
     x1, y1 = np.amax(bboxes[:, 2:], 0)
     mask = np.zeros_like(image)
@@ -130,7 +133,8 @@ def mask_with_bbox(image, bboxes, background=0):
     return image
 
 
-def mask_with_boxes(image, bboxes, dilate=50, background=0):
+@useopt
+def mask_with_boxes(image, bboxes, background=0):
     mask = np.zeros_like(image)
     for x0, y0, x1, y1 in bboxes:
         mask[y0:y1, x0:x1] = 1
@@ -138,10 +142,12 @@ def mask_with_boxes(image, bboxes, dilate=50, background=0):
     return image
 
 
+@useopt
 def check_acceptable_none(bbox):
     return True
 
 
+@useopt
 def check_acceptable_word(bbox, minw=10, maxw=500, minh=10, maxh=100, max_aspect=1.0):
     """Determine whether a bounding box has an acceptable size."""
     bw, bh = dims(bbox)
@@ -151,6 +157,7 @@ def check_acceptable_word(bbox, minw=10, maxw=500, minh=10, maxh=100, max_aspect
     )
 
 
+@useopt
 def check_acceptable_line(bbox, minw=10, maxw=3000, minh=10, maxh=200, max_aspect=1.0):
     """Determine whether a bounding box has an acceptable size."""
     bw, bh = dims(bbox)
@@ -160,10 +167,12 @@ def check_acceptable_line(bbox, minw=10, maxw=3000, minh=10, maxh=200, max_aspec
     )
 
 
+@useopt
 def check_text_none(b):
     return True
 
 
+@useopt
 def check_text_word(b, char_height=1.0, min_char_height=0.2):
     s = get_text(b)
     if " " in s:
@@ -178,6 +187,7 @@ def check_text_word(b, char_height=1.0, min_char_height=0.2):
     return True
 
 
+@useopt
 def check_text_line(b, char_height=1.0, min_char_height=0.2):
     s = get_text(b)
     x0, y0, x1, y1 = get_bbox(b)
@@ -194,7 +204,6 @@ def bboxes_for_hocr(
     image,
     hocr,
     acceptable_conf=50,
-    conf_prop="x_wconf",
     element="ocrx_word",
     confidence_prop="x_wconf",
     check_acceptable=check_acceptable_word,
@@ -383,7 +392,6 @@ def hocr2seg(
                 break
             if np.random.uniform() >= subsample:
                 continue
-            rcount = 0
             for scale in scales:
                 if count >= maxcount:
                     break
@@ -415,7 +423,6 @@ def hocr2seg(
                     if count % 1000 == 0:
                         print(f"{count}", file=sys.stderr)
                     count += 1
-                    rcount += 1
                     assert np.amax(img) < 2.0
                     key_loc = f"{key}@{y},{x}"
                     patch = {

@@ -11,6 +11,7 @@ import scipy.ndimage as ndi
 
 import ocrlib.patches
 from . import utils
+from .utils import unused
 
 import typer
 
@@ -40,6 +41,7 @@ def get_prop(node, name):
     return None
 
 
+@unused
 def get_any(sample, key, default=None):
     """Given a list of keys, return the first dictionary entry matching a key."""
     if isinstance(key, str):
@@ -122,7 +124,7 @@ def table_segmentation_target(
     return target
 
 
-@utils.trace
+@unused
 def augment_segmentation(page, seg, rotation=[0.0, 0.0], scale=[1.0, 1.0], minmark=1):
     if np.sum(seg) <= minmark:
         print(f"no output in segmentation map", file=sys.stderr)
@@ -221,7 +223,6 @@ def tables2seg(
                 break
             if np.random.uniform() >= subsample:
                 continue
-            rcount = 0
             for scale in scales:
                 if count >= maxcount:
                     break
@@ -247,7 +248,6 @@ def tables2seg(
                     if count % 1000 == 0:
                         print(f"{count}", file=sys.stderr)
                     count += 1
-                    rcount += 1
                     assert np.amax(img) < 2.0
                     key_loc = f"{key}@{y},{x}"
                     patch = {

@@ -3,8 +3,10 @@ from torchmore import layers
 from torchmore import flex
 from torchmore import combos
 from torchmore import inputstats
+from .utils import model
 
 
+@model
 def text_model_210113(noutput):
     model = nn.Sequential(
         layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
@@ -27,6 +29,7 @@ def text_model_210113(noutput):
     return model
 
 
+@model
 def segmentation_model_210113(noutput=4):
     model = nn.Sequential(
         layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
@@ -46,6 +49,7 @@ def segmentation_model_210113(noutput=4):
     return model
 
 
+@model
 def segmentation_model_210117(noutput=4):
     model = nn.Sequential(
         inputstats.InputStats("segmodel"),
@@ -66,6 +70,7 @@ def segmentation_model_210117(noutput=4):
     return model
 
 
+@model
 def text_model_210118(noutput):
     model = nn.Sequential(
         layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
@@ -89,6 +94,7 @@ def text_model_210118(noutput):
     return model
 
 
+@model
 def segmentation_model_210118(noutput=4):
     model = nn.Sequential(
         layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),

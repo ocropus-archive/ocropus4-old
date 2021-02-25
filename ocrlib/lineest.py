@@ -3,6 +3,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import interpolation, filters
+from .utils import public
 
 
 def scale_to_h(img, target_height, order=1, dtype=np.dtype("f"), cval=0):
@@ -21,6 +22,7 @@ def scale_to_h(img, target_height, order=1, dtype=np.dtype("f"), cval=0):
     return output
 
 
+@public
 class CenterNormalizer:
     def __init__(self, target_height=48, params=(4, 1.0, 0.3)):
         self.debug = int(os.getenv("debug_center") or "0")

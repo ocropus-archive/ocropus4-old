@@ -20,6 +20,7 @@ from . import slog
 from . import utils
 from . import loading
 import ocrlib.utils
+from .utils import useopt, junk
 
 
 logger = slog.NoLogger()
@@ -46,6 +47,7 @@ def simple_bg_fg(binimage, amplitude=0.3, imsigma=1.0, sigma=3.0):
     return mask * fg + (1.0 - mask) * bg
 
 
+@useopt
 def augmentation_none(sample):
     image, target = sample
     if image.dtype == np.uint8:
@@ -62,6 +64,7 @@ def augmentation_none(sample):
     return image, target
 
 
+@useopt
 def augmentation_gray(sample):
     image, target = sample
     if image.dtype == np.uint8:
@@ -83,6 +86,7 @@ def augmentation_gray(sample):
     return image, target
 
 
+@useopt
 def augmentation_page(sample, max_distortion=0.05):
     image, target = sample
     if image.dtype == np.uint8:
@@ -131,9 +135,7 @@ def make_loader(
     batch_size=2,
     extensions="image.png;framed.png;ipatch.png target.png;lines.png;spatch.png",
     scale=0.5,
-    extra_target_scale=1.0,
     augmentation=augmentation_none,
-    output_scale=None,
     shuffle=0,
     num_workers=1,
 ):
@@ -150,6 +152,7 @@ def make_loader(
 mem_every = ocrlib.utils.Every(60)
 
 
+@junk
 def memsum(trainer):
     """Output current memory usage every minute. (Callback)"""
     if not mem_every():
@@ -247,7 +250,6 @@ class SegTrainer:
         lr=1e-4,
         every=3.0,
         device=None,
-        savedir=True,
         maxgrad=10.0,
         margin=16,
         weightmask=-1,
@@ -425,21 +427,28 @@ def overlapping_tiles(image, r=(32, 32), s=(512, 512)):
     patches = []
     for y in range(0, h, s[0]):
         for x in range(0, w, s[1]):
-            patch = ndi.affine_transform(image, np.eye(3), offset=(y-r[0], x-r[1], 0),
-                                         output_shape=(s[0]+2*r[0], s[1]+2*r[1], image.shape[-1]), order=0)
+            patch = ndi.affine_transform(
+                image,
+                np.eye(3),
+                offset=(y - r[0], x - r[1], 0),
+                output_shape=(s[0] + 2 * r[0], s[1] + 2 * r[1], image.shape[-1]),
+                order=0,
+            )
             patches.append(patch)
     return patches
 
 
-def stuff_back(output, patches, r=(32, 32),  s=(512, 512)):
+def stuff_back(output, patches, r=(32, 32), s=(512, 512)):
     count = 0
     h, w = output.shape[:2]
     for y in range(0, h, s[0]):
         for x in range(0, w, s[1]):
             p = patches[count]
             count += 1
-            ph, pw = min(s[0], h-y), min(s[1], w-x)
-            output[y:y+ph, x:x+pw, ...] = p[r[0]:r[0]+ph, r[1]:r[1]+pw, ...]
+            ph, pw = min(s[0], h - y), min(s[1], w - x)
+            output[y : y + ph, x : x + pw, ...] = p[
+                r[0] : r[0] + ph, r[1] : r[1] + pw, ...
+            ]
     return output
 
 
@@ -593,7 +602,10 @@ def train(
         num_workers=num_workers,
         **kw,
     )
-    (images, targets,) = next(iter(training_dl))
+    (
+        images,
+        targets,
+    ) = next(iter(training_dl))
     if test is not None:
         kw = eval(f"dict({test_args})")
         test_dl = make_loader(test, batch_size=test_bs, **kw)
@@ -636,7 +648,10 @@ def predict(
     output: str = "",
 ):
     training_dl = make_loader(
-        fname, batch_size=1, extensions=extensions, num_workers=1,
+        fname,
+        batch_size=1,
+        extensions=extensions,
+        num_workers=1,
     )
     model = loading.load_only_model(model)
     model.cuda()

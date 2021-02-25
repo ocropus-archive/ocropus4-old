@@ -7,8 +7,10 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+from .utils import public
 
 
+@public
 class Zoom(nn.Module):
     def __init__(self, zoom=1.0):
         super().__init__()
@@ -27,6 +29,7 @@ class Zoom(nn.Module):
         return F.interpolate(a, scale_factor=self.zoom, recompute_scale_factor=False)
 
 
+@public
 class GrayDocument(nn.Module):
     def __init__(self, noise=0.0, autoinvert=True):
         super().__init__()

@@ -10,7 +10,11 @@ import webdataset as wds
 
 def test_hocr2seg(tmp_path):
     extract_seg.hocr2seg(
-        "testdata/pages.tar", output=f"{tmp_path}/_seg.tar", maxcount=50, ignore_errors=False
+        "testdata/pages.tar",
+        output=f"{tmp_path}/_seg.tar",
+        maxcount=50,
+        ignore_errors=False,
+        check="none",
     )
     count = 0
     for sample in wds.Dataset(f"{tmp_path}/_seg.tar"):
@@ -24,6 +28,7 @@ def test_hocr2seg_pipe(tmp_path):
         output=f"pipe:dd of={tmp_path}/_seg2.tar",
         maxcount=50,
         ignore_errors=False,
+        check="none",
     )
     count = 0
     for sample in wds.Dataset(f"{tmp_path}/_seg2.tar"):

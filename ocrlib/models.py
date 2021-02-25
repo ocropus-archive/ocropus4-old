@@ -7,6 +7,7 @@ from torchmore import combos
 from torchmore import inputstats
 
 from . import ocrlayers
+from .utils import model
 
 
 class Spectrum(nn.Module):
@@ -38,6 +39,7 @@ class GlobalAvgPool2d(nn.Module):
         return F.adaptive_avg_pool2d(x, (1, 1))[:, :, 0, 0]
 
 
+@model
 def binarization_210113():
     r = 3
     model = nn.Sequential(
@@ -51,6 +53,7 @@ def binarization_210113():
     return model
 
 
+@model
 def page_orientation_210113(size=256):
     def block(s, r, repeat=2):
         result = []
@@ -78,6 +81,7 @@ def page_orientation_210113(size=256):
     return model
 
 
+@model
 def page_skew_210113(noutput, size=256, r=5, nf=8, r2=5, nf2=4):
     B, D, H, W = (2, 128), (1, 512), size, size
     model = nn.Sequential(
@@ -99,6 +103,7 @@ def page_skew_210113(noutput, size=256, r=5, nf=8, r2=5, nf2=4):
     return model
 
 
+@model
 def text_model_210218(noutput):
     model = nn.Sequential(
         ocrlayers.GrayDocument(),
@@ -123,6 +128,7 @@ def text_model_210218(noutput):
     return model
 
 
+@model
 def segmentation_model_210218x(noutput=4):
     model = nn.Sequential(
         ocrlayers.GrayDocument(),
@@ -145,6 +151,7 @@ def segmentation_model_210218x(noutput=4):
     return model
 
 
+@model
 def segmentation_model_210218(noutput=4):
     model = nn.Sequential(
         ocrlayers.GrayDocument(),

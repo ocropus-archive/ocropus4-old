@@ -18,7 +18,7 @@ import webdataset as wds
 from torchmore import layers
 
 from . import lineest, linemodels, slog
-from .utils import Every, Charset
+from .utils import Every, Charset, useopt, junk
 from . import utils
 from . import loading
 
@@ -36,7 +36,7 @@ min_w, min_h, max_w, max_h = 15, 15, 4000, 200
 
 def goodsize(sample):
     """Determine whether the given sample has a good size."""
-    image, txt = sample
+    image, _ = sample
     h, w = image.shape[-2:]
     good = h > min_h and h < max_h and w > min_w and w < max_w
     if not good:
@@ -48,7 +48,7 @@ plt.rc("image", cmap="gray")
 plt.rc("image", interpolation="nearest")
 
 
-def ctc_decode(probs, sigma=1.0, threshold=0.7, kind=None, full=False):
+def ctc_decode(probs, sigma=1.0, threshold=0.7, full=False):
     """A simple decoder for CTC-trained OCR recognizers.
 
     :probs: d x l sequence classification output
@@ -265,10 +265,12 @@ def normalize_image(a):
     return a
 
 
+@useopt
 def normalize_none(s):
     return s
 
 
+@useopt
 def normalize_simple(s):
     s = re.sub("\\\\[A-Za-z]+", "~", s)
     s = re.sub("\\\\[_^]+", "", s)
@@ -367,6 +369,7 @@ def display_progress(trainer):
     plt.ginput(1, 0.001)
 
 
+@junk
 def load_model(fname):
     assert fname is not None, "must provide file name to load model from"
     assert os.path.exists(fname), f"{fname} does not exist"
@@ -403,7 +406,7 @@ def train(
     ntest: int = int(1e12),
     schedule: str = "1e-3 * (0.9**((n//100000)**.5))",
     # lr: float = 1e-3,
-    checkerr: float = 1e12,
+    # checkerr: float = 1e12,
     charset_file: str = None,
     dewarp_to: int = -1,
     log_to: str = "",

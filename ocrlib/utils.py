@@ -4,7 +4,6 @@ import sys
 import time
 from functools import wraps
 import re
-import matplotlib.pyplot as plt
 
 import numpy as np
 import scipy.ndimage as ndi
@@ -14,6 +13,35 @@ from torchmore import layers
 debug = int(os.environ.get("UTILS_DEBUG", "0"))
 
 do_trace = int(os.environ.get("OCROTRACE", "0"))
+
+
+def unused(f):
+    """Used to mark functions that are currently not used but are kept for future reference.
+    """
+    return f
+
+
+def useopt(f):
+    """Used to mark functions that are somehow used in command line options.
+
+    Usually, this is via eval(f"prefix_{option}").
+    """
+    return f
+
+
+def model(f):
+    """Used to mark functions that create models.
+    """
+    return f
+
+
+def public(f):
+    """Marks a function as public (adds it to __all__)."""
+    mdict = sys.modules[f.__module__].__dict__
+    mall = mdict.setdefault("__all__", [])
+    assert isinstance(mall, list)
+    mall.append(f.__name__)
+    return f
 
 
 def junk(message="don't use this function anymore"):
@@ -314,3 +342,17 @@ def fix_bounding_boxes(bimage, bboxes):
     for y, x in ndi.find_objects(components):
         result.append((x.start, y.start, x.stop, y.stop))
     return result
+
+
+def python_to_json(obj):
+    if isinstance(obj, (int, float, str)):
+        return obj
+    if isinstance(obj, (np.uint8, np.int8, np.uint16, np.int16, np.int32, np.int64)):
+        return int(obj)
+    if isinstance(obj, (np.float32, np.float64)):
+        return float(obj)
+    if isinstance(obj, (tuple, list)):
+        return [python_to_json(x) for x in obj]
+    if isinstance(obj, dict):
+        return {k: python_to_json(v) for k, v in obj.items()}
+    raise ValueError("bad type in fix4json", type(obj), obj)

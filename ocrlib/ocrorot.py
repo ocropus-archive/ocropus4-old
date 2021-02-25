@@ -80,7 +80,7 @@ def get_patches(
     smooth = ndi.uniform_filter(page, 100)
     mask = smooth > np.percentile(smooth, 70)
     samples = []
-    for trial in range(ntrials):
+    for _ in range(ntrials):
         if len(samples) >= npatches:
             break
         y, x = pyrand.randrange(0, h), pyrand.randrange(0, w)
@@ -227,6 +227,7 @@ def make_loader(
 #     return model
 
 
+@public
 class PageOrientation:
     def __init__(self, fname, check=True):
         self.model = loading.load_only_model(fname)()
@@ -257,6 +258,7 @@ class PageOrientation:
         return ndi.rotate(page, -angle)
 
 
+@public
 class PageSkew:
     def __init__(self, fname, check=True):
         self.model = loading.load_only_model(fname)()
@@ -287,7 +289,7 @@ class PageSkew:
         self.angle = self.skew(page) * 180.0 / np.pi
         return ndi.rotate(page, self.angle, order=1)
 
-
+@public
 class PageScale:
     def __init__(self, fname=None, check=True):
         self.model = loading.load_only_model(fname)()

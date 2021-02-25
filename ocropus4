@@ -57,6 +57,9 @@ nlbin)  # nonlinear binarization
 slog)  # examine logs
     $python3 -m ocrlib.slog "$@"
     ;;
+wordrec)  # recognize pages
+    $python3 -m ocrlib.wordrec "$@"
+    ;;
 pagerec)  # recognize pages
     $python3 -m ocrlib.pagerec "$@"
     ;;
