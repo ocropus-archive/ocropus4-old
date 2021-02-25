@@ -1,7 +1,9 @@
 from typing import List
 import sys
 import traceback
+import re
 
+import os.path
 import numpy as np
 import PIL
 import typer
@@ -132,7 +134,11 @@ class BasicRecognizer:
         self.run_recognizers(image)
         result = []
         for i in range(len(self.boxes)):
-            r = dict(type=self.segment_type, box=self.boxes[i], output=self.outputs[i],)
+            r = dict(
+                type=self.segment_type,
+                box=self.boxes[i],
+                output=self.outputs[i],
+            )
             if return_segments:
                 r["image"] = self.segments[i]
             result.append(r)
@@ -354,6 +360,66 @@ def print_raw_text(result):
         print(" ".join(text))
 
 
+def descenders(s):
+    return len(set("gjpqy").intersection(set(s))) > 0
+
+
+def ascenders(s):
+    return len(set("bdfhijklt").intersection(set(s))) > 0 or re.search(r"[A-Z]", s)
+
+
+def boxfactor(s):
+    if ascenders(s) and descenders(s):
+        return 0.75
+    elif ascenders(s):
+        return 1.0
+    elif descenders(s):
+        return 1.0
+    else:
+        return 1.5
+
+
+def html_for_words(key, words, image=None, wordscale=0.6):
+    if image is not None:
+        pageheight, pagewidth = image.shape[0], image.shape[1]
+    else:
+        pageheight = np.amax(w[1] for w in words) + 10
+        pagewidth = np.amax(w[0] for w in words) + 10
+    body = E.div(
+        style="position: relative; "
+        + f"min-height: {pageheight}px; width: {pagewidth}px;"
+        + "border: solid 2px black;"
+    )
+    base = os.path.basename(key)
+    if image is not None:
+        body.append(
+            E.img(
+                src=f"{base}.jpg",
+                style="position: absolute; opacity: 0.3; top: 0px; left: 0px;",
+                alt=key,
+            )
+        )
+    for word in words:
+        y0, y1, x0, x1 = word["box"]
+        s = word["output"]
+        if s == "":
+            s = "☒"
+        bh = wordscale * (y1 - y0) * boxfactor(s)
+        style = f"position: absolute; top: {y0}px; left: {x0}px;"
+        style += f"font-size: {int(bh)+1}px;"
+        style += "font-weight: bold;"
+        style += "color: red;"
+        body.append(
+            E.span(
+                s + " ",
+                Class="ocrx_word",
+                title=f"bbox {x0} {y0} {x1} {y1}",
+                style=style,
+            )
+        )
+    return body
+
+
 @app.command()
 def recognize_segments(
     tarfile: str,
@@ -364,11 +430,13 @@ def recognize_segments(
     extensions: str = "jpg;png;page.jpg;page.png",
     segment_type: str = "span",
     maxrec: int = 999999999,
-    debugseg: bool = False,
-    debug: bool = False,
-    debugout: bool = False,
-    htmlout: bool = True,
-    jsonout: bool = True,
+    full_html: str = "",
+    debug_rec: bool = False,
+    debug_seg: bool = False,
+    debug_out: bool = False,
+    output_html: bool = True,
+    output_json: bool = True,
+    output_image: bool = True,
 ):
 
     assert recmodel != "", "must give --recmodel argument"
@@ -391,9 +459,9 @@ def recognize_segments(
         plt.ginput(1, 100)
 
     pr = BasicRecognizer(segment_type=segment_type)
-    if debug:
+    if debug_rec:
         pr.after_recognition_hook = show_segment
-    if debugseg:
+    if debug_seg:
         pr.after_segmentation_hook = show_page
     pr.load_recognizer(recmodel)
     pr.load_segmenter(segmodel)
@@ -402,6 +470,9 @@ def recognize_segments(
     sink = None
     if output != "":
         sink = wds.TarWriter(output)
+    fullbody = None
+    if full_html != "":
+        fullbody = E.body()
     for count, (key, image) in enumerate(ds):
         print("\n===", key, "=" * 40, "\n")
         if count >= maxrec:
@@ -420,30 +491,27 @@ def recognize_segments(
             "__key__": key,
         }
 
-        if jsonout:
+        if output_image:
+            sample["jpg"] = image
+
+        if output_json:
             sample["words.json"] = result
 
-        if htmlout:
-            head = E.head(E.title(key))
-            body = E.div(style="position: relative;")
-            page = E.html(head, E.body(body))
-            for word in result:
-                y0, y1, x0, x1 = word["box"]
-                body.append(
-                    E.span(
-                        word["output"],
-                        _class="ocrx_word",
-                        title=f"bbox {x0} {y0} {x1} {y1}",
-                        style=f"position: absolute; top: {y0}px; left: {x0}px;",
-                    )
-                )
-                body.append(E.text(" "))
-            sample["words.html"] = etree.tostring(page)
+        page = html_for_words(key, result, image=image)
+
+        if output_html:
+            singlepage = E.html(E.title(key), E.body(page))
+            sample["words.html"] = etree.tostring(singlepage)
+
+        if fullbody is not None:
+            fullbody.append(E.h2(key))
+            fullbody.append(page)
+            fullbody.append(E.p(style="page-break-after: always;"))
 
         if sink is not None:
             sink.write(sample)
 
-        if debugout:
+        if debug_out:
             plt.ion()
             plt.clf()
             plt.imshow(image * 0.3 / np.amax(image), vmin=0.0, vmax=1.0)
@@ -455,6 +523,11 @@ def recognize_segments(
                     s, xy=(x0, y1), xycoords="data", color="red", fontweight="bold"
                 )
             plt.ginput(1, 1000)
+
+    if full_html != "":
+        fulloutput = E.html(E.title(tarfile), fullbody)
+        with open(full_html, "wb") as stream:
+            stream.write(etree.tostring(fulloutput))
 
 
 @app.command()
