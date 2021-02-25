@@ -10,11 +10,13 @@ import functools
 import matplotlib.pyplot as plt
 import yaml
 import json
+from lxml import etree
+from lxml.builder import E
 
 import webdataset as wds
 
 from ocrlib.utils import BBox
-from . import ocroline, ocroseg, utils, loading
+from . import ocroline, ocroseg, loading
 
 Charset = ocroline.Charset
 
@@ -130,11 +132,7 @@ class BasicRecognizer:
         self.run_recognizers(image)
         result = []
         for i in range(len(self.boxes)):
-            r = dict(
-                type=self.segment_type,
-                box=self.boxes[i],
-                output=self.outputs[i],
-            )
+            r = dict(type=self.segment_type, box=self.boxes[i], output=self.outputs[i],)
             if return_segments:
                 r["image"] = self.segments[i]
             result.append(r)
@@ -358,7 +356,8 @@ def print_raw_text(result):
 
 @app.command()
 def recognize_segments(
-    tarfile: List[str],
+    tarfile: str,
+    output: str = "",
     conf: str = "./ocropus4.yaml",
     recmodel: str = "",
     segmodel: str = "",
@@ -367,6 +366,9 @@ def recognize_segments(
     maxrec: int = 999999999,
     debugseg: bool = False,
     debug: bool = False,
+    debugout: bool = False,
+    htmlout: bool = True,
+    jsonout: bool = True,
 ):
 
     assert recmodel != "", "must give --recmodel argument"
@@ -396,65 +398,63 @@ def recognize_segments(
     pr.load_recognizer(recmodel)
     pr.load_segmenter(segmodel)
     print("# starting", file=sys.stderr)
-    ds = wds.Dataset(tarfile[0]).decode("l").to_tuple(f"__key__ {extensions}")
+    ds = wds.Dataset(tarfile).decode("l").to_tuple(f"__key__ {extensions}")
+    sink = None
+    if output != "":
+        sink = wds.TarWriter(output)
     for count, (key, image) in enumerate(ds):
+        print("\n===", key, "=" * 40, "\n")
         if count >= maxrec:
             break
         assert isinstance(image, np.ndarray), type(image)
         image = normalize_image(image)
         try:
             result = pr.recognize_words(image)
-            print("\n===", key, "=" * 40, "\n")
-            for s in result[:10]:
-                print(s["output"])
         except Exception as exn:
             traceback.print_exc()
             print(exn, file=sys.stderr)
+        for s in result[:200]:
+            print(s["output"], end=" ")
+        print("\n")
+        sample = {
+            "__key__": key,
+        }
 
+        if jsonout:
+            sample["words.json"] = result
 
-@app.command()
-def recognize_tar(
-    tarfile: List[str],
-    conf: str = "./ocropus4.yaml",
-    extensions: str = "jpg;png;page.jpg;page.png",
-    format: str = "text",
-    maxrec: int = 999999999,
-    show: int = 0,
-):
-    print("# loading", conf, file=sys.stderr)
-    with open(conf) as stream:
-        conf = yaml.load(stream, Loader=yaml.FullLoader)
-    print("# loading models", file=sys.stderr)
-    pr = PageRecognizer()
-    pr.load_config(conf)
+        if htmlout:
+            head = E.head(E.title(key))
+            body = E.div(style="position: relative;")
+            page = E.html(head, E.body(body))
+            for word in result:
+                y0, y1, x0, x1 = word["box"]
+                body.append(
+                    E.span(
+                        word["output"],
+                        _class="ocrx_word",
+                        title=f"bbox {x0} {y0} {x1} {y1}",
+                        style=f"position: absolute; top: {y0}px; left: {x0}px;",
+                    )
+                )
+                body.append(E.text(" "))
+            sample["words.html"] = etree.tostring(page)
 
-    print("# starting", file=sys.stderr)
-    ds = wds.Dataset(tarfile[0]).decode("l").to_tuple(f"__key__ {extensions}")
-    count = 0
-    for key, image in ds:
-        if count >= maxrec:
-            break
-        assert isinstance(image, np.ndarray), type(image)
-        image = normalize_image(image)
-        try:
-            result = pr.recognize_page(image)
-            print()
-            print("===", key, "=" * 40)
-            print()
-            if format == "json":
-                result = python_to_json(result)
-                try:
-                    print(json.dumps(result, indent=4))
-                except Exception as exn:
-                    print(exn)
-                    print(repr(result))
-            else:
-                print_raw_text(result)
-            print()
-        except Exception as exn:
-            traceback.print_exc()
-            print(exn, file=sys.stderr)
-        count += 1
+        if sink is not None:
+            sink.write(sample)
+
+        if debugout:
+            plt.ion()
+            plt.clf()
+            plt.imshow(image * 0.3 / np.amax(image), vmin=0.0, vmax=1.0)
+            ax = plt.gca()
+            for word in result:
+                y0, y1, x0, x1 = word["box"]
+                s = word["output"]
+                ax.annotate(
+                    s, xy=(x0, y1), xycoords="data", color="red", fontweight="bold"
+                )
+            plt.ginput(1, 1000)
 
 
 @app.command()

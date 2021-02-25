@@ -1,5 +1,4 @@
 import io
-import os
 import re
 import sys
 
@@ -18,11 +17,11 @@ import typer
 # FIXME move this into the function, make it a command line argument
 # FIXME ditto for confidence
 
-debug = int(os.environ.get("EXTRACT_SEG_DEBUG", "0"))
-acceptable_bboxes = list(
-    map(float, os.environ.get("EXTRACT_SEG_ACCEPTABLE", "5 5 8000 8000").split())
-)
-max_aspect = 1.0
+# debug = int(os.environ.get("EXTRACT_SEG_DEBUG", "0"))
+# acceptable_bboxes = list(
+#    map(float, os.environ.get("EXTRACT_SEG_ACCEPTABLE", "5 5 8000 8000").split())
+# )
+# max_aspect = 1.0
 
 app = typer.Typer()
 
@@ -45,6 +44,7 @@ def get_prop(node, name):
             return args
     return None
 
+
 def get_bbox(node):
     bbox = get_prop(node, "bbox")
     if bbox is not None:
@@ -63,14 +63,6 @@ def dims(bbox):
     """Compute the w, h of a bounding box."""
     x0, y0, x1, y1 = bbox
     return x1 - x0, y1 - y0
-
-
-def acceptable(bbox, minw=10, maxw=1000, minh=10, maxh=100):
-    """Determine whether a bounding box has an acceptable size."""
-    bw, bh = dims(bbox)
-    w0, h0, w1, h1 = acceptable_bboxes
-    aspect = bh / max(float(bw), 0.001)
-    return aspect <= max_aspect and bw >= w0 and bw <= w1 and bh >= h0 and bh <= h1
 
 
 def marker_segmentation_target_for_bboxes(
@@ -93,7 +85,7 @@ def marker_segmentation_target_for_bboxes(
         :param labels: list of labels for marker, inside, separator (default: [1, 0, 2])
     """
 
-    #print(labels); raise Exception()
+    # print(labels); raise Exception()
     h, w = image.shape[:2]
     target = np.zeros((h, w), dtype="uint8")
     bboxes = sorted(bboxes, key=lambda b: -dims(b)[0])
@@ -116,7 +108,7 @@ def marker_segmentation_target_for_bboxes(
         d = min(int(min(bw, bh) * center_margin_x), -min_center_x_margin)
         assert abs(c) < bh
         assert abs(d) < bw
-        #print(c, d); raise Exception()
+        # print(c, d); raise Exception()
         target[y0 - c : y0 + c, x0 - c : x1 + c] = labels[2]
         target[yc - min_center_y : yc + min_center_y, x0 - c : x1 + c] = labels[2]
     return target
@@ -145,22 +137,68 @@ def mask_with_boxes(image, bboxes, dilate=50, background=0):
     image = np.where(mask, image, background)
     return image
 
-def check_text(b, char_height=1.0):
+
+def check_acceptable_none(bbox):
+    return True
+
+
+def check_acceptable_word(bbox, minw=10, maxw=500, minh=10, maxh=100, max_aspect=1.0):
+    """Determine whether a bounding box has an acceptable size."""
+    bw, bh = dims(bbox)
+    aspect = bh / max(float(bw), 0.001)
+    return (
+        aspect <= max_aspect and bw >= minw and bw <= maxw and bh >= minh and bh <= maxh
+    )
+
+
+def check_acceptable_line(bbox, minw=10, maxw=3000, minh=10, maxh=200, max_aspect=1.0):
+    """Determine whether a bounding box has an acceptable size."""
+    bw, bh = dims(bbox)
+    aspect = bh / max(float(bw), 0.001)
+    return (
+        aspect <= max_aspect and bw >= minw and bw <= maxw and bh >= minh and bh <= maxh
+    )
+
+
+def check_text_none(b):
+    return True
+
+
+def check_text_word(b, char_height=1.0, min_char_height=0.2):
     s = get_text(b)
     if " " in s:
         return False
     x0, y0, x1, y1 = get_bbox(b)
+    est_min_width = len(s) * (y1 - y0) * min_char_height
     est_max_width = len(s) * (y1 - y0) * char_height
     actual_width = x1 - x0
-    #print(est_max_width, actual_width, repr(s))
-    if actual_width > est_max_width:
+    # print(est_max_width, actual_width, repr(s))
+    if actual_width < est_min_width or actual_width > est_max_width:
         return False
     return True
 
+
+def check_text_line(b, char_height=1.0, min_char_height=0.2):
+    s = get_text(b)
+    x0, y0, x1, y1 = get_bbox(b)
+    est_min_width = len(s) * (y1 - y0) * min_char_height
+    est_max_width = len(s) * (y1 - y0) * char_height
+    actual_width = x1 - x0
+    # print(est_max_width, actual_width, repr(s))
+    if actual_width < est_min_width or actual_width > est_max_width:
+        return False
+    return True
+
+
 def bboxes_for_hocr(
-    image, hocr, acceptable_conf=50, conf_prop="x_wconf", element="ocrx_word",
+    image,
+    hocr,
+    acceptable_conf=50,
+    conf_prop="x_wconf",
+    element="ocrx_word",
     confidence_prop="x_wconf",
-    check_text=check_text,
+    check_acceptable=check_acceptable_word,
+    check_text=check_text_word,
     max_bad_text_frac=0.2,
 ):
     """
@@ -204,7 +242,7 @@ def bboxes_for_hocr(
             else:
                 no_conf += 1
         bbox = [int(x) for x in get_prop(word, "bbox").split()]
-        if not acceptable(bbox):
+        if not check_acceptable(bbox):
             continue
         bboxes.append(bbox)
     if bad_text >= max_bad_text_frac * len(bboxes):
@@ -232,15 +270,23 @@ def segmentation_patches(
     labels=[1, 2, 3],
     params="",
     fix_boxes=False,
+    check_acceptable=check_acceptable_word,
+    check_text=check_text_word,
 ):
     """Extract training patches for segmentation."""
     assert page is not None
     assert hocr is not None
     if page.ndim == 3:
         page = np.mean(page, 2)
-    bboxes = bboxes_for_hocr(page, hocr, element=element)
+    bboxes = bboxes_for_hocr(
+        page,
+        hocr,
+        element=element,
+        check_text=check_text,
+        check_acceptable=check_acceptable,
+    )
     if fix_boxes:
-        binary = (page > np.mean([np.amax(page), np.amin(page)]))
+        binary = page > np.mean([np.amax(page), np.amin(page)])
         bboxes = utils.fix_bounding_boxes(binary, bboxes)
     page = mask(page, bboxes)
     if degrade is not None:
@@ -294,12 +340,13 @@ def hocr2seg(
     invert: str = "Auto",
     mask: str = "bbox",
     labels: str = "1, 2, 3",
-    acceptable: str = "5, 5, 9999, 9999",
     fix_boxes: bool = False,
+    check: str = "word",
 ):
     """Extract segmentation patches from src and send them to output."""
     global acceptable_bboxes
-    acceptable_bboxes = eval(f"[{acceptable}]")
+    check_acceptable = eval(f"check_acceptable_{check}")
+    check_text = eval(f"check_text_{check}")
     labels = eval(f"[{labels}]")
     if show > 0:
         pylab.ion()
@@ -352,6 +399,8 @@ def hocr2seg(
                         mask=eval(f"mask_with_{mask}"),
                         labels=labels,
                         fix_boxes=fix_boxes,
+                        check_text=check_text,
+                        check_acceptable=check_acceptable,
                     )
                 except ValueError as exn:
                     if ignore_errors:

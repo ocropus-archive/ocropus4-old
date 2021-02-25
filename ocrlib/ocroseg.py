@@ -445,9 +445,7 @@ def stuff_back(output, patches, r=(32, 32),  s=(512, 512)):
 
 def full_inference(batch, model, *args, **kw):
     with torch.no_grad():
-        print(">", batch.shape)
         result = model(batch).detach().softmax(1).cpu()
-        print("<", result.shape)
     return result
 
 
