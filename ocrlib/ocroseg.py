@@ -482,6 +482,8 @@ class Segmenter:
         self.region_threshold = 0.3
         self.maxdist = 100
         self.activate()
+        self.patchsize = (512, 512)
+        self.overlap = (64, 64)
 
     def activate(self, yes=True):
         if yes:
@@ -498,7 +500,7 @@ class Segmenter:
         self.model.eval()
         if page.ndim == 2:
             page = np.expand_dims(page, 2)
-        probs = patchwise_inference(page, self.model)
+        probs = patchwise_inference(page, self.model, patchsize=self.patchsize, overlap=self.overlap)
         self.probs = probs
         self.gprobs = smooth_probabilities(probs, self.smooth)
         self.segments = marker_segmentation(

@@ -1,0 +1,2 @@
+vulture:
+	vulture ocrlib
