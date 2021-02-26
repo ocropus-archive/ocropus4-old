@@ -170,7 +170,7 @@ def html_for_page(key, lines, image=None):
             E.img(
                 src=f"{base}.jpg",
                 style="position: absolute; opacity: 0.3; top: 0px; left: 0px;",
-                alt=key,
+                alt="",
             )
         )
 
