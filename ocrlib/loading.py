@@ -102,7 +102,8 @@ def dict_to_model(state, module_path=module_path):
     model.mname_ = state.get("mname")
     model.margs_ = state["margs"]
     model.step_ = state.get("step", 0)
-    model.extra_ = state.get("extra", {})
+    extra = state.get("extra", {})
+    model.extra_ = extra if extra != {} else dict(state, mstate=None)
     model.load_state_dict(state["mstate"])
     return model
 
@@ -173,9 +174,10 @@ def dump_model_as_dict(model):
     return buf.getbuffer()
 
 
-def log_model(logger, model, loss=None, step=None, optimizer=None):
+def log_model(logger, model, loss=None, step=None, optimizer=None, **kw):
     assert loss is not None
     assert step is not None
     state = model_to_dict(model)
+    state.update(kw)
     logger.save("model", state, scalar=loss, step=step)
     logger.flush()

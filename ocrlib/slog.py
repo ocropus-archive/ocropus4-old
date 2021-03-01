@@ -379,6 +379,16 @@ def show(fname, keys="model", xscale="linear", yscale="linear"):
 
 
 @app.command()
+def showdump(fname):
+    dump = torch.load(fname)
+    if not isinstance(dump, dict):
+        print(repr(dump)[:1000])
+        return
+    for k, v in dump.items():
+        print(f"{k:20s} {repr(v)[:60]}")
+
+
+@app.command()
 def info(fnames: List[str], verbose: bool = False):
     """Print information on each of the log files."""
     fnames = sorted(fnames)
