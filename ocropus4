@@ -54,6 +54,9 @@ ocrorot)   # page rotation/orientation detection
 ocroskew)   # skew estimation
     $python3 -m ocrlib.ocroskew "$@"
     ;;
+ocroscale)   # scale estimation
+    $python3 -m ocrlib.ocroscale "$@"
+    ;;
 nlbin)  # nonlinear binarization
     $python3 -m ocrlib.nlbin "$@"
     ;;

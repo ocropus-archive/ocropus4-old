@@ -104,6 +104,28 @@ def page_skew_210301(noutput, size=256, r=5, nf=8, r2=5, nf2=4):
 
 
 @model
+def page_scale_210301(noutput, size=(512, 512), r=5, nf=8, r2=5, nf2=4):
+    model = nn.Sequential(
+        ocrlayers.GrayDocument(),
+        layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
+        flex.Conv2d(nf, r, padding=r//2),
+        flex.BatchNorm2d(),
+        nn.ReLU(),
+        Spectrum(),
+        flex.Conv2d(nf2, r2, padding=r2//2),
+        flex.BatchNorm2d(),
+        nn.ReLU(),
+        layers.Reshape(0, [1, 2, 3]),
+        flex.Linear(noutput*10),
+        flex.BatchNorm(),
+        nn.ReLU(),
+        flex.Linear(noutput),
+    )
+    flex.shape_inference(model, (2, 1, size[0], size[1]))
+    return model
+
+
+@model
 def text_model_210218(noutput):
     model = nn.Sequential(
         ocrlayers.GrayDocument(),
