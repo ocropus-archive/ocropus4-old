@@ -82,24 +82,24 @@ def page_orientation_210113(size=256):
 
 
 @model
-def page_skew_210113(noutput, size=256, r=5, nf=8, r2=5, nf2=4):
-    B, D, H, W = (2, 128), (1, 512), size, size
+def page_skew_210301(noutput, size=256, r=5, nf=8, r2=5, nf2=4):
     model = nn.Sequential(
-        layers.CheckSizes(B, D, H, W),
-        nn.Conv2d(1, nf, r, padding=r // 2),
-        nn.BatchNorm2d(nf),
+        ocrlayers.GrayDocument(),
+        layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
+        flex.Conv2d(nf, r, padding=r//2),
+        flex.BatchNorm2d(),
         nn.ReLU(),
         Spectrum(),
-        nn.Conv2d(nf, nf2, r2, padding=r2 // 2),
-        nn.BatchNorm2d(nf2),
+        flex.Conv2d(nf2, r2, padding=r2//2),
+        flex.BatchNorm2d(),
         nn.ReLU(),
         layers.Reshape(0, [1, 2, 3]),
-        nn.Linear(nf2 * W * H, 128),
-        nn.BatchNorm1d(128),
+        flex.Linear(noutput*10),
+        flex.BatchNorm(),
         nn.ReLU(),
-        nn.Linear(128, noutput),
-        layers.CheckSizes(B, noutput),
+        flex.Linear(noutput),
     )
+    flex.shape_inference(model, (2, 1, size, size))
     return model
 
 

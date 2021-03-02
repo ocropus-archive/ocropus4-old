@@ -48,8 +48,11 @@ ocroline)
 ocrobin)   # binarization
     $python3 -m ocrlib.ocrobin "$@"
     ;;
-ocrorot)   # binarization
+ocrorot)   # page rotation/orientation detection
     $python3 -m ocrlib.ocrorot "$@"
+    ;;
+ocroskew)   # skew estimation
+    $python3 -m ocrlib.ocroskew "$@"
     ;;
 nlbin)  # nonlinear binarization
     $python3 -m ocrlib.nlbin "$@"

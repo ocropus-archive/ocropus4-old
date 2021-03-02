@@ -1,10 +1,10 @@
+import os
 import sys
 import random as pyrand
 from math import cos, exp, log, sin
 from typing import List
 from itertools import islice
 import random
-import os
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -54,15 +54,16 @@ def get_patch(image, shape, center, m=np.eye(2), order=1):
     ).clip(0, 1)
 
 
-def rot_samples(
+def skew_samples(
     page,
     npatches=32,
     ntrials=32,
     shape=(256, 256),
-    alpha=(-0.03, 0.03),
+    alpha=(-0.1, 0.1),
     scale=(1.0, 1.0),
-    rotate=True,
 ):
+    if not isinstance(alpha, tuple):
+        alpha = (-alpha, alpha)
     h, w = page.shape[:2]
     smooth = ndi.uniform_filter(page, 100)
     mask = smooth > np.percentile(smooth, 70)
@@ -79,26 +80,28 @@ def rot_samples(
         s = exp(pyrand.uniform(log(scale[0]), log(scale[1])))
         m = np.array([[cos(a), -sin(a)], [sin(a), cos(a)]], "f") / s
         result = get_patch(page, shape, (y, x), m=m, order=1)
-        c = random.randint(0, 3) if rotate else 0
-        rotated = ndi.rotate(result, 90 * c, order=1).clip(0, 1)
-        yield rotated, c
+        yield result, a
 
 
-def rot_pipe(source, **kw):
+def skew_pipe(source, alpha=0.1, nbins=20, **kw):
     for (page,) in source:
-        yield from rot_samples(page, **kw)
+        yield from skew_samples(page, **kw)
 
 
 def make_loader(
     urls,
     batch_size=16,
-    extensions="nrm.jpg;image.png;framed.png;page.png;png;page.jpg;jpg;jpeg",
+    extensions=default_extensions,
     shuffle=0,
     num_workers=4,
-    pipe=rot_pipe,
+    pipe=skew_pipe,
+    bins=None,
     invert="Auto",
-    limit=-1,
 ):
+
+    def binning(alpha):
+        return binned(alpha, bins)
+
     training = (
         wds.WebDataset(urls)
         .shuffle(shuffle)
@@ -106,19 +109,19 @@ def make_loader(
         .to_tuple(extensions)
         .map_tuple(lambda image: utils.autoinvert(image, invert))
         .pipe(pipe)
+        .map_tuple(lambda x: x, binning)
         .shuffle(shuffle)
     )
-    if limit > 0:
-        training = wds.ResizedDataset(training, limit, limit)
     return DataLoader(training, batch_size=batch_size, num_workers=num_workers)
 
 
 @public
-class PageOrientation:
+class PageSkew:
     def __init__(self, fname, check=True):
         self.model = loading.load_only_model(fname)
+        self.bins = self.model.extra_["bins"]
         self.check = check
-        self.debug = int(os.environ.get("DEBUG_PAGEORIENTATION", 0))
+        self.debug = int(os.environ.get("DEBUG_PAGESKEW", 0))
 
     def orientation(self, page, npatches=200, bs=50):
         if self.check:
@@ -126,7 +129,7 @@ class PageOrientation:
         try:
             self.model.cuda()
             self.model.eval()
-            patches = rot_samples(page, rotate=False, alpha=(0, 0))
+            patches = skew_samples(page, alpha=(0, 0))
             result = []
             while True:
                 batch = [x[0] for x in islice(patches, bs)]
@@ -146,9 +149,9 @@ class PageOrientation:
                         )
                         plt.ginput(1, 1000.0)
                     pass
-            self.last = torch.cat(result)
+            self.last = torch.cat(result).numpy()
             self.hist = self.last.mean(0)
-            return int(self.hist.argmax()) * 90
+            return unbinned(int(self.hist.argmax()), self.bins)
         finally:
             self.model.cpu()
 
@@ -167,18 +170,21 @@ def train(
     prefix: str = "rot",
     lrfun="0.3**(3+n//5000000)",
     output: str = "",
-    model: str = "page_orientation_210113",
+    model: str = "page_skew_210301",
     extensions: str = default_extensions,
+    alpha: float = 0.1,
+    nbins: int = 21,
     display: float = 0.0,
     invert: str = "Auto",
 ):
     logger = slog.Logger(fname=output, prefix=prefix)
     logger.sysinfo()
     logger.json("args", sys.argv)
-    model = loading.load_or_construct_model(model)
+    model = loading.load_or_construct_model(model, nbins)
     model.cuda()
     print(model)
     urls = urls * replicate
+    bins = np.linspace(-alpha, alpha, nbins)
     training = make_loader(
         urls,
         shuffle=10000,
@@ -186,7 +192,8 @@ def train(
         batch_size=bs,
         extensions=extensions,
         invert=invert,
-        pipe=rot_pipe,
+        bins=bins,
+        pipe=skew_pipe,
     )
     criterion = nn.CrossEntropyLoss().cuda()
     lrfun = eval(f"lambda n: {lrfun}")
@@ -198,7 +205,7 @@ def train(
 
     def save():
         avgloss = np.mean(losses[-100:])
-        loading.log_model(logger, model, step=count, loss=avgloss)
+        loading.log_model(logger, model, step=count, loss=avgloss, bins=bins)
         print("\nsaved at", count)
 
     schedule = utils.Schedule()
@@ -250,20 +257,20 @@ def train(
 def correct(
     urls: List[str],
     output: str = "/dev/null",
-    rotmodel: str = "",
-    skewmodel: str = "",
+    model: str = "",
     extensions: str = default_extensions,
     limit: int = 999999999,
     invert: str = "Auto",
 ):
-    rotest = PageOrientation(rotmodel) if rotmodel != "" else None
+    skewtest = PageSkew(model)
     dataset = wds.Dataset(urls).decode("l").to_tuple("__key__ " + extensions)
     sink = wds.TarWriter(output)
     for key, image in islice(dataset, limit):
         image = utils.autoinvert(image, invert)
-        rot = rotest.orientation(image) if rotest else None
-        print(key, image.shape, rot)
-        rotated = ndi.rotate(image, -rot) if rot != 0 else image
+        angle = skewtest.orientation(image)
+        # print(angle, (skewtest.hist * 100).astype(int))
+        print(key, image.shape, angle)
+        rotated = ndi.rotate(image, -angle)
         result = dict(__key__=key, jpg=rotated)
         sink.write(result)
 
