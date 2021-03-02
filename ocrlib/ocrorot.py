@@ -5,10 +5,10 @@ from functools import partial
 from math import cos, exp, log, sin
 from typing import List
 from itertools import islice
+import random
 
 import matplotlib.pyplot as plt
 import numpy as np
-import ocrodeg
 import scipy.ndimage as ndi
 import torch
 import typer
@@ -41,29 +41,33 @@ def unbinned(b, bins):
 
 
 def get_patch(image, shape, center, m=np.eye(2), order=1):
+    assert np.amin(image) >= 0 and np.amax(image) <= 1.0
     yx = np.array(center, "f")
     hw = np.array(shape, "f")
     offset = yx - np.dot(m, hw / 2.0)
     return ndi.affine_transform(
         image, m, offset=offset, output_shape=shape, order=order
-    )
+    ).clip(0, 1)
 
 
-def degrade_patch(patch):
-    p = pyrand.uniform(0.0, 1.0)
-    if p < 0.7:
-        return patch
-    if p < 0.9:
-        sigma = pyrand.uniform(0.2, 5.0)
-        maxdelta = pyrand.uniform(0.5, 3.0)
-        noise = ocrodeg.bounded_gaussian_noise(patch.shape, sigma, maxdelta)
-        patch = ocrodeg.distort_with_noise(patch, noise)
-        gsigma = pyrand.uniform(0.0, 2.5)
-        if gsigma > 0.5:
-            patch = ndi.gaussian_filter(patch, gsigma)
-        return patch
-    else:
-        return 1.0 - ocrodeg.printlike_multiscale(1.0 - patch)
+def rot_pipe(source, npatches=32, ntrials=32, shape=(256, 256)):
+    for (page,) in source:
+        h, w = page.shape[:2]
+        smooth = ndi.uniform_filter(page, 100)
+        mask = smooth > np.percentile(smooth, 70)
+        samples = []
+        for _ in range(ntrials):
+            if len(samples) >= npatches:
+                break
+            y, x = pyrand.randrange(0, h), pyrand.randrange(0, w)
+            if mask[y, x]:
+                samples.append((x, y))
+        pyrand.shuffle(samples)
+        for x, y in samples:
+            result = get_patch(page, shape, (y, x), order=1)
+            c = random.randint(0, 3)
+            rotated = ndi.rotate(result, 90 * c, order=1).clip(0, 1)
+            yield rotated, c
 
 
 def get_patches(
@@ -74,7 +78,6 @@ def get_patches(
     alpha=(0.0, 0.0),
     scale=(1.0, 1.0),
     order=1,
-    degrade=False,
     npatches=100,
     ntrials=10000,
 ):
@@ -103,26 +106,8 @@ def get_patches(
             if pyrand.uniform(0.0, 1.0) > 0.5:
                 inv = 1
                 result = 1.0 - result
-        if degrade:
-            result = degrade_patch(result)
         result = result.clip(0, 1)
         yield result, (rangle // 90, a, s, inv)
-
-
-def rot_pipe(source, shape=(256, 256), alpha=0.03, scale=1.3):
-    for (page,) in source:
-        if np.mean(page) > 0.5:
-            page = 1.0 - page
-        for patch, params in get_patches(
-            page,
-            shape=shape,
-            flip=True,
-            degrade=True,
-            alpha=(-alpha, alpha),
-            scale=(1.0 / scale, scale),
-        ):
-            r, _, _, _ = params
-            yield torch.tensor(patch), r
 
 
 def skew_pipe(source, shape=(256, 256), alpha=(-0.1, 0.1), scale=(0.7, 1.4)):
@@ -130,7 +115,10 @@ def skew_pipe(source, shape=(256, 256), alpha=(-0.1, 0.1), scale=(0.7, 1.4)):
         if np.mean(page) > 0.5:
             page = 1.0 - page
         for patch, params in get_patches(
-            page, shape=shape, alpha=alpha, scale=scale, degrade=True
+            page,
+            shape=shape,
+            alpha=alpha,
+            scale=scale,
         ):
             _, a, s, _ = params
             yield torch.tensor(patch), a, s
@@ -143,10 +131,18 @@ def make_loader(
     shuffle=0,
     num_workers=4,
     pipe=rot_pipe,
+    invert="Auto",
     limit=-1,
 ):
-    training = wds.Dataset(urls).shuffle(shuffle).decode("l").to_tuple(extensions)
-    training.pipe(pipe)
+    training = (
+        wds.WebDataset(urls)
+        .shuffle(shuffle)
+        .decode("l")
+        .to_tuple(extensions)
+        .map_tuple(lambda image: utils.autoinvert(image, invert))
+        .pipe(pipe)
+        .shuffle(shuffle)
+    )
     if limit > 0:
         training = wds.ResizedDataset(training, limit, limit)
     return DataLoader(training, batch_size=batch_size, num_workers=num_workers)
@@ -177,7 +173,9 @@ class PageOrientation:
                     for i in range(len(inputs)):
                         plt.ion()
                         plt.imshow(inputs[i, 0].detach().cpu().numpy())
-                        plt.title(str(i) + ": " + repr(inputs.shape) + " " + repr(outputs[i]))
+                        plt.title(
+                            str(i) + ": " + repr(inputs.shape) + " " + repr(outputs[i])
+                        )
                         plt.ginput(1, 1000.0)
                     pass
             self.last = torch.cat(result)
@@ -274,6 +272,7 @@ def train_rot(
     model: str = "page_orientation_210113",
     extensions: str = default_extensions,
     display: float = 0.0,
+    invert: str = "Auto",
 ):
     logger = slog.Logger(fname=output, prefix=prefix)
     logger.sysinfo()
@@ -288,6 +287,8 @@ def train_rot(
         num_workers=num_workers,
         batch_size=bs,
         extensions=extensions,
+        invert=invert,
+        pipe=rot_pipe,
     )
     criterion = nn.CrossEntropyLoss().cuda()
     lrfun = eval(f"lambda n: {lrfun}")
@@ -307,6 +308,9 @@ def train_rot(
     for patches, targets in utils.repeatedly(training):
         if count > nsamples:
             break
+        if len(patches) < 2:
+            print("skipping small batch", file=sys.stderr)
+            continue
         patches = patches.type(torch.float).unsqueeze(1).cuda()
         optimizer.zero_grad()
         outputs = model(patches)
@@ -320,9 +324,6 @@ def train_rot(
         erate = (pred != targets).sum() * 1.0 / len(pred)
         errs.append(erate)
         if schedule("info", 60, initial=True):
-            print(targets)
-            print(pred)
-            print(probs)
             print(count, np.mean(losses[-50:]), np.mean(errs[-50:]), lr, flush=True)
         if schedule("log", 15 * 60):
             avgloss = np.mean(losses[-100:])
@@ -336,7 +337,7 @@ def train_rot(
         if display > 0 and schedule("display", display):
             plt.ion()
             plt.imshow(patches[0, 0].detach().cpu().numpy())
-            plt.title(f"{targets[0]} {outputs[0]}")
+            plt.title(f"{targets[0]} {list((100*probs[0].numpy()).astype(int))}")
             plt.ginput(1, 0.001)
         if schedule("save", 15 * 60):
             save()
