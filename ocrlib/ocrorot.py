@@ -50,24 +50,31 @@ def get_patch(image, shape, center, m=np.eye(2), order=1):
     ).clip(0, 1)
 
 
-def rot_pipe(source, npatches=32, ntrials=32, shape=(256, 256)):
+def rot_samples(page, npatches=32, ntrials=32, shape=(256, 256), alpha=(-0.03, 0.03), scale=(1.0, 1.0)):
+    h, w = page.shape[:2]
+    smooth = ndi.uniform_filter(page, 100)
+    mask = smooth > np.percentile(smooth, 70)
+    samples = []
+    for _ in range(ntrials):
+        if len(samples) >= npatches:
+            break
+        y, x = pyrand.randrange(0, h), pyrand.randrange(0, w)
+        if mask[y, x]:
+            samples.append((x, y))
+    pyrand.shuffle(samples)
+    for x, y in samples:
+        a = pyrand.uniform(*alpha)
+        s = exp(pyrand.uniform(log(scale[0]), log(scale[1])))
+        m = np.array([[cos(a), -sin(a)], [sin(a), cos(a)]], "f") / s
+        result = get_patch(page, shape, (y, x), m=m, order=1)
+        c = random.randint(0, 3)
+        rotated = ndi.rotate(result, 90 * c, order=1).clip(0, 1)
+        yield rotated, c
+
+
+def rot_pipe(source, **kw):
     for (page,) in source:
-        h, w = page.shape[:2]
-        smooth = ndi.uniform_filter(page, 100)
-        mask = smooth > np.percentile(smooth, 70)
-        samples = []
-        for _ in range(ntrials):
-            if len(samples) >= npatches:
-                break
-            y, x = pyrand.randrange(0, h), pyrand.randrange(0, w)
-            if mask[y, x]:
-                samples.append((x, y))
-        pyrand.shuffle(samples)
-        for x, y in samples:
-            result = get_patch(page, shape, (y, x), order=1)
-            c = random.randint(0, 3)
-            rotated = ndi.rotate(result, 90 * c, order=1).clip(0, 1)
-            yield rotated, c
+        yield from rot_samples(page, **kw)
 
 
 def get_patches(
