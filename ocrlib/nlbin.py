@@ -158,7 +158,7 @@ def estimate_thresholds(flat, bignore=0.1, escale=1.0, lo=5, hi=90, debug=0):
 
 
 def nlbin(raw, args):
-    assert raw.dtype == np.float
+    assert raw.dtype == float
     image = normalize_raw_image(raw)
     flat = estimate_local_whitelevel(
         image, args.zoom, args.perc, args.dist, debug_nlbin
@@ -197,7 +197,7 @@ def binarize1(
     assert image.dtype == np.uint8
     image = image / 255.0
     result = nlbin(image, args)
-    assert result.dtype == np.float
+    assert result.dtype == float
     if args.threshold >= 0:
         result = np.array(result > args.threshold, dtype=np.uint8) * 255
     else:
@@ -223,21 +223,28 @@ def binarize(
     skewsteps: int = 8,
     debug: float = 0,
     output: str = "",
+    maxrec: int = 999999999999,
 ):
     args = utils.Record(**locals())
     ds = wds.WebDataset(fname).decode("l8").to_tuple("__key__", extensions)
     sink = wds.TarWriter(output)
+    count = 0
     for key, image in ds:
         print(key)
+        if count >= maxrec:
+            break
         assert image.dtype == np.uint8
         image = image / 255.0
         flat = nlbin(image, args)
-        assert flat.dtype == np.float
+        assert flat.dtype == float
         result = dict(__key__=key)
+        if gray:
+            result["jpg"] = image
         if threshold >= 0:
             result["bin.png"] = np.array(flat > args.threshold, dtype=np.uint8) * 255
         result["nrm.jpg"] = np.array(flat * 255, dtype=np.uint8)
         sink.write(result)
+        count += 1
     sink.close()
 
 

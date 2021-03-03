@@ -1,6 +1,5 @@
 import random as pyrand
 from typing import List
-import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,9 +10,12 @@ import torch
 from torch import nn, optim
 from torch.utils import data
 from itertools import islice
+import scipy.ndimage as ndi
+from math import exp, log, cos, sin
 
 from . import slog
 from . import loading
+from . import utils
 
 
 app = typer.Typer()
@@ -26,26 +28,88 @@ plt.rc("image", interpolation="nearest")
 app = typer.Typer()
 
 
+def get_patch(image, shape, center, m=np.eye(2), order=1):
+    assert np.amin(image) >= 0 and np.amax(image) <= 1.0
+    yx = np.array(center, "f")
+    hw = np.array(shape, "f")
+    offset = yx - np.dot(m, hw / 2.0)
+    return ndi.affine_transform(
+        image, m, offset=offset, output_shape=shape, order=order
+    ).clip(0, 1)
+
+
+def bin_samples(
+    page,
+    binpage,
+    npatches=32,
+    ntrials=32,
+    shape=(256, 1024),
+    alpha=(-0.03, 0.03),
+    scale=(1.0, 1.0),
+    rotate=True,
+):
+    h, w = page.shape[:2]
+    assert isinstance(page, np.ndarray), repr(page)[:200]
+    assert isinstance(binpage, np.ndarray), repr(binpage)[:200]
+    assert page.ndim == 2, page.shape
+    assert binpage.ndim == 2, binpage.shape
+    smooth = ndi.uniform_filter(page, 100)
+    mask = smooth > np.percentile(smooth, 70)
+    samples = []
+    for _ in range(ntrials):
+        if len(samples) >= npatches:
+            break
+        y, x = pyrand.randrange(0, h), pyrand.randrange(0, w)
+        if mask[y, x]:
+            samples.append((x, y))
+    pyrand.shuffle(samples)
+    for x, y in samples:
+        a = pyrand.uniform(*alpha)
+        s = exp(pyrand.uniform(log(scale[0]), log(scale[1])))
+        m = np.array([[cos(a), -sin(a)], [sin(a), cos(a)]], "f") / s
+        patch = get_patch(page, shape, (y, x), m=m, order=1)
+        binpatch = get_patch(binpage, shape, (y, x), m=m, order=1)
+        yield patch, binpatch
+
+
+def bin_pipe(source, **kw):
+    for (page, binpage) in source:
+        yield from bin_samples(page, binpage, **kw)
+
+
+def make_loader(
+    urls,
+    batch_size=16,
+    extensions="nrm.jpg;image.png;framed.png;page.png;png;page.jpg;jpg;jpeg",
+    shuffle=0,
+    num_workers=4,
+    pipe=bin_pipe,
+    invert="Auto",
+):
+
+    def inverter(image):
+        return utils.autoinvert(image, invert)
+
+    def astensor(image):
+        return torch.tensor(image).unsqueeze(0)
+
+    training = (
+        wds.WebDataset(urls)
+        .shuffle(shuffle)
+        .decode("l")
+        .to_tuple(extensions)
+        .map_tuple(inverter, inverter)
+        .pipe(pipe)
+        .shuffle(shuffle)
+        .map_tuple(astensor, astensor)
+    )
+    return data.DataLoader(training, batch_size=batch_size, num_workers=num_workers)
+
+
 def normalize(a):
     a = a - np.amin(a)
     a /= max(1e-6, np.amax(a))
     return a
-
-
-def tiles(src, r=256):
-    for inputs, targets in src:
-        assert inputs.shape == targets.shape
-        d, h, w = inputs.shape
-        for i in range(0, h - r + 1, r):
-            for j in range(0, w - r + 1, r):
-                yield (
-                    inputs[:, i : i + r, j : j + r],
-                    targets[:, i : i + r, j : j + r],
-                )
-
-
-def nothing(trainer):
-    pass
 
 
 class BinTrainer:
@@ -53,6 +117,7 @@ class BinTrainer:
         self,
         model,
         lr=1e-3,
+        lr_schedule=None,
         savedir=True,
     ):
         super().__init__()
@@ -61,9 +126,11 @@ class BinTrainer:
         self.losses = []
         self.last_lr = -1
         self.set_lr(lr)
+        self.lr_schedule = lr_schedule
         self.criterion = nn.MSELoss().cuda()
-        self.every_batch = nothing
+        self.every_batch = lambda _: None
         self.maxcount = 1e21
+        self.nsamples = 0
 
     def to(self, device="cpu"):
         self.device = device
@@ -83,9 +150,12 @@ class BinTrainer:
         assert inputs.ndim == 4
         assert targets.ndim == 4
         assert len(inputs) == len(targets)
+        if self.lr_schedule:
+            self.set_lr(self.lr_schedule(self.nsamples))
         inputs = inputs.mean(1, keepdim=True)
         targets = targets.mean(1, keepdim=True)
         self.optimizer.zero_grad()
+        self.model.train()
         outputs = self.model(inputs.to(self.device))
         loss = self.criterion(outputs, targets.to(self.device))
         loss.backward()
@@ -98,29 +168,17 @@ class BinTrainer:
             outputs.detach().cpu(),
         )
         self.every_batch(self)
-
-    def train_epoch(self, loader, show=-1):
-        count = 0
-        for inputs, targets in loader:
-            self.train_batch(inputs, targets)
-            print(
-                f"{self.count:10d} {np.mean(self.losses[-10:]):.5f}",
-                end="\r",
-                file=sys.stderr,
-            )
-            if show > 0 and count % show == 0:
-                self.show_batch()
-            count += 1
-            if self.count >= self.maxcount:
-                return
+        self.nsamples += len(inputs)
 
     def show_batch(self):
         inputs, targets, outputs = self.last
         plt.ion()
         plt.clf()
-        plt.subplot(121)
+        plt.subplot(311)
         plt.imshow(inputs[0, 0].detach().cpu())
-        plt.subplot(122)
+        plt.subplot(312)
+        plt.imshow(targets[0, 0].detach().cpu())
+        plt.subplot(313)
         plt.imshow(outputs[0, 0].detach().cpu())
         plt.ginput(1, 0.001)
 
@@ -172,7 +230,7 @@ def generate(
             else:
                 degraded = ocrodeg.printlike_fibrous(page, blotches=1e-6)
             degraded = normalize(degraded)
-            result = {"__key__": f"{key}/{v}", "png": degraded, "bin.png": page}
+            result = {"__key__": f"{key}/{v}", "jpg": degraded, "bin.jpg": page}
             sink.write(result)
     sink.close()
 
@@ -184,29 +242,26 @@ def train(
     num_workers: int = 4,
     model: str = "binarization_210113",
     bs: int = 32,
-    lr: float = 1e-4,
+    lr: float = 1e-3,
     show: int = 0,
     num_epochs: int = 100,
-    maxcount: float = 1e21,
-    output: str = "",
+    output: str = "_ocrobin.sqlite3",
     replicate: int = 1,
+    shuffle: int = 10000,
+    display: float = 0.0,
+    save_interval: float = 600.0,
+    maxtrain: int = 1000000,
+    invert: str = "Auto",
 ):
     fnames = fnames * replicate
-    ds = (
-        wds.WebDataset(fnames, handler=wds.warn_and_continue)
-        .decode("torchrgb")
-        .to_tuple(extensions)
-        .pipe(tiles)
-        .shuffle(5000)
-    )
-    dl = data.DataLoader(ds, num_workers=num_workers, batch_size=bs)
+    loader = make_loader(fnames, extensions=extensions, shuffle=shuffle, invert=invert, pipe=bin_pipe)
     logger = slog.Logger(fname=output, prefix="bin")
     model = loading.load_or_construct_model(model)
     model.cuda()
+    print(model)
     trainer = BinTrainer(model, lr=lr)
     trainer.count = int(getattr(model, "step_", 0))
     trainer.to("cuda")
-    trainer.maxcount = maxcount
 
     def save():
         logger.save_smodel(
@@ -214,11 +269,18 @@ def train(
         )
         logger.flush()
 
-    for epoch in range(num_epochs):
-        trainer.train_epoch(dl, show=show)
-        print(f"\nepoch {epoch} loss {np.mean(trainer.losses[-500:])}")
-        # obj = dict(mstate=model.state_dict())
+    schedule = utils.Schedule()
+
+    for inputs, targets in islice(utils.repeatedly(loader), 0, maxtrain):
+        trainer.train_batch(inputs, targets)
         save()
+        if schedule("progress", 60, initial=True):
+            print(f"\nepoch {trainer.count} loss {np.mean(trainer.losses[-500:])}")
+        if schedule("save", save_interval, initial=True):
+            save()
+        if display > 0 and schedule("display", display, initial=True):
+            trainer.show_batch()
+
     save()
 
 
