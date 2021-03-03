@@ -19,6 +19,7 @@ from ocrlib.utils import Schedule, repeatedly
 from . import slog
 from . import utils
 from . import loading
+from . import patches
 import ocrlib.utils
 from .utils import useopt, junk
 
@@ -422,58 +423,6 @@ def smooth_probabilities(probs, smooth):
     return gprobs
 
 
-def overlapping_tiles(image, r=(32, 32), s=(512, 512)):
-    h, w = image.shape[:2]
-    patches = []
-    for y in range(0, h, s[0]):
-        for x in range(0, w, s[1]):
-            patch = ndi.affine_transform(
-                image,
-                np.eye(3),
-                offset=(y - r[0], x - r[1], 0),
-                output_shape=(s[0] + 2 * r[0], s[1] + 2 * r[1], image.shape[-1]),
-                order=0,
-            )
-            patches.append(patch)
-    return patches
-
-
-def stuff_back(output, patches, r=(32, 32), s=(512, 512)):
-    count = 0
-    h, w = output.shape[:2]
-    for y in range(0, h, s[0]):
-        for x in range(0, w, s[1]):
-            p = patches[count]
-            count += 1
-            ph, pw = min(s[0], h - y), min(s[1], w - x)
-            output[y : y + ph, x : x + pw, ...] = p[
-                r[0] : r[0] + ph, r[1] : r[1] + pw, ...
-            ]
-    return output
-
-
-def full_inference(batch, model, *args, **kw):
-    with torch.no_grad():
-        result = model(batch).detach().softmax(1).cpu()
-    return result
-
-
-def patchwise_inference(image, model, patchsize=(512, 512), overlap=(64, 64)):
-    patches = overlapping_tiles(image, r=overlap, s=patchsize)
-    outputs = []
-    for npatch in patches:
-        patch = torch.tensor(npatch).permute(2, 0, 1).unsqueeze(0)
-        probs = full_inference(patch, model)
-        if probs.shape[-2:] != patch.shape[-2:]:
-            print("# shape mismatch", probs.shape, patch.shape)
-            probs = F.interpolate(probs, size=patch.shape[-2:])
-        nprobs = probs[0].permute(1, 2, 0).numpy()
-        outputs.append(nprobs)
-    result = np.zeros(image.shape[:2] + (outputs[0].shape[-1],))
-    stuff_back(result, outputs, r=overlap, s=patchsize)
-    return result
-
-
 class Segmenter:
     def __init__(self, model, scale=0.5):
         self.smooth = 0.0
@@ -500,7 +449,7 @@ class Segmenter:
         self.model.eval()
         if page.ndim == 2:
             page = np.expand_dims(page, 2)
-        probs = patchwise_inference(page, self.model, patchsize=self.patchsize, overlap=self.overlap)
+        probs = patches.patchwise_inference(page, self.model, patchsize=self.patchsize, overlap=self.overlap)
         self.probs = probs
         self.gprobs = smooth_probabilities(probs, self.smooth)
         self.segments = marker_segmentation(

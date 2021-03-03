@@ -32,24 +32,6 @@ def normalize(a):
     return a
 
 
-default_model = """
-from torch import nn
-from torchmore import layers
-
-def make_model():
-    r = 3
-    model = nn.Sequential(
-        nn.Conv2d(1, 8, r, padding=r // 2),
-        nn.BatchNorm2d(8),
-        nn.ReLU(),
-        layers.BDHW_LSTM(8, 4),
-        nn.Conv2d(8, 1, 1),
-        nn.Sigmoid(),
-    )
-    return model
-"""
-
-
 def tiles(src, r=256):
     for inputs, targets in src:
         assert inputs.shape == targets.shape
