@@ -271,13 +271,14 @@ def correct(
     output: str = "/dev/null",
     model: str = "",
     extensions: str = default_extensions,
-    limit: int = 999999999,
+    nsamples: int = 999999999,
     invert: str = "Auto",
 ):
+    assert model != ""
     scaletest = PageScale(model)
     dataset = wds.Dataset(urls).decode("l").to_tuple("__key__ " + extensions)
     sink = wds.TarWriter(output)
-    for key, image in islice(dataset, limit):
+    for key, image in islice(dataset, nsamples):
         image = utils.autoinvert(image, invert)
         scale = scaletest.getscale(image)
         print(f"{key} {image.shape} {scale:.2f}")
@@ -285,6 +286,37 @@ def correct(
             scaled = ndi.zoom(image, 1.0/scale, order=2).clip(0, 1)
             result = dict(__key__=key, jpg=scaled)
             sink.write(result)
+
+
+@app.command()
+def hist(
+    urls: List[str],
+    model: str = "",
+    extensions: str = default_extensions,
+    nsamples: int = 999999999,
+    invert: str = "Auto",
+    display: bool = False,
+    logscale: bool = False,
+):
+    assert model != ""
+    scaletest = PageScale(model)
+    dataset = wds.Dataset(urls).decode("l").to_tuple("__key__ " + extensions)
+    result = []
+    for key, image in islice(dataset, nsamples):
+        image = utils.autoinvert(image, invert)
+        scale = scaletest.getscale(image)
+        print(f"{key} {image.shape} {scale:.2f}", file=sys.stderr)
+        result.append(scaletest.hist)
+    result = np.mean(result, 0)
+    if display:
+        plt.ion()
+        plt.clf()
+        labels = [f"{x:.2f}" for x in np.exp(np.array(scaletest.bins))]
+        plt.bar(labels, result)
+        plt.ginput(1, 1000000)
+    b = np.argmax(result)
+    s = exp(unbinned(b, scaletest.bins))
+    print(s)
 
 
 @app.command()

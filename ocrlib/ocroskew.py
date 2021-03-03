@@ -259,20 +259,22 @@ def correct(
     output: str = "/dev/null",
     model: str = "",
     extensions: str = default_extensions,
-    limit: int = 999999999,
+    nsamples: int = 999999999,
     invert: str = "Auto",
 ):
+    assert model != ""
     skewtest = PageSkew(model)
     dataset = wds.Dataset(urls).decode("l").to_tuple("__key__ " + extensions)
     sink = wds.TarWriter(output)
-    for key, image in islice(dataset, limit):
+    for key, image in islice(dataset, nsamples):
         image = utils.autoinvert(image, invert)
         angle = skewtest.orientation(image)
         # print(angle, (skewtest.hist * 100).astype(int))
         print(key, image.shape, angle)
-        rotated = ndi.rotate(image, -angle)
-        result = dict(__key__=key, jpg=rotated)
-        sink.write(result)
+        if output != "/dev/null":
+            rotated = ndi.rotate(image, -angle, order=2).clip(0, 1)
+            result = dict(__key__=key, jpg=rotated)
+            sink.write(result)
 
 
 @app.command()

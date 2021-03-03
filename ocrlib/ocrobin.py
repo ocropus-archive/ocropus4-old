@@ -250,7 +250,7 @@ def train(
     shuffle: int = 10000,
     display: float = 0.0,
     save_interval: float = 600.0,
-    maxtrain: int = 1000000,
+    nsamples: int = 999999999999,
     invert: str = "Auto",
     tvals: str = "0.0, 1.0",
 ):
@@ -274,13 +274,13 @@ def train(
 
     schedule = utils.Schedule()
 
-    for inputs, targets in islice(utils.repeatedly(loader), 0, maxtrain):
+    for inputs, targets in islice(utils.repeatedly(loader), 0, nsamples):
         targets *= tvals[1] - tvals[0]
         targets += tvals[0]
         trainer.train_batch(inputs, targets)
         save()
         if schedule("progress", 60, initial=True):
-            print(f"\nepoch {trainer.count} loss {np.mean(trainer.losses[-500:])}")
+            print(f"epoch {trainer.count} loss {np.mean(trainer.losses[-500:])}")
         if schedule("save", save_interval, initial=True):
             save()
         if display > 0 and schedule("display", display, initial=True):

@@ -250,16 +250,16 @@ def train(
 def correct(
     urls: List[str],
     output: str = "/dev/null",
-    rotmodel: str = "",
-    skewmodel: str = "",
+    model: str = "",
     extensions: str = default_extensions,
-    limit: int = 999999999,
+    nsamples: int = 999999999,
     invert: str = "Auto",
 ):
-    rotest = PageOrientation(rotmodel) if rotmodel != "" else None
+    assert model != ""
+    rotest = PageOrientation(model)
     dataset = wds.Dataset(urls).decode("l").to_tuple("__key__ " + extensions)
     sink = wds.TarWriter(output)
-    for key, image in islice(dataset, limit):
+    for key, image in islice(dataset, nsamples):
         image = utils.autoinvert(image, invert)
         rot = rotest.orientation(image) if rotest else None
         print(key, image.shape, rot)
