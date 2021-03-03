@@ -175,11 +175,11 @@ class BinTrainer:
         plt.ion()
         plt.clf()
         plt.subplot(311)
-        plt.imshow(inputs[0, 0].detach().cpu())
+        plt.imshow(inputs[0, 0].detach().cpu(), vmin=0, vmax=1)
         plt.subplot(312)
-        plt.imshow(targets[0, 0].detach().cpu())
+        plt.imshow(targets[0, 0].detach().cpu(), vmin=0, vmax=1)
         plt.subplot(313)
-        plt.imshow(outputs[0, 0].detach().cpu())
+        plt.imshow(outputs[0, 0].detach().cpu(), vmin=0, vmax=1)
         plt.ginput(1, 0.001)
 
     def predict_batch(self, inputs):
@@ -252,6 +252,7 @@ def train(
     save_interval: float = 600.0,
     maxtrain: int = 1000000,
     invert: str = "Auto",
+    tvals: str = "0.0, 1.0",
 ):
     fnames = fnames * replicate
     loader = make_loader(fnames, extensions=extensions, shuffle=shuffle, invert=invert, pipe=bin_pipe)
@@ -263,6 +264,8 @@ def train(
     trainer.count = int(getattr(model, "step_", 0))
     trainer.to("cuda")
 
+    tvals = eval(f"({tvals})")
+
     def save():
         logger.save_smodel(
             model, step=trainer.count, scalar=np.mean(trainer.losses[-100:])
@@ -272,6 +275,8 @@ def train(
     schedule = utils.Schedule()
 
     for inputs, targets in islice(utils.repeatedly(loader), 0, maxtrain):
+        targets *= tvals[1] - tvals[0]
+        targets += tvals[0]
         trainer.train_batch(inputs, targets)
         save()
         if schedule("progress", 60, initial=True):

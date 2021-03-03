@@ -41,15 +41,19 @@ class GlobalAvgPool2d(nn.Module):
 
 @model
 def binarization_210113():
-    r = 3
+    r = 5
     model = nn.Sequential(
-        nn.Conv2d(1, 8, r, padding=r // 2),
-        nn.BatchNorm2d(8),
+        flex.Conv2d(16, r, padding=r // 2),
+        flex.BatchNorm2d(),
         nn.ReLU(),
-        layers.BDHW_LSTM(8, 4),
-        nn.Conv2d(8, 1, 1),
+        flex.BDHW_LSTM(4),
+        flex.BatchNorm2d(),
+        flex.Conv2d(8, 3, padding=1),
+        flex.BatchNorm2d(),
+        flex.Conv2d(1, 3, padding=1),
         nn.Sigmoid(),
     )
+    flex.shape_inference(model, (2, 1, 161, 391))
     return model
 
 
