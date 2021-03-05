@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from __future__ import print_function
+import sys
 
 import argparse
 
@@ -229,8 +229,9 @@ def binarize(
     args = utils.Record(**locals())
     ds = wds.WebDataset(fname).decode("l8").to_tuple("__key__", extensions)
     sink = wds.TarWriter(output)
+    count = 0
     for key, image in islice(ds, 0, maxrec):
-        print(key)
+        print(f"{count}/{maxrec} {key}", file=sys.stderr)
         assert image.dtype == np.uint8
         image = image / 255.0
         flat = nlbin(image, args)
@@ -242,6 +243,7 @@ def binarize(
             result["bin.png"] = np.array(flat > args.threshold, dtype=np.uint8) * 255
         result["nrm.jpg"] = np.array(flat * 255, dtype=np.uint8)
         sink.write(result)
+        count += 1
     sink.close()
 
 
