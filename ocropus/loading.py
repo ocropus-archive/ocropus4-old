@@ -7,7 +7,7 @@ import os.path
 
 from . import slog
 
-default_path = "ocrlib.models:ocrlib.experimental_models:ocrlib.old_models"
+default_path = "ocropus.models:ocropus.experimental_models:ocropus.old_models"
 module_path = os.environ.get("MODEL_MODULES", default_path).split(":")
 
 #

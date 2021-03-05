@@ -5,9 +5,8 @@
 #
 
 import torch
-from ocrlib import utils
-from ocrlib import ocroseg
-from ocrlib import slog
+from ocropus import ocroseg
+from ocropus import slog
 
 
 def test_segtrainer():

@@ -4,7 +4,7 @@
 # See the LICENSE file for licensing terms (TBD).
 #
 
-from ocrlib import extract_seg
+from ocropus import extract_seg
 import webdataset as wds
 
 

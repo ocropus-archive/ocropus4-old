@@ -325,7 +325,7 @@ def segmentation_patches(
             np.array(seg >= 2, "i"), threshold, [page, seg], r=patchsize, n=n
         )
     )
-    print("# interesting patches", len(patches))
+    print("# interesting patches", len(patchlist))
     for patch in patchlist:
         yield patch
 

@@ -1,5 +1,5 @@
 [tool.vulture]
 ignore_decorators = ["@app.command", "@useopt", "@public", "@unused", "@model", "@junk"]
 ignore_names = ["make_*", "check_*"]
-paths = ["ocrlib"]
-exclude = ["ocrlib/.ipynb_checkpoints/"]
+paths = ["ocropus"]
+exclude = ["ocropus/.ipynb_checkpoints/"]

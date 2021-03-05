@@ -1,2 +1,2 @@
 vulture:
-	vulture ocrlib
+	vulture ocropus

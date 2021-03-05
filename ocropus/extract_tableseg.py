@@ -159,7 +159,7 @@ def patches_of_segmentation(
             n=n,
         )
     )
-    print("# interesting patches", len(patches))
+    print("# interesting patches", len(patchlist))
     for patch in patchlist:
         yield patch
 

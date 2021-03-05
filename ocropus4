@@ -27,47 +27,47 @@ case $library in
 # data extraction
 
 extract-seg)  # extract segmentation for training segmenters
-    $python3 -m ocrlib.extract_seg "$@"
+    $python3 -m ocropus.extract_seg "$@"
     ;;
 extract-rec)  # extract images for training recognizers
     ;&
 extract-lines)
-    $python3 -m ocrlib.extract_lines "$@"
+    $python3 -m ocropus.extract_lines "$@"
     ;;
 
 # inference
 
 ocroseg)  # page segmentation
-    $python3 -m ocrlib.ocroseg "$@"
+    $python3 -m ocropus.ocroseg "$@"
     ;;
 ocrotext)  # line/word recognition
     ;&
 ocroline)
-    $python3 -m ocrlib.ocroline "$@"
+    $python3 -m ocropus.ocroline "$@"
     ;;
 ocrobin)   # binarization
-    $python3 -m ocrlib.ocrobin "$@"
+    $python3 -m ocropus.ocrobin "$@"
     ;;
 ocrorot)   # page rotation/orientation detection
-    $python3 -m ocrlib.ocrorot "$@"
+    $python3 -m ocropus.ocrorot "$@"
     ;;
 ocroskew)   # skew estimation
-    $python3 -m ocrlib.ocroskew "$@"
+    $python3 -m ocropus.ocroskew "$@"
     ;;
 ocroscale)   # scale estimation
-    $python3 -m ocrlib.ocroscale "$@"
+    $python3 -m ocropus.ocroscale "$@"
     ;;
 nlbin)  # nonlinear binarization
-    $python3 -m ocrlib.nlbin "$@"
+    $python3 -m ocropus.nlbin "$@"
     ;;
 slog)  # examine logs
-    $python3 -m ocrlib.slog "$@"
+    $python3 -m ocropus.slog "$@"
     ;;
 wordrec)  # recognize pages
-    $python3 -m ocrlib.wordrec "$@"
+    $python3 -m ocropus.wordrec "$@"
     ;;
 pagerec)  # recognize pages
-    $python3 -m ocrlib.pagerec "$@"
+    $python3 -m ocropus.pagerec "$@"
     ;;
 
 # help

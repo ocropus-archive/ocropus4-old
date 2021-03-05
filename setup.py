@@ -37,7 +37,7 @@ print(PREREQS)
 #ocrodeg@git+git://github.com/NVlabs/ocrodeg.git
 
 setup(
-    name="ocrlib",
+    name="ocropus",
     version=VERSION,
     description="OCRopus 4",
     long_description=open("README.md").read(),
@@ -53,7 +53,7 @@ setup(
         "Programming Language :: Python :: 3.7",
     ],
     keywords="ocr, scene text, deep learning, text recognition",
-    packages=["ocrlib"],
+    packages=["ocropus"],
     python_requires=">=3.6",
     scripts=SCRIPTS,
     install_requires=PREREQS,

@@ -27,7 +27,7 @@ To Be Written
 - OCRopus4 provides both command line interfaces and Python APIs.
     - command line APIs are provided by `Typer`
     - command invocation generally looks like this:
-        - `python3 -m ocrlib.ocroseg train ...`
+        - `python3 -m ocropus.ocroseg train ...`
         - that is, commands are simply part of the library files
 - All the computations are carried out in PyTorch.
 - OCRopus4 uses some extra external and internal libraries:
@@ -35,13 +35,13 @@ To Be Written
     - `webdatset` for large scale I/O
     - `torchmore` for easy model building (shape inference and extra layers)
     - `tarp` for fast processing of large datasets
-    - `ocrlib/slog.py` for logging (into sqlite3 databases)
+    - `ocropus/slog.py` for logging (into sqlite3 databases)
 
 # Directory Structure
 
 - `REF` - various old notebooks and code snippets kept for reference (they don't necessarily run)
 - `TESTS` - various manual tests
-- `ocrlib` - most Python code (will be renamed to `ocropus`)
+- `ocropus` - most Python code (will be renamed to `ocropus`)
 - `testdata` - datasets used by PyTest tests
 - `models` - trained models (must download with `./run download`)
 - `prep` - notebooks and scripts for data preparation (mostly UW3 examples)

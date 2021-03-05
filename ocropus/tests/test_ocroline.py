@@ -5,9 +5,8 @@
 #
 
 import torch
-from ocrlib import utils
-from ocrlib import ocroline
-from ocrlib import slog
+from ocropus import ocroline
+from ocropus import slog
 
 
 def test_linetrainer():
