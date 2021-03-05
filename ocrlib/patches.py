@@ -3,7 +3,7 @@ from scipy import ndimage as ndi
 
 import torch
 import torch.functional as F
-from ocrlib.utils import safe_randint
+from .utils import safe_randint
 
 
 def mrot(a):

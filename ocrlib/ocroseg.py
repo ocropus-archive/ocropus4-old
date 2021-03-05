@@ -14,13 +14,11 @@ from torch.utils.data import DataLoader
 from webdataset import Dataset
 import torchmore.layers
 
-import ocrlib.patches
-from ocrlib.utils import Schedule, repeatedly
+from .utils import Schedule, repeatedly
 from . import slog
 from . import utils
 from . import loading
 from . import patches
-import ocrlib.utils
 from .utils import useopt, junk
 
 
@@ -106,7 +104,7 @@ def augmentation_page(sample, max_distortion=0.05):
         np.random.uniform(-d, d),
         image.shape[1] + np.random.uniform(-d, d),
     ]
-    image = ocrlib.patches.get_affine_patch(image, image.shape[:2], src, order=1)
+    image = patches.get_affine_patch(image, image.shape[:2], src, order=1)
     if np.random.uniform() > 0.5:
         image = simple_bg_fg(
             image,
@@ -114,7 +112,7 @@ def augmentation_page(sample, max_distortion=0.05):
             imsigma=np.random.uniform(0.01, 2.0),
             sigma=np.random.uniform(0.5, 10.0),
         )
-    target = ocrlib.patches.get_affine_patch(target, target.shape[:2], src, order=0)
+    target = patches.get_affine_patch(target, target.shape[:2], src, order=0)
     return image, target
 
 
@@ -150,7 +148,7 @@ def make_loader(
 # Logging
 ###
 
-mem_every = ocrlib.utils.Every(60)
+mem_every = utils.Every(60)
 
 
 @junk
@@ -161,7 +159,7 @@ def memsum(trainer):
     print(torch.cuda.memory_summary())
 
 
-log_progress_every = ocrlib.utils.Every(60)
+log_progress_every = utils.Every(60)
 
 
 def log_progress(trainer):
@@ -175,7 +173,7 @@ def log_progress(trainer):
     logger.flush()
 
 
-print_progress_every = ocrlib.utils.Every(60)
+print_progress_every = utils.Every(60)
 
 
 def print_progress(self):

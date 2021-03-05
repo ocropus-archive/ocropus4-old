@@ -15,7 +15,7 @@ from . import loading
 from .utils import public
 from lxml import etree
 from lxml.builder import E
-from ocrlib.utils import BBox
+from .utils import BBox
 
 
 Charset = ocroline.Charset

@@ -13,7 +13,7 @@ from lxml.builder import E
 
 import webdataset as wds
 
-from ocrlib.utils import BBox
+from .utils import BBox
 from . import ocroline, ocroseg, loading
 
 Charset = ocroline.Charset

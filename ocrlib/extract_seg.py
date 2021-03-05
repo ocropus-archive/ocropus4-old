@@ -8,8 +8,8 @@ from lxml import etree
 from matplotlib import pylab
 import scipy.ndimage as ndi
 
-import ocrlib.patches
 from . import utils
+from . import patches
 from .utils import useopt
 
 import typer
@@ -320,13 +320,13 @@ def segmentation_patches(
     assert page.ndim == 2
     assert page.shape == seg.shape
     extra["seg"] = seg
-    patches = list(
-        ocrlib.patches.interesting_patches(
+    patchlist = list(
+        patches.interesting_patches(
             np.array(seg >= 2, "i"), threshold, [page, seg], r=patchsize, n=n
         )
     )
     print("# interesting patches", len(patches))
-    for patch in patches:
+    for patch in patchlist:
         yield patch
 
 
