@@ -13,10 +13,6 @@ if sys.version_info < (3, 6):
 
 VERSION = "0.0.0"
 
-SCRIPTS = """
-ocropus4
-""".split()
-
 PREREQS = """
 click==7.1.1
 typer
@@ -32,9 +28,9 @@ tabulate
 webdataset@git+git://github.com/tmbdev/webdataset.git
 tensorcom@git+git://github.com/NVlabs/tensorcom.git
 torchmore@git+git://github.com/tmbdev/torchmore.git
+ocrodeg@git+git://github.com/NVlabs/ocrodeg.git
 """.split()
 print(PREREQS)
-#ocrodeg@git+git://github.com/NVlabs/ocrodeg.git
 
 setup(
     name="ocropus",
@@ -55,6 +51,6 @@ setup(
     keywords="ocr, scene text, deep learning, text recognition",
     packages=["ocropus"],
     python_requires=">=3.6",
-    scripts=SCRIPTS,
+    scripts=["ocropus4"],
     install_requires=PREREQS,
 )
