@@ -8,6 +8,7 @@ import PIL
 import numpy as np
 import typer
 import matplotlib.pyplot as plt
+from itertools import islice
 from scipy.ndimage import filters, interpolation, morphology
 from scipy import stats
 import webdataset as wds
@@ -228,11 +229,8 @@ def binarize(
     args = utils.Record(**locals())
     ds = wds.WebDataset(fname).decode("l8").to_tuple("__key__", extensions)
     sink = wds.TarWriter(output)
-    count = 0
-    for key, image in ds:
+    for key, image in islice(ds, 0, maxrec):
         print(key)
-        if count >= maxrec:
-            break
         assert image.dtype == np.uint8
         image = image / 255.0
         flat = nlbin(image, args)
@@ -244,7 +242,6 @@ def binarize(
             result["bin.png"] = np.array(flat > args.threshold, dtype=np.uint8) * 255
         result["nrm.jpg"] = np.array(flat * 255, dtype=np.uint8)
         sink.write(result)
-        count += 1
     sink.close()
 
 
