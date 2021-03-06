@@ -5,6 +5,7 @@ import time
 from functools import wraps
 import re
 
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy.ndimage as ndi
 import torch
@@ -318,29 +319,6 @@ def label_correspondences(nlabels, olabels):
     result = np.zeros(n, dtype="i")
     for p in a:
         result[p % m] = p // m
-    return result
-
-
-def fix_bounding_boxes(bimage, bboxes):
-    # global mcomponents, components, remap, markers
-    components, _ = ndi.label(bimage)
-    markers = np.zeros_like(bimage, dtype="i")
-    for x0, y0, x1, y1 in bboxes:
-        ym, _ = int(np.mean([y1, y0])), int(np.mean([x1, x0]))
-        xoff = 3
-        yoff = (y1 - y0) // 3
-        x0, x1 = x0 + xoff, x1 - xoff
-        y0, y1 = ym - yoff, ym + yoff
-        if y0 < 0 or x1 <= x0 or y1 <= y0:
-            continue
-        markers[y0:y1, x0:x1] = 1
-    mcomponents, _ = ndi.label(markers)
-    remap = label_correspondences(mcomponents, components)
-    remap[0] = 0
-    components = remap[components]
-    result = []
-    for y, x in ndi.find_objects(components):
-        result.append((x.start, y.start, x.stop, y.stop))
     return result
 
 

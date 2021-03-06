@@ -278,7 +278,6 @@ def segmentation_patches(
     mask=(lambda image, bboxes: image),
     labels=[1, 2, 3],
     params="",
-    fix_boxes=False,
     check_acceptable=check_acceptable_word,
     check_text=check_text_word,
 ):
@@ -294,9 +293,6 @@ def segmentation_patches(
         check_text=check_text,
         check_acceptable=check_acceptable,
     )
-    if fix_boxes:
-        binary = page > np.mean([np.amax(page), np.amin(page)])
-        bboxes = utils.fix_bounding_boxes(binary, bboxes)
     page = mask(page, bboxes)
     if degrade is not None:
         page = degrade(page)
@@ -349,7 +345,6 @@ def hocr2seg(
     invert: str = "Auto",
     mask: str = "bbox",
     labels: str = "1, 2, 3",
-    fix_boxes: bool = False,
     check: str = "word",
 ):
     """Extract segmentation patches from src and send them to output."""
@@ -406,7 +401,6 @@ def hocr2seg(
                         rotation=(-randrot, randrot),
                         mask=eval(f"mask_with_{mask}"),
                         labels=labels,
-                        fix_boxes=fix_boxes,
                         check_text=check_text,
                         check_acceptable=check_acceptable,
                     )
