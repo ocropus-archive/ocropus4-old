@@ -72,7 +72,7 @@ class BasicRecognizer:
     def load_recognizer(self, fname):
         print(f"# loading recognizer {fname}", file=sys.stderr)
         model = loading.load_only_model(fname)
-        self.recognizer = ocrorec.LineRec(model)
+        self.recognizer = ocrorec.TextRec(model)
         self.recognizer.activate(False)
 
     def run_recognizers(self, image):

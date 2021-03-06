@@ -95,7 +95,7 @@ def collate4ocr(samples):
     return result, seqs
 
 
-class LineTrainer:
+class TextTrainer:
     """A class encapsulating the logic for training text line recognizers."""
 
     def __init__(self, model, *, lr=1e-4, device=None, maxgrad=10.0):
@@ -209,7 +209,7 @@ class LineTrainer:
         return result
 
 
-class LineRec:
+class TextRec:
     """A line recognizer (without training logic)."""
 
     def __init__(self, model, *, charset=Charset()):
@@ -462,7 +462,7 @@ def train(
     model.cuda()
     print(model)
 
-    trainer = LineTrainer(model)
+    trainer = TextTrainer(model)
     trainer.charset = charset
     trainer.set_lr_schedule(eval(f"lambda n: {schedule}"))
 
@@ -493,9 +493,9 @@ def recognize(
     normalize: bool = True,
 ):
     model = loading.load_only_model(model)
-    linerec = LineRec(model)
-    linerec.invert = invert
-    linerec.normalize = normalize
+    textrec = TextRec(model)
+    textrec.invert = invert
+    textrec.normalize = normalize
     dataset = wds.Dataset(fname)
     dataset.decode("l8").rename(image=extensions)
     plt.ion()
@@ -508,9 +508,9 @@ def recognize(
         if image.shape[0] < 10 or image.shape[1] < 10:
             print(sample.get("__key__", image.shape))
             continue
-        result = linerec.recognize(image)
+        result = textrec.recognize(image)
         plt.clf()
-        plt.imshow(linerec.last_image)
+        plt.imshow(textrec.last_image)
         plt.title(result)
         plt.ginput(1, 1.0)
         print(sample.get("__key__"), image.shape, result)

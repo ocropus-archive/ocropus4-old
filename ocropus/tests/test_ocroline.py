@@ -14,7 +14,7 @@ def test_linetrainer():
         text = stream.read()
     mmod = slog.load_module("mmod", text)
     model = mmod.make_model(96)
-    trainer = ocrorec.LineTrainer(model)
+    trainer = ocrorec.TextTrainer(model)
     trainer.set_lr(1e-3)
     xs = torch.zeros((1, 1, 48, 277))
     ys = [torch.tensor([0, 1, 0])]

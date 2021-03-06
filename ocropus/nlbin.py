@@ -31,6 +31,7 @@ debug_nlbin = False
 
 
 def check_page(image):
+    """Checks whether the input roughly conforms to the requirements of a page."""
     if len(image.shape) == 3:
         raise ValueError("input image is color image %s" % (image.shape,))
     if np.mean(image) < np.median(image):
@@ -47,6 +48,7 @@ def check_page(image):
 
 
 def estimate_skew_angle(image, angles):
+    """Estimate page skew angle from projections."""
     estimates = []
     for a in angles:
         v = np.mean(interpolation.rotate(image, a, order=0, mode="constant"), axis=1)
@@ -60,18 +62,22 @@ def estimate_skew_angle(image, angles):
 
 
 def H(s):
+    """Height of a slice."""
     return s[0].stop - s[0].start
 
 
 def W(s):
+    """Width of a slice."""
     return s[1].stop - s[1].start
 
 
 def A(s):
+    """Angle of a slice."""
     return W(s) * H(s)
 
 
 def dshow(image, info):
+    """Plot an image with info."""
     if debug_nlbin <= 0:
         return
     plt.ion()
@@ -82,7 +88,7 @@ def dshow(image, info):
 
 
 def normalize_raw_image(raw):
-    """ perform image normalization """
+    """Perform simple image normalization."""
     image = raw - np.amin(raw)
     if np.amax(image) == np.amin(image):
         raise ValueError("image is empty")
@@ -113,7 +119,7 @@ def estimate_local_whitelevel(image, zoom=0.5, perc=80, dist=20, debug=0):
     return flat
 
 
-def estimate_skew(flat, bignore=0.1, maxskew=2, skewsteps=8):
+def estimate_skew_and_fix(flat, bignore=0.1, maxskew=2, skewsteps=8):
     """ estimate skew angle and rotate"""
     d0, d1 = flat.shape
     o0, o1 = int(bignore * d0), int(bignore * d1)  # border ignore
@@ -158,13 +164,15 @@ def estimate_thresholds(flat, bignore=0.1, escale=1.0, lo=5, hi=90, debug=0):
     return lo, hi
 
 
-def nlbin(raw, args):
+def nlbin(raw, args, deskew=True):
+    """Nonlinear image binarization and deskewing."""
     assert raw.dtype == float
     image = normalize_raw_image(raw)
     flat = estimate_local_whitelevel(
         image, args.zoom, args.perc, args.dist, debug_nlbin
     )
-    flat, angle = estimate_skew(flat, args.bignore, args.maxskew, args.skewsteps)
+    if deskew:
+        flat, angle = estimate_skew_and_fix(flat, args.bignore, args.maxskew, args.skewsteps)
     lo, hi = estimate_thresholds(
         flat, args.bignore, args.escale, args.lo, args.hi, debug_nlbin
     )
@@ -190,14 +198,16 @@ def binarize1(
     skewsteps: int = 8,
     debug: float = 0,
     output: str = "",
+    nodeskew: bool = False,
 ):
+    """Binarize a single image."""
     args = utils.Record(**locals())
     image = PIL.Image.open(args.fname)
     image = image.convert("L")
     image = np.asarray(image)
     assert image.dtype == np.uint8
     image = image / 255.0
-    result = nlbin(image, args)
+    result = nlbin(image, args, deskew=not nodeskew)
     assert result.dtype == float
     if args.threshold >= 0:
         result = np.array(result > args.threshold, dtype=np.uint8) * 255
@@ -226,6 +236,7 @@ def binarize(
     output: str = "",
     maxrec: int = 999999999999,
 ):
+    """Binarize a shard of images."""
     args = utils.Record(**locals())
     ds = wds.WebDataset(fname).decode("l8").to_tuple("__key__", extensions)
     sink = wds.TarWriter(output)
