@@ -8,7 +8,7 @@ import functools
 import webdataset as wds
 import traceback
 
-from . import ocroline
+from . import ocrorec
 from . import ocroseg
 from . import wordrec
 from . import loading
@@ -18,7 +18,7 @@ from lxml.builder import E
 from .utils import BBox
 
 
-Charset = ocroline.Charset
+Charset = ocrorec.Charset
 
 app = typer.Typer()
 

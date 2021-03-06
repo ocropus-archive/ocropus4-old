@@ -24,7 +24,7 @@ segtrain.sqlite3: uw3-seg.tar
 	mv segtrain.sqlite3.temp segtrain.sqlite3
 
 linetrain.sqlite3: uw3-lines.tar
-	$(ocropus) ocroline train uw3-lines.tar --display --mdef linemodel.py --log-to linetrain.sqlite3.temp --epochs 3
+	$(ocropus) ocrorec train uw3-lines.tar --display --mdef linemodel.py --log-to linetrain.sqlite3.temp --epochs 3
 	mv linetrain.sqlite3.temp linetrain.sqlite3
 
 uw3-seg.tar:

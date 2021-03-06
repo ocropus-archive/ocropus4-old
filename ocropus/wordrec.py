@@ -14,9 +14,9 @@ from lxml.builder import E
 import webdataset as wds
 
 from .utils import BBox
-from . import ocroline, ocroseg, loading
+from . import ocrorec, ocroseg, loading
 
-Charset = ocroline.Charset
+Charset = ocrorec.Charset
 
 app = typer.Typer()
 
@@ -37,10 +37,10 @@ def linebbox(words):
 def goodsize(segment):
     h, w = segment.shape[:2]
     return (
-        h > ocroline.min_h
-        and h < ocroline.max_h
-        and w > ocroline.min_w
-        and w < ocroline.max_w
+        h > ocrorec.min_h
+        and h < ocrorec.max_h
+        and w > ocrorec.min_w
+        and w < ocrorec.max_w
     )
 
 
@@ -72,7 +72,7 @@ class BasicRecognizer:
     def load_recognizer(self, fname):
         print(f"# loading recognizer {fname}", file=sys.stderr)
         model = loading.load_only_model(fname)
-        self.recognizer = ocroline.LineRec(model)
+        self.recognizer = ocrorec.LineRec(model)
         self.recognizer.activate(False)
 
     def run_recognizers(self, image):

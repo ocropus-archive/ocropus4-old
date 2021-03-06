@@ -13,7 +13,7 @@ models: segtrain.pth # wordtrain.pth
 tars: uw3-words.tar uw3-seg.tar
 
 wordtrain.sqlite3: uw3-words.tar
-	$(ocropus) ocroline train uw3-words.tar --log-to wordtrain.sqlite3.temp --ntrain 1000000 --display
+	$(ocropus) ocrorec train uw3-words.tar --log-to wordtrain.sqlite3.temp --ntrain 1000000 --display
 	mv wordtrain.sqlite3.temp wordtrain.sqlite3
 
 segtrain.sqlite3: uw3-seg.tar
@@ -50,7 +50,7 @@ uw3-framed.tar: $(raw)
 #	mv rottrain.sqlite3.temp rottrain.sqlite3
 #
 #linetrain.sqlite3: uw3-lines.tar
-#	$(ocropus) ocroline train uw3-lines.tar --display --mdef linemodel.py --log-to linetrain.sqlite3.temp --epochs 3
+#	$(ocropus) ocrorec train uw3-lines.tar --display --mdef linemodel.py --log-to linetrain.sqlite3.temp --epochs 3
 #	mv linetrain.sqlite3.temp linetrain.sqlite3
 #
 #uw3-seg.tar:

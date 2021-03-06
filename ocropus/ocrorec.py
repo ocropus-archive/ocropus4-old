@@ -418,7 +418,7 @@ def train(
 
     if log_to == "":
         log_to = None
-    logger = slog.Logger(fname=log_to, prefix="ocroline")
+    logger = slog.Logger(fname=log_to, prefix="ocrorec")
     logger.sysinfo()
     logger.json(
         "args",

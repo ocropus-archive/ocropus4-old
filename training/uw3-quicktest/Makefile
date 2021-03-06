@@ -30,7 +30,7 @@ uw3-gray.tar: $(hocr)
 	$(ocropus) ocrobin generate $(hocr) --output uw3-gray.tar --limit 20
 
 lines.out: linetrain.pth
-	$(ocropus) ocroline recognize --model linetrain.pth uw3-lines.tar --limit 10
+	$(ocropus) ocrorec recognize --model linetrain.pth uw3-lines.tar --limit 10
 	touch lines.out
 
 deskew.out: rottrain.pth skewtrain.pth
@@ -53,7 +53,7 @@ segtrain.sqlite3: uw3-seg.tar
 	mv segtrain.sqlite3.temp segtrain.sqlite3
 
 linetrain.sqlite3: uw3-lines.tar
-	$(ocropus) ocroline train uw3-lines.tar --display --log-to linetrain.sqlite3.temp --ntrain 100
+	$(ocropus) ocrorec train uw3-lines.tar --display --log-to linetrain.sqlite3.temp --ntrain 100
 	mv linetrain.sqlite3.temp linetrain.sqlite3
 
 uw3-seg.tar:

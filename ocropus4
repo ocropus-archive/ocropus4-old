@@ -43,7 +43,10 @@ ocroseg)  # page segmentation
 ocrotext)  # line/word recognition
     ;&
 ocroline)
-    $python3 -m ocropus.ocroline "$@"
+    $python3 -m ocropus.ocrorec "$@"
+    ;;
+ocrorec)
+    $python3 -m ocropus.ocrorec "$@"
     ;;
 ocrobin)   # binarization
     $python3 -m ocropus.ocrobin "$@"

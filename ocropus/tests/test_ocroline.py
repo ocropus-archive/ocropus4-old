@@ -5,7 +5,7 @@
 #
 
 import torch
-from ocropus import ocroline
+from ocropus import ocrorec
 from ocropus import slog
 
 
@@ -14,7 +14,7 @@ def test_linetrainer():
         text = stream.read()
     mmod = slog.load_module("mmod", text)
     model = mmod.make_model(96)
-    trainer = ocroline.LineTrainer(model)
+    trainer = ocrorec.LineTrainer(model)
     trainer.set_lr(1e-3)
     xs = torch.zeros((1, 1, 48, 277))
     ys = [torch.tensor([0, 1, 0])]
