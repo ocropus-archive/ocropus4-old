@@ -107,11 +107,20 @@ def acceptable_words(fname="/usr/share/dict/words", minlen=1):
         dictionary = set([x.strip().lower() for x in stream.readlines()])
 
     def f(text):
+        if re.search(r"^-?\$?[0-9]+[.,0-9]+$", text):
+            # number
+            return True
+        if re.search(r"^\w\w+-$", text):
+            # hyphenated word
+            return True
         core = re.sub(r"\W?(\w[\w -]*)\W{0,3}", r"\1", text)
         core = core.lower()
         if len(core) < minlen:
             return False
-        return core in dictionary
+        if core in dictionary:
+            # dictionary word
+            return True
+        return False
 
     return f
 

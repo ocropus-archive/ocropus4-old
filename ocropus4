@@ -32,7 +32,10 @@ extract-seg)  # extract segmentation for training segmenters
 extract-rec)  # extract images for training recognizers
     ;&
 extract-lines)
-    $python3 -m ocropus.extract_lines "$@"
+    $python3 -m ocropus.extract_text "$@"
+    ;;
+extract-text)
+    $python3 -m ocropus.extract_text "$@"
     ;;
 
 # inference
