@@ -109,6 +109,10 @@ def acceptable_words(fname="/usr/share/dict/words", minlen=1):
         dictionary = set([x.strip().lower() for x in stream.readlines()])
 
     def f(text):
+        text = utils.fix_quotes(text)
+        # replace nested quotes by a single quote, just for testing
+        text = re.sub(r"""^['"]['"]""", "'", text)
+        text = re.sub(r"""['"]['"]$""", "'", text)
         if re.search(r"^[$%-]{0,2}[0-9]+[.,0-9]*[%]?$", text):
             # number
             return True
