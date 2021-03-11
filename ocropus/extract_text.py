@@ -85,8 +85,10 @@ def hocr2images(
             continue
         lineimage = image[y0:y1, x0:x1, ...]
         linetext = get_text(line)
+        if linetext == "":
+            continue
         if acceptable_text is not None and not acceptable_text(linetext):
-            print(f"# bad text {linetext}", file=sys.stderr)
+            print(f"# bad text '{linetext}'", file=sys.stderr)
             continue
         yield lineimage, linetext, bbox
 
@@ -107,11 +109,17 @@ def acceptable_words(fname="/usr/share/dict/words", minlen=1):
         dictionary = set([x.strip().lower() for x in stream.readlines()])
 
     def f(text):
-        if re.search(r"^[$%-]{0,2}[0-9]+[.,0-9]+[%]?$", text):
+        if re.search(r"^[$%-]{0,2}[0-9]+[.,0-9]*[%]?$", text):
             # number
             return True
         if re.search(r"^\w\w+-$", text):
-            # hyphenated word
+            # word at end of line
+            return True
+        if re.search(r"^[A-Z]{2,10}$", text):
+            # all caps
+            return True
+        if re.search(r"^([A-Z]\.){2,10}$", text):
+            # abbreviations
             return True
         core = re.sub(r"\W?(\w[\w -]*)\W{0,3}", r"\1", text)
         core = core.lower()
