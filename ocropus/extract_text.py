@@ -1,3 +1,4 @@
+import os
 import sys
 import io
 import re
@@ -40,6 +41,7 @@ def hocr2images(
     acceptable_text=lambda x: True,
     acceptable_conf=-1,
     conf_tag="x_wconf",
+    verbose=True,
 ):
     assert isinstance(image, np.ndarray), type(image)
     assert isinstance(hocr, (bytes, str))
@@ -66,7 +68,8 @@ def hocr2images(
         if acceptable_conf >= 0:
             conf = float(get_prop(line, "x_wconf"))
             if conf < acceptable_conf:
-                print(f"# confidence {conf} < acceptable confidence {acceptable_conf}", file=sys.stderr)
+                if verbose:
+                    print(f"# confidence {conf} < acceptable confidence {acceptable_conf}", file=sys.stderr)
                 continue
         bbox = [int(x) for x in get_prop(line, "bbox").split()]
         x0, y0, x1, y1 = bbox
@@ -81,7 +84,8 @@ def hocr2images(
             continue
         bbox = x0, y0, x1, y1
         if not acceptable_size((x0, y0, x1, y1)):
-            print(f"# acceptable_size({bbox}) is False", file=sys.stderr)
+            if verbose:
+                print(f"# bad size {y1-y0} x {x1-x0}", file=sys.stderr)
             continue
         lineimage = image[y0:y1, x0:x1, ...]
         linetext = get_text(line)
