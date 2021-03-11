@@ -107,7 +107,7 @@ def acceptable_words(fname="/usr/share/dict/words", minlen=1):
         dictionary = set([x.strip().lower() for x in stream.readlines()])
 
     def f(text):
-        if re.search(r"^-?\$?[0-9]+[.,0-9]+$", text):
+        if re.search(r"^[$%-]{0,2}[0-9]+[.,0-9]+[%]?$", text):
             # number
             return True
         if re.search(r"^\w\w+-$", text):

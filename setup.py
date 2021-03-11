@@ -14,7 +14,7 @@ if sys.version_info < (3, 6):
 VERSION = "0.0.0"
 
 PREREQS = """
-click==7.1.1
+click
 typer
 braceexpand
 bs4

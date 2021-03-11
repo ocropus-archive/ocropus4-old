@@ -10,6 +10,9 @@ from ocropus import extract_text
 def test_acceptable_words():
     f = extract_text.acceptable_words()
     assert f("123")
+    assert f("%123")
+    assert f("123%")
+    assert f("0.123%")
     assert f("$123.00")
     assert f("-$123.00")
     assert f("-123.")
