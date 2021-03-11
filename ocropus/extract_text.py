@@ -117,6 +117,7 @@ def acceptable_words(fname="/usr/share/dict/words", minlen=1):
         # replace nested quotes by a single quote, just for testing
         text = re.sub(r"""^['"]['"]""", "'", text)
         text = re.sub(r"""['"]['"]$""", "'", text)
+        text = re.sub(r"""'s$""", "", text)
         if re.search(r"^[$%-]{0,2}[0-9]+[.,0-9]*[%]?$", text):
             # number
             return True
