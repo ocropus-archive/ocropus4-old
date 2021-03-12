@@ -251,7 +251,8 @@ class SegTrainer:
         device=None,
         maxgrad=10.0,
         margin=16,
-        weightmask=-1,
+        weightmask=0,
+        bordermask=16,
         **kw,
     ):
         super().__init__()
@@ -271,6 +272,7 @@ class SegTrainer:
         self.nsamples = 0
         self.nbatches = 0
         self.weightmask = weightmask
+        self.bordermask = bordermask
         self.weightlayer = torchmore.layers.WeightedGrad()
         self.last_mask = None
 
@@ -314,6 +316,12 @@ class SegTrainer:
             if self.weightmask > 0:
                 w = self.weightmask
                 mask = ndi.maximum_filter(mask, (0, w, w), mode="constant")
+            if self.bordermask > 0:
+                d = self.bordermask
+                mask[:, :d, :] = 0
+                mask[:, -d:, :] = 0
+                mask[:, :, :d] = 0
+                mask[:, :, -d:] = 0
             mask = torch.tensor(mask)
             self.last_mask = mask
             outputs = self.weightlayer.forward(outputs, mask)
@@ -517,7 +525,8 @@ def train(
     augmentation: str = "none",
     extensions: str = "png;image.png;framed.png;ipatch.png seg.png;target.png;lines.png;spatch.png",
     prefix: str = "ocroseg",
-    weightmask: int = -1,
+    weightmask: int = 0,
+    bordermask: int = 16,
     num_workers: int = 1,
     log_to: str = "",
     parallel: bool = False,
@@ -567,7 +576,7 @@ def train(
         model = torch.nn.DataParallel(model)
     print(model)
 
-    trainer = SegTrainer(model, weightmask=weightmask)
+    trainer = SegTrainer(model, weightmask=weightmask, bordermask=bordermask)
     trainer.set_lr_schedule(eval(f"lambda n: {schedule}"))
 
     schedule = Schedule()
