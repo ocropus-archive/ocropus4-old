@@ -142,28 +142,36 @@ def mask_with_boxes(image, bboxes, background=0):
     return image
 
 
+def within(x, lo, hi):
+    return x >= lo and x <= hi
+
+
 @useopt
 def check_acceptable_none(bbox):
     return True
 
 
 @useopt
-def check_acceptable_word(bbox, minw=10, maxw=500, minh=10, maxh=100, max_aspect=1.0):
+def check_acceptable_word(bbox, minw=10, maxw=500, minh=10, maxh=100, min_aspect=0.0, max_aspect=1e5):
     """Determine whether a bounding box has an acceptable size."""
     bw, bh = dims(bbox)
     aspect = bh / max(float(bw), 0.001)
     return (
-        aspect <= max_aspect and bw >= minw and bw <= maxw and bh >= minh and bh <= maxh
+            within(aspect, min_aspect, max_aspect) and
+            within(bw, minw, maxw) and
+            within(bh, minh, maxh)
     )
 
 
 @useopt
-def check_acceptable_line(bbox, minw=10, maxw=3000, minh=10, maxh=200, max_aspect=1.0):
+def check_acceptable_line(bbox, minw=10, maxw=3000, minh=10, maxh=200, min_aspect=0.0, max_aspect=1e5):
     """Determine whether a bounding box has an acceptable size."""
     bw, bh = dims(bbox)
     aspect = bh / max(float(bw), 0.001)
     return (
-        aspect <= max_aspect and bw >= minw and bw <= maxw and bh >= minh and bh <= maxh
+            within(aspect, min_aspect, max_aspect) and
+            within(bw, minw, maxw) and
+            within(bh, minh, maxh)
     )
 
 
@@ -173,31 +181,25 @@ def check_text_none(b):
 
 
 @useopt
-def check_text_word(b, char_height=1.0, min_char_height=0.2):
+def check_text_word(b, lo_factor=0.2, hi_factor=3.0):
     s = get_text(b)
-    if " " in s:
-        return False
     x0, y0, x1, y1 = get_bbox(b)
-    est_min_width = len(s) * (y1 - y0) * min_char_height
-    est_max_width = len(s) * (y1 - y0) * char_height
+    est_min_width = len(s) * (y1 - y0) * lo_factor
+    est_max_width = len(s) * (y1 - y0) * hi_factor
     actual_width = x1 - x0
     # print(est_max_width, actual_width, repr(s))
-    if actual_width < est_min_width or actual_width > est_max_width:
-        return False
-    return True
+    return within(actual_width, est_min_width, est_max_width)
 
 
 @useopt
-def check_text_line(b, char_height=1.0, min_char_height=0.2):
+def check_text_line(b, lo_factor=0.2, hi_factor=3.0):
     s = get_text(b)
     x0, y0, x1, y1 = get_bbox(b)
-    est_min_width = len(s) * (y1 - y0) * min_char_height
-    est_max_width = len(s) * (y1 - y0) * char_height
+    est_min_width = len(s) * (y1 - y0) * lo_factor
+    est_max_width = len(s) * (y1 - y0) * hi_factor
     actual_width = x1 - x0
     # print(est_max_width, actual_width, repr(s))
-    if actual_width < est_min_width or actual_width > est_max_width:
-        return False
-    return True
+    return within(actual_width, est_min_width, est_max_width)
 
 
 def bboxes_for_hocr(
