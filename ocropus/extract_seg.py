@@ -347,7 +347,7 @@ def hocr2seg(
     invert: str = "Auto",
     mask: str = "bbox",
     labels: str = "1, 2, 3",
-    check: str = "word",
+    check: str = "none",
 ):
     """Extract segmentation patches from src and send them to output."""
     global acceptable_bboxes
