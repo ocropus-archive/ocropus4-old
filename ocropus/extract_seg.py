@@ -115,6 +115,103 @@ def marker_segmentation_target_for_bboxes(
     return target
 
 
+def nzrange(a):
+    indexes = np.nonzero(a)[0]
+    return indexes[0], indexes[-1]
+
+
+def fix_bbox(bbox, image, sigma=5.0, threshold=0.3, pad=1):
+    h, w = image.shape
+    x0, y0, x1, y1 = bbox
+    patch = image[y0:y1, x0:x1]
+    smoothed = ndi.gaussian_filter(patch, sigma, mode="constant")
+    smoothed /= np.amax(smoothed)
+    thresholded = smoothed > threshold
+    dy0, dy1 = nzrange(np.sum(thresholded, 1))
+    dx0, dx1 = nzrange(np.sum(thresholded, 0))
+    return (
+        max(x0 + dx0 - pad, 0),
+        max(y0 + dy0 - pad, 0),
+        min(x0 + dx1 + pad, w),
+        min(y0 + dy1 + pad, h),
+    )
+
+
+def fill_bbox(image, bbox, value, ypad=0, xpad=0):
+    h, w = image.shape
+    x0, y0, x1, y1 = bbox
+    image[
+        max(y0 - ypad, 0) : min(y1 + ypad, h), max(x0 - xpad, 0) : min(x1 + xpad, w)
+    ] = value
+
+
+def make_text_mask(bbox, image, margin=3, scale=1.0, threshold=0.5, gthreshold=0.5):
+    x0, y0, x1, y1 = bbox
+    patch = image[y0:y1, x0:x1]
+    unit = int((y1 - y0) / 3.0 + 1)
+    spread = ndi.maximum_filter(patch, (unit, 3 * unit), mode="constant")
+    smoothed = ndi.gaussian_filter(patch, (unit, unit), mode="constant")
+    smoothed /= np.amax(smoothed)
+    return np.maximum(spread > threshold, smoothed > gthreshold)
+
+
+def make_center_mask(bbox, image, delta=0.2, margin=5, scale=1.0):
+    x0, y0, x1, y1 = bbox
+    patch = image[y0:y1, x0:x1]
+    unit = (y1 - y0) / 20.0
+    smoothed = 0.9 * ndi.gaussian_filter(
+        patch, (scale * unit, scale * 5 * unit), mode="constant"
+    ) + 0.1 * ndi.gaussian_filter(
+        patch, (scale * unit, scale * 40 * unit), mode="constant"
+    )
+    smoothed /= np.amax(smoothed)
+    acc = np.add.accumulate(smoothed, axis=0)
+    acc /= acc[-1, :][np.newaxis, :]
+    mask = (acc > 0.5 - delta) * (acc < 0.5 + delta)
+    mask[:, :margin] = 0
+    mask[:, -margin:] = 0
+    return mask
+
+
+def marker_segmentation_target_for_bboxes_2(
+    image,
+    bboxes,
+    labels=[1, 2, 3],
+    border=10,
+    pad=0,
+    delta=0.2,
+    fbb_sigma=3.0,
+    fbb_threshold=0.2,
+):
+    """
+    Generate a segmentation target given an image and target bounding boxes.
+    This generates a central marker and a separator for each bounding box.
+        :param image: page image
+        :param bboxes: list of (x0, y0, x1, y1) bounding boxes for marker generation
+        :param labels: list of labels for marker, inside, separator (default: [1, 2, 3])
+    """
+
+    # print(labels); raise Exception()
+    h, w = image.shape[:2]
+    target = np.zeros((h, w), dtype="uint8")
+    bboxes = sorted(bboxes, key=lambda b: -dims(b)[0])
+    bboxes = [
+        fix_bbox(bbox, image, pad=pad, sigma=fbb_sigma, threshold=fbb_threshold)
+        for bbox in bboxes
+    ]
+    for bbox in bboxes:
+        fill_bbox(target, bbox, labels[0], ypad=border, xpad=border)
+    for bbox in bboxes:
+        x0, y0, x1, y1 = bbox
+        textmask = make_text_mask(bbox, image)
+        mask = make_center_mask(bbox, image, delta=delta)
+        target[y0:y1, x0:x1] = np.where(
+            textmask, np.where(mask, labels[2], labels[1]), labels[0]
+        )
+
+    return target
+
+
 @useopt
 def mask_with_none(image, bboxes):
     return image
@@ -152,26 +249,30 @@ def check_acceptable_none(bbox):
 
 
 @useopt
-def check_acceptable_word(bbox, minw=10, maxw=500, minh=10, maxh=100, min_aspect=0.0, max_aspect=1e5):
+def check_acceptable_word(
+    bbox, minw=10, maxw=500, minh=10, maxh=100, min_aspect=0.0, max_aspect=1e5
+):
     """Determine whether a bounding box has an acceptable size."""
     bw, bh = dims(bbox)
     aspect = bh / max(float(bw), 0.001)
     return (
-            within(aspect, min_aspect, max_aspect) and
-            within(bw, minw, maxw) and
-            within(bh, minh, maxh)
+        within(aspect, min_aspect, max_aspect)
+        and within(bw, minw, maxw)
+        and within(bh, minh, maxh)
     )
 
 
 @useopt
-def check_acceptable_line(bbox, minw=10, maxw=3000, minh=10, maxh=200, min_aspect=0.0, max_aspect=1e5):
+def check_acceptable_line(
+    bbox, minw=10, maxw=3000, minh=10, maxh=200, min_aspect=0.0, max_aspect=1e5
+):
     """Determine whether a bounding box has an acceptable size."""
     bw, bh = dims(bbox)
     aspect = bh / max(float(bw), 0.001)
     return (
-            within(aspect, min_aspect, max_aspect) and
-            within(bw, minw, maxw) and
-            within(bh, minh, maxh)
+        within(aspect, min_aspect, max_aspect)
+        and within(bw, minw, maxw)
+        and within(bh, minh, maxh)
     )
 
 
@@ -299,7 +400,7 @@ def segmentation_patches(
     if degrade is not None:
         page = degrade(page)
     kw = eval(f"dict({params})")
-    seg = marker_segmentation_target_for_bboxes(page, bboxes, labels=labels, **kw)
+    seg = marker_segmentation_target_for_bboxes_2(page, bboxes, labels=labels, **kw)
     if np.sum(seg) <= minmark:
         print(f"didn't get any {element}", file=sys.stderr)
         return
