@@ -408,6 +408,7 @@ def segmentation_patches(
     params="",
     check_acceptable=check_acceptable_word,
     check_text=check_text_word,
+    mode="image",
 ):
     """Extract training patches for segmentation."""
     assert page is not None
@@ -425,7 +426,12 @@ def segmentation_patches(
     if degrade is not None:
         page = degrade(page)
     kw = eval(f"dict({params})")
-    seg = marker_segmentation_target_for_bboxes_2(page, bboxes, labels=labels, **kw)
+    if mode == "image":
+        seg = marker_segmentation_target_for_bboxes_2(page, bboxes, labels=labels, **kw)
+    elif mode == "box":
+        seg = marker_segmentation_target_for_bboxes(page, bboxes, labels=labels, **kw)
+    else:
+        raise ValueError(f"{mode}: unknown extraction mode")
     if np.sum(seg) <= minmark:
         print(f"didn't get any {element}", file=sys.stderr)
         return
@@ -474,6 +480,7 @@ def hocr2seg(
     mask: str = "bbox",
     labels: str = "1, 2, 3",
     check: str = "none",
+    mode: str = "image",
 ):
     """Extract segmentation patches from src and send them to output."""
     global acceptable_bboxes
@@ -529,6 +536,7 @@ def hocr2seg(
                         rotation=(-randrot, randrot),
                         mask=eval(f"mask_with_{mask}"),
                         labels=labels,
+                        mode=mode,
                         check_text=check_text,
                         check_acceptable=check_acceptable,
                     )
