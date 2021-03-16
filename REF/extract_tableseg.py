@@ -11,7 +11,7 @@ import scipy.ndimage as ndi
 
 from . import utils
 from .utils import unused
-import .patches
+from . import patches
 
 import typer
 
@@ -68,6 +68,7 @@ def dims(bbox):
 def bboxes_for_hocr(image, hocr, element="ocrx_table_cell"):
     """
     Generate a segmentation target given an image and hOCR segmentation info.
+
         :param image: page image
         :param hocr: hOCR format info corresponding to page image
         :param element: hOCR target unit (usually, "ocrx_word" or "ocr_line")
@@ -99,7 +100,11 @@ def bboxes_for_hocr(image, hocr, element="ocrx_table_cell"):
 
 @utils.trace
 def table_segmentation_target(
-    page, hocr, labels=[1, 2, 3], offsets=[12, 2, -10], element="ocrx_table_cell",
+    page,
+    hocr,
+    labels=[1, 2, 3],
+    offsets=[12, 2, -10],
+    element="ocrx_table_cell",
 ):
     """Extract training patches for segmentation."""
     if page.ndim == 3:
@@ -126,8 +131,9 @@ def table_segmentation_target(
 
 @unused
 def augment_segmentation(page, seg, rotation=[0.0, 0.0], scale=[1.0, 1.0], minmark=1):
+    """Augment a segmentation with random scale or rotation."""
     if np.sum(seg) <= minmark:
-        print(f"no output in segmentation map", file=sys.stderr)
+        print("no output in segmentation map", file=sys.stderr)
         return
     if scale[0] != 1.0 or scale[1] != 1.0:
         s = np.random.uniform(*scale)
@@ -229,11 +235,19 @@ def tables2seg(
                 scale += np.clip(np.random.normal(), -2, 2) * 0.1
                 try:
                     pageseg = table_segmentation_target(
-                        page, hocr, element=element,  labels=labels, offsets=offsets,
+                        page,
+                        hocr,
+                        element=element,
+                        labels=labels,
+                        offsets=offsets,
                     )
                     # page, pageseg = augment_segmentation( page, pageseg, rotation=rotations, scale=[scale, scale])
                     patches = patches_of_segmentation(
-                        page, pageseg, threshold=2, patchsize=patchsize, n=patches_per_image
+                        page,
+                        pageseg,
+                        threshold=2,
+                        patchsize=patchsize,
+                        n=patches_per_image,
                     )
                 except ValueError as exn:
                     if ignore_errors:

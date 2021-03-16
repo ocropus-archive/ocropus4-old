@@ -47,6 +47,7 @@ def get_prop(node, name):
 
 
 def get_bbox(node):
+    """Get the bounding box for the hOCR node."""
     bbox = get_prop(node, "bbox")
     if bbox is not None:
         return [int(x) for x in bbox.split()]
@@ -80,12 +81,12 @@ def marker_segmentation_target_for_bboxes(
 ):
     """
     Generate a segmentation target given an image and target bounding boxes.
+
     This generates a central marker and a separator for each bounding box.
         :param image: page image
         :param bboxes: list of (x0, y0, x1, y1) bounding boxes for marker generation
         :param labels: list of labels for marker, inside, separator (default: [1, 0, 2])
     """
-
     # print(labels); raise Exception()
     h, w = image.shape[:2]
     target = np.zeros((h, w), dtype="uint8")
@@ -116,11 +117,13 @@ def marker_segmentation_target_for_bboxes(
 
 
 def nzrange(a):
+    """Return a pair of indexes: minimum, maximum non-zero element in array."""
     indexes = np.nonzero(a)[0]
-    return indexes[0], indexes[-1]
+    return indexes[0], indexes[-1] + 1
 
 
 def fix_bbox(bbox, image, sigma=5.0, threshold=0.3, pad=1):
+    """Given an image and a bounding box, adjust the bounding box to content."""
     h, w = image.shape
     x0, y0, x1, y1 = bbox
     patch = image[y0:y1, x0:x1]
@@ -138,6 +141,7 @@ def fix_bbox(bbox, image, sigma=5.0, threshold=0.3, pad=1):
 
 
 def fill_bbox(image, bbox, value, ypad=0, xpad=0):
+    """Fill the bounding box in the target image with the value and padding."""
     h, w = image.shape
     x0, y0, x1, y1 = bbox
     image[
@@ -145,20 +149,36 @@ def fill_bbox(image, bbox, value, ypad=0, xpad=0):
     ] = value
 
 
-def make_text_mask(bbox, image, margin=3, scale=1.0, threshold=0.5, gthreshold=0.5):
+def make_text_mask(
+    bbox, image, margin=3, scale=1.0, threshold=0.5, gthreshold=0.5, add_center=1
+):
+    """Use filtering to generate a text mask for a mostly binary image."""
     x0, y0, x1, y1 = bbox
-    patch = image[y0:y1, x0:x1]
-    unit = int((y1 - y0) / 3.0 + 1)
+    patch = image[y0:y1, x0:x1].copy()
+    patch /= np.amax(patch)
+    h, w = patch.shape
+    if add_center > 0:
+        patch[
+            h // 2 - add_center // 2 : h // 2 + (add_center - add_center // 2), :
+        ] = np.amax(patch)
+    unit = int(h / 3.0 + 1)
     spread = ndi.maximum_filter(patch, (unit, 3 * unit), mode="constant")
     smoothed = ndi.gaussian_filter(patch, (unit, unit), mode="constant")
     smoothed /= np.amax(smoothed)
     return np.maximum(spread > threshold, smoothed > gthreshold)
 
 
-def make_center_mask(bbox, image, delta=0.2, margin=5, scale=1.0):
+def make_center_mask(bbox, image, delta=0.2, margin=5, scale=1.0, add_center=1):
+    """Use filtering to generate a center mask for a mostly binary image."""
     x0, y0, x1, y1 = bbox
-    patch = image[y0:y1, x0:x1]
-    unit = (y1 - y0) / 20.0
+    patch = image[y0:y1, x0:x1].copy()
+    patch /= np.amax(patch)
+    h, w = patch.shape
+    unit = h / 20.0
+    if add_center > 0:
+        patch[
+            h // 2 - add_center // 2 : h // 2 + (add_center - add_center // 2), :
+        ] = np.amax(patch)
     smoothed = 0.9 * ndi.gaussian_filter(
         patch, (scale * unit, scale * 5 * unit), mode="constant"
     ) + 0.1 * ndi.gaussian_filter(
@@ -178,6 +198,7 @@ def marker_segmentation_target_for_bboxes_2(
     bboxes,
     labels=[1, 2, 3],
     border=10,
+    erode=1,
     pad=0,
     delta=0.2,
     fbb_sigma=3.0,
@@ -185,13 +206,12 @@ def marker_segmentation_target_for_bboxes_2(
 ):
     """
     Generate a segmentation target given an image and target bounding boxes.
+
     This generates a central marker and a separator for each bounding box.
         :param image: page image
         :param bboxes: list of (x0, y0, x1, y1) bounding boxes for marker generation
         :param labels: list of labels for marker, inside, separator (default: [1, 2, 3])
     """
-
-    # print(labels); raise Exception()
     h, w = image.shape[:2]
     target = np.zeros((h, w), dtype="uint8")
     bboxes = sorted(bboxes, key=lambda b: -dims(b)[0])
@@ -204,6 +224,8 @@ def marker_segmentation_target_for_bboxes_2(
     for bbox in bboxes:
         x0, y0, x1, y1 = bbox
         textmask = make_text_mask(bbox, image)
+        if erode > 0:
+            textmask = ndi.minimum_filter(textmask, erode)
         mask = make_center_mask(bbox, image, delta=delta)
         target[y0:y1, x0:x1] = np.where(
             textmask, np.where(mask, labels[2], labels[1]), labels[0]
@@ -214,11 +236,13 @@ def marker_segmentation_target_for_bboxes_2(
 
 @useopt
 def mask_with_none(image, bboxes):
+    """Mask image. Do nothing option."""
     return image
 
 
 @useopt
 def mask_with_bbox(image, bboxes, background=0):
+    """Mask image. Use entire page as mask."""
     if len(bboxes) == 0:
         return image
     bboxes = np.array(bboxes, dtype=int)
@@ -232,6 +256,7 @@ def mask_with_bbox(image, bboxes, background=0):
 
 @useopt
 def mask_with_boxes(image, bboxes, background=0):
+    """Mask image. Use union of bounding boxes."""
     mask = np.zeros_like(image)
     for x0, y0, x1, y1 in bboxes:
         mask[y0:y1, x0:x1] = 1
@@ -240,11 +265,13 @@ def mask_with_boxes(image, bboxes, background=0):
 
 
 def within(x, lo, hi):
+    """Check whether x is within the range [lo, hi] inclusive."""
     return x >= lo and x <= hi
 
 
 @useopt
 def check_acceptable_none(bbox):
+    """Check whether bbox has acceptable dimensions. Always true."""
     return True
 
 
@@ -252,7 +279,7 @@ def check_acceptable_none(bbox):
 def check_acceptable_word(
     bbox, minw=10, maxw=500, minh=10, maxh=100, min_aspect=0.0, max_aspect=1e5
 ):
-    """Determine whether a bounding box has an acceptable size."""
+    """Check whether bbox has acceptable dimensions. Defaults for word segmentation."""
     bw, bh = dims(bbox)
     aspect = bh / max(float(bw), 0.001)
     return (
@@ -266,7 +293,7 @@ def check_acceptable_word(
 def check_acceptable_line(
     bbox, minw=10, maxw=3000, minh=10, maxh=200, min_aspect=0.0, max_aspect=1e5
 ):
-    """Determine whether a bounding box has an acceptable size."""
+    """Check whether bbox has acceptable dimensions. Defaults for line segmentation."""
     bw, bh = dims(bbox)
     aspect = bh / max(float(bw), 0.001)
     return (
@@ -278,11 +305,13 @@ def check_acceptable_line(
 
 @useopt
 def check_text_none(b):
+    """Check whether bbox text is acceptable. Always true."""
     return True
 
 
 @useopt
 def check_text_word(b, lo_factor=0.2, hi_factor=3.0):
+    """Check whether bbox text is acceptable for word segmentation."""
     s = get_text(b)
     x0, y0, x1, y1 = get_bbox(b)
     est_min_width = len(s) * (y1 - y0) * lo_factor
@@ -294,6 +323,7 @@ def check_text_word(b, lo_factor=0.2, hi_factor=3.0):
 
 @useopt
 def check_text_line(b, lo_factor=0.2, hi_factor=3.0):
+    """Check whether bbox text is acceptable for line segmentation."""
     s = get_text(b)
     x0, y0, x1, y1 = get_bbox(b)
     est_min_width = len(s) * (y1 - y0) * lo_factor
@@ -313,12 +343,7 @@ def bboxes_for_hocr(
     check_text=check_text_word,
     max_bad_text_frac=0.2,
 ):
-    """
-    Generate a segmentation target given an image and hOCR segmentation info.
-        :param image: page image
-        :param hocr: hOCR format info corresponding to page image
-        :param element: hOCR target unit (usually, "ocrx_word" or "ocr_line")
-    """
+    """Return list of good bounding boxes from hOCR spec."""
     htmlparser = etree.HTMLParser()
     doc = etree.parse(io.BytesIO(hocr), htmlparser)
     pages = list(doc.xpath('//*[@class="ocr_page"]'))
@@ -544,6 +569,7 @@ def hocr2seg(
 
 @app.command()
 def json2seg():
+    """Convert JSON segmentation output to segmentation patches."""
     raise Exception("unimplemented")
 
 

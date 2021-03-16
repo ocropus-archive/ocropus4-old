@@ -5,3 +5,4 @@ pytest-cov
 tk
 black
 bash_kernel
+pydocstyle

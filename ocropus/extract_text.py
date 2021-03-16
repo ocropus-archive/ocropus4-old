@@ -15,12 +15,14 @@ app = typer.Typer()
 
 
 def get_text(node):
+    """Extract text from a DOM node."""
     textnodes = node.xpath(".//text()")
     s = "".join([text for text in textnodes])
     return re.sub(r"\s+", " ", s)
 
 
 def get_prop(node, name):
+    """Get property from hOCR node."""
     title = node.get("title")
     props = title.split(";")
     for prop in props:
