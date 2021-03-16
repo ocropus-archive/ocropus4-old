@@ -197,7 +197,7 @@ def marker_segmentation_target_for_bboxes_2(
     image,
     bboxes,
     labels=[1, 2, 3],
-    border=15,
+    border=20,
     erode=3,
     pad=0,
     delta=0.2,
