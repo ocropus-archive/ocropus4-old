@@ -1,0 +1,125 @@
+#!/bin/bash
+
+set -e
+
+export OMP_NUM_THREADS=1
+
+image=ocropus4
+remimage=tmbdev/ocropus4
+
+die() {
+    echo "ERROR: $*"
+    exit 1
+}
+
+cmd_clean() { # remove temporary files
+    rm -f *-info.txt
+    rm -f *.pth *.pth.tar
+    rm -f *.log
+}
+
+cmd_cleanlogs() { # clean up log files
+    source venv/bin/activate
+    mkdir -p ./JUNK
+    mv -v $(python3 -m ocropus.slog findempty *.sqlite3) ./JUNK/.
+}
+
+
+cmd_download_uw3() {
+    mkdir -p uw3
+    gsutil -m rsync -r gs://lpr-uw3/* uw3/.
+}
+
+
+cmd_download() {
+    mkdir -p trained
+    gsutil -m rsync -r gs://ocropus4-trained/ ./models/
+}
+
+
+cmd_upload() {
+    gsutil -m rsync -r ./models/ gs://ocropus4-trained/
+}
+
+
+cmd_info() {
+    test -d venv || python3 -m venv venv
+    source venv/bin/activate
+    python3 -m ocropus.slog info *.sqlite3
+}
+
+cmd_getbest() {
+    test -d venv || python3 -m venv venv
+    source venv/bin/activate
+    python3 -m ocropus.slog getbest "$@"
+}
+
+cmd_val2model() {
+    test -d venv || python3 -m venv venv
+    source venv/bin/activate
+    python3 -m ocropus.slog val2model $1
+}
+
+cmd_venv() { # set up a virtualenv
+    test -d venv || python3 -m venv venv
+    source venv/bin/activate
+    pip3 install -U pip
+    pip3 install numpy
+    pip3 install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cu102/torch_nightly.html
+    pip3 install -U -r requirements.txt
+    pip3 install -U -r requirements.dev.txt
+    # python3 -m bash_kernel.install
+    pip3 install -U neovim
+    pip3 install -U jupyterlab
+    pip3 install -U pytest
+    python3 -m bash_kernel.install
+    if true; then
+        pip3 install sos-python
+        pip3 install sos-notebook
+        pip3 install jupyterlab-sos
+        pip3 install -e git://github.com/vatlab/transient-display-data#egg=transient-display-data
+        python -m sos_notebook.install
+        jupyter labextension install transient-display-data
+        jupyter labextension install jupyterlab-sos
+        pip3 install papermill
+        pip3 install sos-papermill
+    fi
+    jupyter kernelspec list
+}
+
+cmd_lab() { # run jupyter lab in the environment
+    set -e
+    cmd_venv > venv.log
+    source venv/bin/activate
+    jupyter lab "$@"
+}
+
+cmd_help() { # help message
+echo
+echo available commands:
+echo
+grep '^cmd_[_0-9a-z]*() {' $0 | sed 's/cmd_//;s/\(.*\)() *{* *#* */\1 -- /'
+}
+
+cmd=${1:-help}
+shift
+case $cmd in
+help)
+    echo; echo available commands:; echo
+    grep '^cmd_[_0-9a-z]*() {' "$0" | sed 's/cmd_//;s/\(.*\)() *{* *#* */\1 -- /'
+    ;;
+*.py)
+    # cmd_versions
+    set -e
+    # hg status grep -v '^M ' > /dev/null
+    cmd_venv > venv.log
+    source venv/bin/activate
+    export OMP_NUM_THREADS=1
+    python3 "$cmd" "$@"
+    ;;
+*)
+    set -e
+    "cmd_$cmd" "$@"
+    ;;
+esac
+
