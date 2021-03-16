@@ -197,8 +197,8 @@ def marker_segmentation_target_for_bboxes_2(
     image,
     bboxes,
     labels=[1, 2, 3],
-    border=10,
-    erode=1,
+    border=15,
+    erode=3,
     pad=0,
     delta=0.2,
     fbb_sigma=3.0,
@@ -220,18 +220,16 @@ def marker_segmentation_target_for_bboxes_2(
         for bbox in bboxes
     ]
     for bbox in bboxes:
-        fill_bbox(target, bbox, labels[0], ypad=border, xpad=border)
-    for bbox in bboxes:
         x0, y0, x1, y1 = bbox
         textmask = make_text_mask(bbox, image)
+        cmask = make_center_mask(bbox, image, delta=delta)
         if erode > 0:
+            target[y0:y1, x0:x1] = np.where(textmask, labels[0], target[y0:y1, x0:x1])
             textmask = ndi.minimum_filter(textmask, erode)
-        mask = make_center_mask(bbox, image, delta=delta)
-        target[y0:y1, x0:x1] = np.where(
-            textmask, np.where(mask, labels[2], labels[1]), labels[0]
-        )
-
-    return target
+        target[y0:y1, x0:x1] = np.where(textmask, np.where(cmask, labels[2], labels[1]), 0)
+    halo = ndi.maximum_filter(target != 0, border)
+    target = np.where(target, target, np.where(halo, labels[0], 0))
+    return target.astype(np.uint8)
 
 
 @useopt
@@ -386,7 +384,7 @@ def bboxes_for_hocr(
         print("# too many bad bounding boxes on this page")
         return []
     print(
-        f"# {bad_conf} bad bboxes, {no_conf} no confidence, {len(bboxes)} good, {bad_text} bad text, {count} total"
+        f"# {bad_conf} low conf, {no_conf} no conf, {len(bboxes)} good, {bad_text} bad text, {count} total"
     )
     return bboxes
 
