@@ -1,16 +1,18 @@
 # OCRopus4
 
-This is a very preliminary version of OCRopus 4. Components are:
+This is a **very preliminary** version of OCRopus 4. Components are:
 
 - ocrobin -- binarization (hardcoded binarizer is also available)
-- ocrorot -- orientation, skew, and scale estimation
+- ocrorot -- orientation
+- ocroskew -- small page rotations ("skew")
+- ocroscale -- scale determination
 - ocroseg -- word, line, and block segmentation of pages
-- ocrotest -- text recognition from words and lines
+- ocrorec -- text recognition from words and lines
 
 Status is:
 
 - DL training and recognition for text recognition and page layout analysis are working
-- training fully works on the UW3 dataset
+- training fully works on UW3 and G1000
 - we have large datasets extracted from the Tobacco corpus and Google 1000 Books
 
 Warnings:
@@ -20,7 +22,7 @@ Warnings:
 
 # Getting Started
 
-To Be Written
+Look at `g1000test/quicktest.ipynb` to see all the components in action.
 
 # Other Comments
 
@@ -29,6 +31,7 @@ To Be Written
     - command invocation generally looks like this:
         - `python3 -m ocropus.ocroseg train ...`
         - that is, commands are simply part of the library files
+        - the toplevel `ocropus4` script provides a nicer interface
 - All the computations are carried out in PyTorch.
 - OCRopus4 uses some extra external and internal libraries:
     - `typer` for command line interfaces
@@ -51,11 +54,6 @@ To Be Written
 # Commands:
 
 - `./ocropus4` -- the main command for OCRopus 4
-    - recex -- extract training data for recognition
-    - segex -- extract training data for segmentation
-    - rec[ognition] -- recognize text lines
-    - seg[mentation] -- segment page images
-    - nlbin -- nonlinear image binarizer
 - `./run` -- various utility commands for building and working with the repo
     - clean -- remove temporary files
     - cleanlogs -- clean up log files
