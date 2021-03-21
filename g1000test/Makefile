@@ -1,3 +1,14 @@
+quick: clean
+	. ../venv/bin/activate; papermill quicktest.ipynb output.ipynb
+	. ../venv/bin/activate; jupyter nbconvert output.ipynb output.html
+
+clean:
+	rm -rf *-execute
+	rm -rf *.sqlite3 *.pth
+	rm -rf *-seg.tar *-words.tar *-lines.tar
+	rm -rf full.sos output.ipynb
+	# we're not rerunning tess by default
+
 full:
 	rm -f full.sos
 	. ../venv/bin/activate; sos convert quicktest.ipynb full.sos
@@ -14,9 +25,3 @@ full:
 	. ../venv/bin/activate; sos run full.sos predict-scale
 	. ../venv/bin/activate; sos run full.sos train-bin
 
-clean:
-	rm -rf *-execute
-	rm -rf *.sqlite3 *.pth
-	rm -rf *-seg.tar *-words.tar *-lines.tar
-	rm -rf full.sos output.ipynb
-	# we're not rerunning tess by default

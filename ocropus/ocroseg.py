@@ -531,6 +531,7 @@ def train(
     log_to: str = "",
     parallel: bool = False,
     save_interval: float = 30 * 60,
+    noutput: int = 4,
 ):
     global logger
 
@@ -570,7 +571,7 @@ def train(
     else:
         test_dl = None
 
-    model = loading.load_or_construct_model(model)
+    model = loading.load_or_construct_model(model, noutput=noutput)
     model.cuda()
     if parallel and torch.cuda.device_count() > 1:
         model = torch.nn.DataParallel(model)

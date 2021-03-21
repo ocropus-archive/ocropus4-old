@@ -58,6 +58,21 @@ def binarization_210113():
 
 
 @model
+def cbinarization_210317():
+    model = nn.Sequential(
+        ocrlayers.GrayDocument(),
+        layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
+        inputstats.InputStats("cbinarization"),
+        layers.ModPad(32),
+        combos.make_unet([32, 64, 128, 256, 512], sub=nn.Sequential(*combos.conv2d_block(256, 3, repeat=1))),
+        flex.Conv2d(1, 3, padding=1),
+        nn.Sigmoid(),
+    )
+    flex.shape_inference(model, (2, 1, 161, 391))
+    return model
+
+
+@model
 def page_orientation_210113(size=256):
     def block(s, r, repeat=2):
         result = []

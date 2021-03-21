@@ -198,7 +198,7 @@ def binarize1(
     skewsteps: int = 8,
     debug: float = 0,
     output: str = "",
-    nodeskew: bool = False,
+    deskew: bool = False,
 ):
     """Binarize a single image."""
     args = utils.Record(**locals())
@@ -207,7 +207,7 @@ def binarize1(
     image = np.asarray(image)
     assert image.dtype == np.uint8
     image = image / 255.0
-    result = nlbin(image, args, deskew=not nodeskew)
+    result = nlbin(image, args, deskew=deskew)
     assert result.dtype == float
     if args.threshold >= 0:
         result = np.array(result > args.threshold, dtype=np.uint8) * 255
@@ -235,6 +235,7 @@ def binarize(
     debug: float = 0,
     output: str = "",
     maxrec: int = 999999999999,
+    deskew: bool = False,
 ):
     """Binarize a shard of images."""
     args = utils.Record(**locals())
@@ -245,7 +246,7 @@ def binarize(
         print(f"{count}/{maxrec} {key}", file=sys.stderr)
         assert image.dtype == np.uint8
         image = image / 255.0
-        flat = nlbin(image, args)
+        flat = nlbin(image, args, deskew=deskew)
         assert flat.dtype == float
         result = dict(__key__=key)
         if gray:

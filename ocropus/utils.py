@@ -5,9 +5,7 @@ import time
 from functools import wraps
 import re
 
-import matplotlib.pyplot as plt
 import numpy as np
-import scipy.ndimage as ndi
 import torch
 from torchmore import layers
 
@@ -334,3 +332,7 @@ def python_to_json(obj):
     if isinstance(obj, dict):
         return {k: python_to_json(v) for k, v in obj.items()}
     raise ValueError("bad type in fix4json", type(obj), obj)
+
+
+def lrschedule(expr):
+    return eval(f"lambda n: {expr}")

@@ -1,4 +1,5 @@
 import random as pyrand
+import sys
 from typing import List
 
 import matplotlib.pyplot as plt
@@ -77,6 +78,42 @@ def bin_pipe(source, **kw):
         yield from bin_samples(page, binpage, **kw)
 
 
+def identity(x):
+    return x
+
+
+def normalize(a):
+    a = a - np.amin(a)
+    a /= max(1e-6, np.amax(a))
+    return a
+
+
+def abs_normalize(lo, hi):
+    def f(a):
+        return ((a - lo) / (hi - lo)).clip(0, 1)
+
+    return f
+
+
+def frac_normalize(lo_frac, hi_frac):
+    def f(a):
+        lo = np.percentile(100.0 * lo_frac)
+        hi = np.percentile(100.0 * hi_frac)
+        return ((a - lo) / (hi - lo)).clip(0, 1)
+
+    return f
+
+
+def thresholded(thresholds):
+    def f(a):
+        if thresholds[0] > thresholds[1]:
+            return a
+        threshold = pyrand.uniform(*thresholds)
+        return (a > threshold).type(torch.float)
+
+    return f
+
+
 def make_loader(
     urls,
     batch_size=16,
@@ -85,8 +122,10 @@ def make_loader(
     num_workers=4,
     pipe=bin_pipe,
     invert="Auto",
+    thresholds=(1.0, 0.0),
+    absnorm=(1.0, 0.0),
+    fracnorm=(1.0, 0.0),
 ):
-
     def inverter(image):
         return utils.autoinvert(image, invert)
 
@@ -101,15 +140,15 @@ def make_loader(
         .map_tuple(inverter, inverter)
         .pipe(pipe)
         .shuffle(shuffle)
-        .map_tuple(astensor, astensor)
     )
+    if absnorm[0] < absnorm[1]:
+        training = training.map_tuple(identity, abs_normalize(*absnorm))
+    if fracnorm[0] < fracnorm[1]:
+        training = training.map_tuple(identity, frac_normalize(*fracnorm))
+    training = training.map_tuple(astensor, astensor)
+    if thresholds[0] <= thresholds[1]:
+        training = training.map_tuple(identity, thresholded(thresholds))
     return data.DataLoader(training, batch_size=batch_size, num_workers=num_workers)
-
-
-def normalize(a):
-    a = a - np.amin(a)
-    a /= max(1e-6, np.amax(a))
-    return a
 
 
 class BinTrainer:
@@ -141,6 +180,7 @@ class BinTrainer:
     def set_lr(self, lr, momentum=0.9):
         if lr == self.last_lr:
             return
+        print(f"# setting lr to {lr}", file=sys.stderr)
         self.optimizer = optim.SGD(
             self.model.parameters(), lr=lr, momentum=0.9, weight_decay=0.0
         )
@@ -240,9 +280,9 @@ def train(
     fnames: List[str],
     extensions: str = "png;page.png;jpg;page.jpg bin.png",
     num_workers: int = 4,
-    model: str = "binarization_210113",
+    model: str = "cbinarization_210317",  # "binarization_210113",
     bs: int = 32,
-    lr: float = 1e-3,
+    lr: str = "1e-3",
     show: int = 0,
     num_epochs: int = 100,
     output: str = "_ocrobin.sqlite3",
@@ -252,19 +292,31 @@ def train(
     save_interval: float = 600.0,
     nsamples: int = 999999999999,
     invert: str = "Auto",
-    tvals: str = "0.0, 1.0",
+    fracnorm: str = "1.0,0.0",
+    absnorm: str = "1.0,0.0",
+    thresholds: str = "1.0,0.0",
 ):
     fnames = fnames * replicate
-    loader = make_loader(fnames, extensions=extensions, shuffle=shuffle, invert=invert, pipe=bin_pipe)
+    thresholds = eval(f"({thresholds})")
+    fracnorm = eval(f"({fracnorm})")
+    absnorm = eval(f"({absnorm})")
+    loader = make_loader(
+        fnames,
+        extensions=extensions,
+        shuffle=shuffle,
+        invert=invert,
+        pipe=bin_pipe,
+        thresholds=thresholds,
+        fracnorm=fracnorm,
+        absnorm=absnorm,
+    )
     logger = slog.Logger(fname=output, prefix="bin")
     model = loading.load_or_construct_model(model)
     model.cuda()
     print(model)
-    trainer = BinTrainer(model, lr=lr)
+    trainer = BinTrainer(model, lr_schedule=eval(f"lambda n: {lr}"))
     trainer.count = int(getattr(model, "step_", 0))
     trainer.to("cuda")
-
-    tvals = eval(f"({tvals})")
 
     def save():
         logger.save_smodel(
@@ -275,10 +327,7 @@ def train(
     schedule = utils.Schedule()
 
     for inputs, targets in islice(utils.repeatedly(loader), 0, nsamples):
-        targets *= tvals[1] - tvals[0]
-        targets += tvals[0]
         trainer.train_batch(inputs, targets)
-        save()
         if schedule("progress", 60, initial=True):
             print(f"epoch {trainer.count} loss {np.mean(trainer.losses[-500:])}")
         if schedule("save", save_interval, initial=True):
