@@ -12,6 +12,7 @@ from torch import nn, optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from webdataset import Dataset
+import webdataset as wds
 import torchmore.layers
 
 from .utils import Schedule, repeatedly
@@ -58,7 +59,7 @@ def augmentation_none(sample):
     assert image.ndim == 3
     assert target.ndim == 2
     assert image.dtype == np.float32
-    assert target.dtype in (np.uint8, np.int16, np.int32, np.int64)
+    assert target.dtype in (np.uint8, np.int16, np.int32, np.int64), target.dtype
     assert image.shape[:2] == target.shape[:2]
     return image, target
 
@@ -73,7 +74,7 @@ def augmentation_gray(sample):
     assert image.ndim == 3
     assert target.ndim == 2
     assert image.dtype == np.float32
-    assert target.dtype in (np.uint8, np.int16, np.int32, np.int64)
+    assert target.dtype in (np.uint8, np.int16, np.int32, np.int64), target.dtype
     assert image.shape[:2] == target.shape[:2]
     if np.random.uniform() > 0.5:
         image = simple_bg_fg(
@@ -95,7 +96,7 @@ def augmentation_page(sample, max_distortion=0.05):
     assert image.ndim == 3
     assert target.ndim == 2
     assert image.dtype == np.float32
-    assert target.dtype in (np.uint8, np.int16, np.int32, np.int64)
+    assert target.dtype in (np.uint8, np.int16, np.int32, np.int64), target.dtype
     assert image.shape[:2] == target.shape[:2]
     d = min(image.shape[0], image.shape[1]) * max_distortion
     src = [
@@ -137,10 +138,19 @@ def make_loader(
     augmentation=augmentation_none,
     shuffle=0,
     num_workers=1,
+    invert="False",
+    remapper=None,
 ):
-    training = Dataset(urls).shuffle(shuffle).decode("rgb8").to_tuple(extensions)
-    training.map(augmentation)
-    training.map(np2tensor)
+    def autoinvert(x):
+        return utils.autoinvert(x, invert)
+    def remap(y):
+        if remapper is None:
+            return y
+        return remapper[y]
+    training = wds.WebDataset(urls).shuffle(shuffle).decode("rgb8").to_tuple(extensions)
+    training = training.map_tuple(autoinvert, remap)
+    training = training.map(augmentation)
+    training = training.map(np2tensor)
     return DataLoader(training, batch_size=batch_size, num_workers=num_workers)
 
 
@@ -167,9 +177,7 @@ def log_progress(trainer):
     if not log_progress_every():
         return
     avgloss = mean(trainer.losses[-100:]) if len(trainer.losses) > 0 else 0.0
-    logger.scalar(
-        "train/loss", avgloss, step=trainer.nsamples, json=dict(lr=trainer.last_lr)
-    )
+    logger.scalar("train/loss", avgloss, step=trainer.nsamples, json=dict(lr=trainer.last_lr))
     logger.flush()
 
 
@@ -180,14 +188,13 @@ def print_progress(self):
     if not print_progress_every():
         return
     print(
-        f"# {len(self.losses)} {np.median(self.losses[-10:])}",
-        file=sys.stderr,
-        flush=True,
+        f"# {len(self.losses)} {np.median(self.losses[-10:])}", file=sys.stderr, flush=True,
     )
 
 
 def display_progress(self):
     import matplotlib.pyplot as plt
+    cmap = plt.cm.nipy_spectral
 
     if int(os.environ.get("noreport", 0)):
         return
@@ -206,7 +213,8 @@ def display_progress(self):
     mask = getattr(self, "last_mask")
     if mask is not None:
         mask = mask[0].detach().numpy()
-        ax1.imshow(mask * 0.3 + doc * 0.7, cmap="gray")
+        combined = np.array([doc, doc, mask]).transpose(1, 2, 0)
+        ax1.imshow(combined)
     else:
         ax1.imshow(doc, cmap="gray")
     p = outputs.detach().cpu().softmax(1)
@@ -219,19 +227,23 @@ def display_progress(self):
     ax2.imshow(result, vmin=0, vmax=1)
     m = result.shape[1] // 2
     ax2.plot([m, m], [0, h], color="white", alpha=0.5)
-    t = targets[0].detach().numpy()
-    t = np.array([t == 1, t == 2, t == 3]).astype(float).transpose(1, 2, 0)
-    ax3.imshow(t)
-    ax6.imshow(targets[0].detach().numpy(), vmin=0, vmax=5, cmap=plt.cm.viridis)
     if len(self.losses) >= 100:
+        atsamples = self.atsamples[::10]
         losses = ndi.gaussian_filter(self.losses, 10.0)
         losses = losses[::10]
         losses = ndi.gaussian_filter(losses, 10.0)
-        ax4.plot(losses)
+        ax4.plot(atsamples, losses)
         ax4.set_ylim((0.9 * amin(losses), median(losses) * 3))
-    colors = "black r g b yellow".split()
+    colors = [cmap(x) for x in np.linspace(0, 1, p.shape[1])]
     for i in range(0, d):
-        ax5.plot(p[0, i, :, m], color=colors[i])
+        ax5.plot(p[0, i, :, m], color=colors[i % len(colors)])
+    if p.shape[1] <= 4:
+        t = targets[0].detach().numpy()
+        t = np.array([t == 1, t == 2, t == 3]).astype(float).transpose(1, 2, 0)
+        ax3.imshow(t)
+    else:
+        ax3.imshow(p.argmax(1)[0], vmin=0, vmax=p.shape[1], cmap=cmap)
+    ax6.imshow(targets[0].detach().numpy(), vmin=0, vmax=p.shape[1], cmap=cmap)
     plt.ginput(1, 0.001)
 
 
@@ -261,9 +273,9 @@ class SegTrainer:
         # self.lossfn = nn.CTCLoss()
         self.lossfn = nn.CrossEntropyLoss()
         self.every = every
+        self.atsamples = []
         self.losses = []
         self.last_lr = None
-        self.set_lr(lr)
         self.lr_schedule = None
         self.clip_gradient = maxgrad
         self.charset = None
@@ -275,15 +287,15 @@ class SegTrainer:
         self.bordermask = bordermask
         self.weightlayer = torchmore.layers.WeightedGrad()
         self.last_mask = None
+        self.set_lr(lr)
 
     def set_lr(self, lr, momentum=0.9):
         """Set the learning rate.
 
         Keeps track of current learning rate and only allocates a new optimizer if it changes."""
         if lr != self.last_lr:
-            self.optimizer = optim.SGD(
-                self.model.parameters(), lr=lr, momentum=momentum
-            )
+            print(f"# learning rate {lr} @ {self.nsamples}", file=sys.stderr)
+            self.optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=momentum)
             self.last_lr = lr
 
     def set_lr_schedule(self, f):
@@ -339,6 +351,7 @@ class SegTrainer:
         self.nsamples += len(inputs)
         self.nbatches += 1
         loss = loss.detach().item()
+        self.atsamples.append(self.nsamples)
         self.losses.append(loss)
         return loss
 
@@ -396,9 +409,7 @@ class SegTrainer:
 
 def spread_labels(labels, maxdist=9999999):
     """Spread the given labels to the background"""
-    distances, features = ndi.distance_transform_edt(
-        labels == 0, return_distances=1, return_indices=1
-    )
+    distances, features = ndi.distance_transform_edt(labels == 0, return_distances=1, return_indices=1)
     indexes = features[0] * labels.shape[1] + features[1]
     spread = labels.ravel()[indexes.ravel()].reshape(*labels.shape)
     spread *= distances < maxdist
@@ -464,8 +475,7 @@ class Segmenter:
             self.maxdist,
         )
         return [
-            (obj[0].start, obj[0].stop, obj[1].start, obj[1].stop)
-            for obj in ndi.find_objects(self.segments)
+            (obj[0].start, obj[0].stop, obj[1].start, obj[1].stop) for obj in ndi.find_objects(self.segments)
         ]
 
 
@@ -481,11 +491,7 @@ def extract_boxes(page, boxes, pad=5):
     for y0, y1, x0, x1 in boxes:
         h, w = y1 - y0, x1 - x0
         word = ndi.affine_transform(
-            page,
-            np.eye(2),
-            output_shape=(h + 2 * pad, w + 2 * pad),
-            offset=(y0 - pad, x0 - pad),
-            order=0,
+            page, np.eye(2), output_shape=(h + 2 * pad, w + 2 * pad), offset=(y0 - pad, x0 - pad), order=0,
         )
         yield word
 
@@ -532,6 +538,8 @@ def train(
     parallel: bool = False,
     save_interval: float = 30 * 60,
     noutput: int = 4,
+    invert: str = False,
+    remap: str = "",
 ):
     global logger
 
@@ -551,6 +559,19 @@ def train(
     )
     logger.flush()
 
+    if remap == "":
+        remapper = np.zeros(noutput, dtype=np.uint8)
+        for i in range(noutput):
+            remapper[i] = i
+    else:
+        translate = eval("{" + remap + "}")
+        noutput = np.max(list(translate.values())) + 1
+        nclasses = np.max(list(translate.keys())) + 1
+        print(f"noutput {noutput} nclasses {nclasses}")
+        remapper = np.zeros(nclasses, dtype=np.uint8)
+        for k, v in translate.items():
+            remapper[k] = v
+
     kw = eval(f"dict({training_args})")
     training_dl = make_loader(
         training,
@@ -559,12 +580,11 @@ def train(
         shuffle=shuffle,
         augmentation=eval(f"augmentation_{augmentation}"),
         num_workers=num_workers,
+        invert=invert,
+        remapper=remapper,
         **kw,
     )
-    (
-        images,
-        targets,
-    ) = next(iter(training_dl))
+    (images, targets,) = next(iter(training_dl))
     if test is not None:
         kw = eval(f"dict({test_args})")
         test_dl = make_loader(test, batch_size=test_bs, **kw)
@@ -585,6 +605,8 @@ def train(
     for images, targets in repeatedly(training_dl):
         if trainer.nsamples >= ntrain:
             break
+        assert float(targets.min()) >= 0
+        assert float(targets.max()) <= noutput
         trainer.train_batch(images, targets)
         if schedule("progress", 60, initial=True):
             print_progress(trainer)
@@ -606,12 +628,7 @@ def predict(
     prefix: str = "ocroseg",
     output: str = "",
 ):
-    training_dl = make_loader(
-        fname,
-        batch_size=1,
-        extensions=extensions,
-        num_workers=1,
-    )
+    training_dl = make_loader(fname, batch_size=1, extensions=extensions, num_workers=1,)
     model = loading.load_only_model(model)
     model.cuda()
 

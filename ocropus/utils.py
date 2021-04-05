@@ -185,18 +185,37 @@ def imshow_tensor(a, order, b=0, ax=None, **kw):
     ax.imshow(a, **kw)
 
 
-def autoinvert(image, mode):
-    image = image - np.amin(image)
-    image /= max(0.1, np.amax(image))
-    if mode == "False":
-        return image
-    elif mode == "True":
-        return 1.0 - image
-    elif mode == "Auto":
-        if np.mean(image) > np.mean([np.amax(image), np.amin(image)]):
-            return 1.0 - image
-        else:
+def autoinvert(image, mode, normalize=True):
+    assert isinstance(image, np.ndarray)
+    if image.dtype == float:
+        if normalize:
+            image = image - np.amin(image)
+            image /= max(0.1, np.amax(image))
+        if mode == "False":
             return image
+        elif mode == "True":
+            return 1.0 - image
+        elif mode == "Auto":
+            if np.mean(image) > np.mean([np.amax(image), np.amin(image)]):
+                return 1.0 - image
+            else:
+                return image
+    elif image.dtype == np.uint8:
+        if normalize:
+            image = image.astype(np.float) - float(np.amin(image))
+            image *= 255.0 / max(0.1, np.amax(image))
+            image = image.astype(np.uint8)
+        if mode == "False":
+            return image
+        elif mode == "True":
+            return 255 - image
+        elif mode == "Auto":
+            if np.mean(image) > np.mean([np.amax(image), np.amin(image)]):
+                return 255 - image
+            else:
+                return image
+    else:
+        raise ValueError(f"{image.dtype}: unsupported dtype")
 
 
 def safe_randint(lo, hi):
