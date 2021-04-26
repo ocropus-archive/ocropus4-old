@@ -69,6 +69,7 @@ def box_area(box):
 
 def plot_box(b, **kw):
     import matplotlib.pyplot as plt
+
     ys, xs = b[:2]
     y0, y1, x0, x1 = ys.start, ys.stop, xs.start, xs.stop
     plt.plot([x0, x0, x1, x1, x0], [y0, y1, y1, y0, y0], **kw)
@@ -77,3 +78,45 @@ def plot_box(b, **kw):
 def plot_boxes(boxes, **kw):
     for b in boxes:
         plot_box(b, **kw)
+
+
+def intersection(a, b):
+    start = max(a.start, b.start)
+    stop = min(a.stop, b.stop)
+    if start > stop:
+        return None
+    else:
+        return slice(start, stop)
+
+
+def intersections(a, b):
+    result = list(map(intersection, a, b))
+    if None in result:
+        return None
+    else:
+        return result
+
+
+def union(a, b):
+    start = min(a.start, b.start)
+    stop = max(a.stop, b.stop)
+    if start > stop:
+        return None
+    else:
+        return slice(start, stop)
+
+
+def unions(a, b):
+    result = list(map(union, a, b))
+    if None in result:
+        return None
+    else:
+        return result
+
+
+def scale(s, a):
+    return slice(int(a.start * scale), int(a.stop * scale))
+
+
+def scales(s, a):
+    return map(lambda a: scale(s, a), a)
