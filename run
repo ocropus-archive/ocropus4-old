@@ -72,17 +72,20 @@ cmd_venv() { # set up a virtualenv
     pip3 install -U neovim
     pip3 install -U jupyterlab
     pip3 install -U pytest
+    pip3 install -U tabulate
     python3 -m bash_kernel.install
     if true; then
         pip3 install sos-python
         pip3 install sos-notebook
         pip3 install jupyterlab-sos
-        pip3 install -e git://github.com/vatlab/transient-display-data#egg=transient-display-data
         python -m sos_notebook.install
-        jupyter labextension install transient-display-data
-        jupyter labextension install jupyterlab-sos
         pip3 install papermill
         pip3 install sos-papermill
+    fi
+    if false; then
+        pip3 install -e git://github.com/vatlab/transient-display-data#egg=transient-display-data
+        jupyter labextension install transient-display-data
+        jupyter labextension install jupyterlab-sos
     fi
     jupyter kernelspec list
 }

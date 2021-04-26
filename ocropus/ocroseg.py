@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import math
 
 import typer
 import matplotlib.pyplot as plt
@@ -11,9 +12,9 @@ from scipy import ndimage as ndi
 from torch import nn, optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from webdataset import Dataset
 import webdataset as wds
 import torchmore.layers
+import traceback
 import skimage
 import skimage.filters
 
@@ -224,6 +225,8 @@ def display_progress(self):
     else:
         ax1.imshow(doc, cmap="gray")
     p = outputs.detach().cpu().softmax(1)
+    assert not torch.isnan(inputs).any()
+    assert not torch.isnan(outputs).any()
     b, d, h, w = outputs.size()
     result = p.numpy()[0].transpose(1, 2, 0)
     if result.shape[2] > 3:
@@ -235,7 +238,8 @@ def display_progress(self):
     ax2.plot([m, m], [0, h], color="white", alpha=0.5)
     if len(self.losses) >= 100:
         atsamples = self.atsamples[::10]
-        losses = ndi.gaussian_filter(self.losses, 10.0)
+        losses = self.losses
+        losses = ndi.gaussian_filter(losses, 10.0)
         losses = losses[::10]
         losses = ndi.gaussian_filter(losses, 10.0)
         ax4.plot(atsamples, losses)
@@ -345,6 +349,9 @@ class SegTrainer:
             outputs = self.weightlayer.forward(outputs, mask)
         assert inputs.size(0) == outputs.size(0)
         loss = self.compute_loss(outputs, targets)
+        if math.isnan(float(loss)):
+            print("got NaN loss", file=sys.stderr)
+            return 999.0
         loss.backward()
         if self.clip_gradient is not None:
             nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_gradient)
@@ -405,6 +412,8 @@ class SegTrainer:
             err = self.err_batch(inputs, targets)
             errors.append(err)
             total += len(inputs)
+        if len(errors) < 1:
+            return 1.0
         return np.mean(errors)
 
 
@@ -508,6 +517,8 @@ def save_model(logger, trainer, test_dl, ntest=999999):
         print("# testing", file=sys.stderr)
         err = trainer.errors(test_dl, ntest=ntest)
         logger.scalar("val/err", err, step=trainer.nsamples)
+    elif len(trainer.losses) < 10:
+        err = 999.0
     else:
         err = np.mean(trainer.losses[-100:])
     print(f"# saving {trainer.nsamples}", file=sys.stderr)
@@ -621,7 +632,10 @@ def train(
         if schedule("save", save_interval, initial=True):
             save_model(logger, trainer, test_dl)
         if display > 0 and schedule("display", display):
-            display_progress(trainer)
+            try:
+                display_progress(trainer)
+            except:
+                traceback.print_exc()
 
     save_model(logger, trainer, test_dl)
 
