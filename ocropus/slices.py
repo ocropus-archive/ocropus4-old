@@ -81,6 +81,8 @@ def plot_boxes(boxes, **kw):
 
 
 def intersection(a, b):
+    if a is None or b is None:
+        return None
     start = max(a.start, b.start)
     stop = min(a.stop, b.stop)
     if start > stop:
@@ -90,7 +92,10 @@ def intersection(a, b):
 
 
 def intersections(a, b):
-    result = list(map(intersection, a, b))
+    if a is None or b is None:
+        return None
+    result = map(intersection, a, b)
+    result = list(result)
     if None in result:
         return None
     else:

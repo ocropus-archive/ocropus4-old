@@ -69,6 +69,9 @@ nlbin)  # nonlinear binarization
 slog)  # examine logs
     $python3 -m ocropus.slog "$@"
     ;;
+pubnet)  # pubnet-related models
+    $python3 -m ocropus.pubnet "$@"
+    ;;
 wordrec)  # recognize pages
     $python3 -m ocropus.wordrec "$@"
     ;;
