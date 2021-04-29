@@ -298,6 +298,7 @@ class SegTrainer:
         self.weightlayer = torchmore.layers.WeightedGrad()
         self.last_mask = None
         self.set_lr(lr)
+        self.old_interpolate = False
 
     def set_lr(self, lr, momentum=0.9):
         """Set the learning rate.
@@ -330,7 +331,11 @@ class SegTrainer:
             assert outputs.shape[0] == inputs.shape[0]
             assert outputs.ndim == 4
             bs, h, w = targets.shape
-            outputs = F.interpolate(outputs, size=(h, w))
+            if self.old_interpolate:
+                # this is wrong when used with ModPad(16)
+                outputs = F.interpolate(outputs, size=(h, w))
+            else:
+                outputs = outputs[:, :, :h, :w]
         if self.weightmask >= 0:
             mask = targets.detach().numpy()
             assert mask.ndim == 3
@@ -663,117 +668,6 @@ def predict(
         plt.imshow(133)
         plt.imshow(result[0, :, :, 1:])
         plt.show()
-
-
-def allboxes(a):
-    return ndi.find_objects(ndi.label(a)[0])
-
-
-def intersects_any(x, bg):
-    for y in bg:
-        if sl.intersections(x, y) is not None:
-            return True
-    return False
-
-
-def mergeall(fg, bg):
-    fg = fg.copy()
-    result = []
-    while len(fg) > 0:
-        a = fg.pop(0)
-        i = 0
-        while i < len(fg):
-            b = fg[i]
-            u = sl.unions(a, b)
-            if intersects_any(u, bg):
-                i = i + 1
-            else:
-                a = u
-                del fg[i]
-        result.append(a)
-    return result
-
-
-class PubLaynetSegmenter:
-    def __init__(self, model):
-        if isinstance(model, str):
-            model = loading.load_or_construct_model("publaynet-model.pth")
-            model.eval()
-        assert callable(model)
-        self.model = model
-
-    def activate(self, active=True):
-        if active:
-            self.model.cuda()
-        else:
-            self.model.cpu()
-
-
-    def predict_probs(self, im):
-        assert im.shape[0] > 500 and im.shape[0] < 1200
-        assert im.shape[1] > 300 and im.shape[1] < 1000
-        assert np.mean(im) > 0.5
-        input = 1 - torch.tensor(im).permute(2, 0, 1).unsqueeze(0)
-        with torch.no_grad():
-            output = self.model(input).detach().cpu()[0].softmax(0).numpy().transpose(1, 2, 0)
-        assert output.shape[2] == 5
-        return output
-
-    def predict(self, im, merge=True):
-        output = self.predict_probs(im)
-        tables = skimage.filters.apply_hysteresis_threshold(output[..., 1], 0.3, 0.9)
-        images = skimage.filters.apply_hysteresis_threshold(output[..., 2], 0.3, 0.9)
-        markers = skimage.filters.apply_hysteresis_threshold(output[..., 4], 0.3, 0.9)
-        regions = skimage.filters.apply_hysteresis_threshold(
-            np.maximum(output[..., 3], output[..., 4]), 0.3, 0.9
-        )
-        text = marker_segmentation(markers, regions, maxdist=20)
-        combo = np.where(text, 3, np.where(images, 2, np.where(tables, 1, 0)))
-        text_boxes = allboxes(text)
-        table_boxes = allboxes(tables)
-        image_boxes = allboxes(images)
-        if merge:
-            merged_table_boxes = mergeall(table_boxes, text_boxes + image_boxes)
-            merged_image_boxes = mergeall(image_boxes, text_boxes + table_boxes)
-        else:
-            merged_table_boxes = table_boxes
-            merged_image_boxes = image_boxes
-        return text_boxes, merged_table_boxes, merged_image_boxes
-
-    def predict_map(self, im, **kw):
-        textobj, tableobj, imgobj = self.predict(im, **kw)
-        z = np.zeros(im.shape[:2], dtype=int)
-        for s in textobj:
-            z[tuple(s)] = 3
-        for s in tableobj:
-            z[tuple(s)] = 1
-        for s in imgobj:
-            z[tuple(s)] = 2
-        return z
-
-
-@app.command()
-def publaynet(src: str, model: str = "", scale=1.0, nomerge:bool=False, probs:bool=False):
-    segmenter = PubLaynetSegmenter(model)
-    segmenter.activate()
-    ds = wds.WebDataset(src).decode("rgb").to_tuple("__key__", "png;jpg;jpeg")
-    for key, im in ds:
-        if scale != 1.0:
-            im = ndi.zoom(im, [scale, scale, 1][: im.ndim], order=1)
-        plt.clf()
-        plt.subplot(121)
-        plt.imshow(im)
-        if probs:
-            z = segmenter.predict_probs(im)
-            assert z.shape[2] == 5
-            z[..., 3] = np.maximum(z[..., 3], z[..., 4])
-            plt.subplot(122)
-            plt.imshow(z[..., 1:4])
-        else:
-            z = segmenter.predict_map(im, merge=(not nomerge))
-            plt.subplot(122)
-            plt.imshow(z, cmap=plt.cm.viridis, vmax=3)
-        plt.ginput(1, 1000.0)
 
 
 @app.command()
