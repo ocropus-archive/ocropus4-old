@@ -538,7 +538,7 @@ def train(
     training_bs: int = 2,
     display: float = -1.0,
     shuffle: int = 1000,
-    model: str = "segmentation_model_210218",
+    model: str = "segmentation_model_210429",
     test: str = None,
     test_bs: int = 2,
     test_args: str = "",
