@@ -4,6 +4,7 @@ from torchmore import flex
 from torchmore import combos
 from torchmore import inputstats
 from .utils import model
+from . import ocrlayers
 
 
 @model

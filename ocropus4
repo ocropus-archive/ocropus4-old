@@ -78,6 +78,9 @@ wordrec)  # recognize pages
 pagerec)  # recognize pages
     $python3 -m ocropus.pagerec "$@"
     ;;
+models)  # list and show models
+    $python3 -m ocropus.models "$@"
+    ;;
 
 # help
 

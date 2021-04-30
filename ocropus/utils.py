@@ -13,6 +13,8 @@ debug = int(os.environ.get("UTILS_DEBUG", "0"))
 
 do_trace = int(os.environ.get("OCROTRACE", "0"))
 
+all_models = []
+
 
 def unused(f):
     """Used to mark functions that are currently not used but are kept for future reference.
@@ -31,6 +33,8 @@ def useopt(f):
 def model(f):
     """Used to mark functions that create models.
     """
+    global all_models
+    all_models.append(f)
     return f
 
 

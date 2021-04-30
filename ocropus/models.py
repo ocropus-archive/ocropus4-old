@@ -1,13 +1,20 @@
 import torch
 import torch.nn.functional as F
+import re
 from torch import nn
 from torchmore import layers
 from torchmore import flex
 from torchmore import combos
 from torchmore import inputstats
+import typer
 
 from . import ocrlayers
 from .utils import model
+from . import utils
+from . import loading
+
+
+app = typer.Typer()
 
 
 class Spectrum(nn.Module):
@@ -41,6 +48,7 @@ class GlobalAvgPool2d(nn.Module):
 
 @model
 def binarization_210113():
+    """A small model combining convolutions and 2D LSTM for binarization."""
     r = 5
     model = nn.Sequential(
         flex.Conv2d(16, r, padding=r // 2),
@@ -58,7 +66,29 @@ def binarization_210113():
 
 
 @model
+def cbinarization_210429():
+    """A purely convolutional U-net based model."""
+    model = nn.Sequential(
+        ocrlayers.GrayDocument(),
+        layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
+        inputstats.InputStats("cbinarization"),
+        layers.ModPaded(
+            32,
+            combos.make_unet(
+                [32, 64, 128, 256, 512], sub=nn.Sequential(*combos.conv2d_block(256, 3, repeat=1))
+            ),
+        ),
+        flex.Conv2d(1, 3, padding=1),
+        nn.Sigmoid(),
+    )
+    flex.shape_inference(model, (2, 1, 161, 391))
+    return model
+
+
+@model
 def page_orientation_210113(size=256):
+    """A model for page orientation using a VGG-like architecture."""
+
     def block(s, r, repeat=2):
         result = []
         for i in range(repeat):
@@ -87,18 +117,19 @@ def page_orientation_210113(size=256):
 
 @model
 def page_skew_210301(noutput, size=256, r=5, nf=8, r2=5, nf2=4):
+    """A model for page skew using Fourier transforms."""
     model = nn.Sequential(
         ocrlayers.GrayDocument(),
         layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
-        flex.Conv2d(nf, r, padding=r//2),
+        flex.Conv2d(nf, r, padding=r // 2),
         flex.BatchNorm2d(),
         nn.ReLU(),
         Spectrum(),
-        flex.Conv2d(nf2, r2, padding=r2//2),
+        flex.Conv2d(nf2, r2, padding=r2 // 2),
         flex.BatchNorm2d(),
         nn.ReLU(),
         layers.Reshape(0, [1, 2, 3]),
-        flex.Linear(noutput*10),
+        flex.Linear(noutput * 10),
         flex.BatchNorm(),
         nn.ReLU(),
         flex.Linear(noutput),
@@ -109,18 +140,19 @@ def page_skew_210301(noutput, size=256, r=5, nf=8, r2=5, nf2=4):
 
 @model
 def page_scale_210301(noutput, size=(512, 512), r=5, nf=8, r2=5, nf2=4):
+    """A model for page scale using Fourier transforms."""
     model = nn.Sequential(
         ocrlayers.GrayDocument(),
         layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
-        flex.Conv2d(nf, r, padding=r//2),
+        flex.Conv2d(nf, r, padding=r // 2),
         flex.BatchNorm2d(),
         nn.ReLU(),
         Spectrum(),
-        flex.Conv2d(nf2, r2, padding=r2//2),
+        flex.Conv2d(nf2, r2, padding=r2 // 2),
         flex.BatchNorm2d(),
         nn.ReLU(),
         layers.Reshape(0, [1, 2, 3]),
-        flex.Linear(noutput*10),
+        flex.Linear(noutput * 10),
         flex.BatchNorm(),
         nn.ReLU(),
         flex.Linear(noutput),
@@ -131,6 +163,7 @@ def page_scale_210301(noutput, size=(512, 512), r=5, nf=8, r2=5, nf2=4):
 
 @model
 def text_model_210218(noutput):
+    """Text recognition model using 2D LSTM and convolutions."""
     model = nn.Sequential(
         ocrlayers.GrayDocument(),
         layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
@@ -156,12 +189,14 @@ def text_model_210218(noutput):
 
 @model
 def segmentation_model_210429(noutput=4):
+    """Page segmentation using U-net and LSTM combos."""
     model = nn.Sequential(
         ocrlayers.GrayDocument(),
         # ocrlayers.Zoom(0.5),
         layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
         inputstats.InputStats("segmodel"),
-        layers.ModPadded(8,
+        layers.ModPadded(
+            8,
             combos.make_unet([32, 64, 96], sub=flex.BDHW_LSTM(100)),
         ),
         *combos.conv2d_block(48, 3, repeat=2),
@@ -174,14 +209,16 @@ def segmentation_model_210429(noutput=4):
 
 @model
 def publaynet_model_210429(noutput=4):
+    """Layout model tuned for PubLayNet."""
     model = nn.Sequential(
         ocrlayers.GrayDocument(),
         # ocrlayers.Zoom(0.5),
         layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
         inputstats.InputStats("segmodel"),
-        layers.ModPadded(16,
+        layers.ModPadded(
+            16,
             combos.make_unet([40, 60, 80, 100], sub=flex.BDHW_LSTM(100)),
-        )
+        ),
         *combos.conv2d_block(48, 3, repeat=2),
         flex.BDHW_LSTM(32),
         flex.Conv2d(noutput, 3, padding=1),
@@ -190,17 +227,33 @@ def publaynet_model_210429(noutput=4):
     return model
 
 
-@model
-def cbinarization_210429():
-    model = nn.Sequential(
-        ocrlayers.GrayDocument(),
-        layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
-        inputstats.InputStats("cbinarization"),
-        layers.ModPaded(32,
-            combos.make_unet([32, 64, 128, 256, 512], sub=nn.Sequential(*combos.conv2d_block(256, 3, repeat=1))),
-        ),
-        flex.Conv2d(1, 3, padding=1),
-        nn.Sigmoid(),
-    )
-    flex.shape_inference(model, (2, 1, 161, 391))
-    return model
+@app.command()
+def list(long: bool = False):
+    for model in utils.all_models:
+        if long:
+            print(model.__name__)
+            print()
+            print(re.sub(r"(?m)^", "    ", model.__doc__))
+            print()
+        else:
+            print(model.__name__)
+
+
+@app.command()
+def show(name: str, kw: str = ""):
+    for model in utils.all_models:
+        if model.__name__ == name:
+            instance = model(**eval(f"dict({kw})"))
+            print(instance)
+            break
+
+
+@app.command()
+def load(fname: str, kw: str = ""):
+    kw = eval(f"dict({kw})")
+    model = loading.load_or_construct_model(fname, **kw)
+    print(model)
+
+
+if __name__ == "__main__":
+    app()

@@ -74,7 +74,7 @@ cmd_venv() { # set up a virtualenv
     pip3 install -U pytest
     pip3 install -U tabulate
     python3 -m bash_kernel.install
-    if true; then
+    if false; then
         pip3 install sos-python
         pip3 install sos-notebook
         pip3 install jupyterlab-sos
