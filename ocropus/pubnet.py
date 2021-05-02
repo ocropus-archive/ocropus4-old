@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import signal
 
 import typer
 import matplotlib.pyplot as plt
@@ -37,8 +38,19 @@ plt.rc("image", interpolation="nearest")
 app = typer.Typer()
 
 
+def done_exn(*args, **kw):
+    raise Exception("done")
+
+def enable_kill():
+    def handler(signal_received, frame):
+        sys.exit(1)
+    signal.signal(signal.SIGINT, handler)
+
 def allboxes(a):
     return ndi.find_objects(ndi.label(a)[0])
+
+def removed(l, x):
+    return [y for y in l if y != x]
 
 
 def intersects_any(x, bg):
@@ -85,6 +97,7 @@ class PubLaynetSegmenter:
         self.text_opening = [(2, 20)]
         self.images_opening = [(3, 3)]
         self.tables_opening = [(3, 3)]
+        self.offset = (-2, -2)
 
     def activate(self, active=True):
         if active:
@@ -135,7 +148,19 @@ class PubLaynetSegmenter:
             merged_table_boxes = table_boxes
             merged_image_boxes = image_boxes
 
-        return text_boxes, merged_table_boxes, merged_image_boxes
+        return self.fix(text_boxes), self.fix(merged_table_boxes), self.fix(merged_image_boxes)
+
+
+    def fix(self, boxes):
+        if boxes is None:
+            return []
+        result = []
+        dy, dx = self.offset
+        for ys, xs in removed(boxes, None):
+            xs = slice(xs.start+dx, xs.stop+dx)
+            ys = slice(ys.start+dy, ys.stop+dy)
+            result.append((ys, xs))
+        return result
 
     def predict_map(self, im, **kw):
         textobj, tableobj, imgobj = self.predict(im, **kw)
@@ -165,28 +190,36 @@ def pageseg(
     slice: str = "999999999",
     timeout: float = 1e9,
     check: bool = True,
+    offset: str = "-2, -2",
 ):
     segmenter = PubLaynetSegmenter(model)
+    segmenter.offset = eval(f"({offset})")
     segmenter.activate()
     ds = wds.WebDataset(src).decode("rgb").to_tuple("__key__", "png;jpg;jpeg")
     slicer = eval(f"lambda x: islice(x, {slice})")
+    plt.ion()
+    plt.gcf().canvas.mpl_connect('close_event', done_exn)
     for count, (key, im) in slicer(enumerate(ds)):
         if scale != 1.0:
             im = ndi.zoom(im, [scale, scale, 1][: im.ndim], order=1)
+        from matplotlib.patches import Rectangle
+
         plt.clf()
+        plt.subplot(122)
+        z = segmenter.predict_probs(im)
+        assert z.shape[2] == 5
+        z[..., 3] = np.maximum(z[..., 3], z[..., 4])
+        plt.imshow(z[..., 1:4])
         plt.subplot(121)
         plt.title(f"{count}: {key}")
+        ax = plt.gca()
+        text, tables, images = segmenter.predict(im)
         plt.imshow(im)
-        if probs:
-            z = segmenter.predict_probs(im)
-            assert z.shape[2] == 5
-            z[..., 3] = np.maximum(z[..., 3], z[..., 4])
-            plt.subplot(122)
-            plt.imshow(z[..., 1:4])
-        else:
-            z = segmenter.predict_map(im, merge=(not nomerge), check=check)
-            plt.subplot(122)
-            plt.imshow(z, cmap=plt.cm.viridis, vmax=3)
+        for (boxes, color) in zip([text, tables, images], ["blue", "red", "green"]):
+            for ys, xs in boxes:
+                w, h = xs.stop - xs.start, ys.stop - ys.start
+                ax.add_patch(Rectangle((xs.start, ys.start), w, h, color=color, alpha=0.4))
+        enable_kill()
         plt.ginput(1, timeout)
 
 
@@ -200,6 +233,7 @@ class PubTabnetSegmenter:
         self.hystthresh = (0.5, 0.9)
         self.opening = []
         self.do_interpolate = True
+        self.offset = (-2, -2)
 
     def activate(self, active=True):
         if active:
@@ -238,7 +272,7 @@ class PubTabnetSegmenter:
         text = ocroseg.marker_segmentation(markers, regions, maxdist=20)  # this is labels
         text_boxes = ndi.find_objects(text)
 
-        return text_boxes
+        return self.fix(text_boxes)
 
     def predict_map(self, im, **kw):
         textobj = self.predict(im, **kw)
@@ -249,6 +283,18 @@ class PubTabnetSegmenter:
             z[tuple(s)] = 3
         return z
 
+    def fix(self, boxes):
+        if boxes is None:
+            return []
+        result = []
+        dy, dx = self.offset
+        for ys, xs in removed(boxes, None):
+            xs = slice(xs.start+dx, xs.stop+dx)
+            ys = slice(ys.start+dy, ys.stop+dy)
+            result.append((ys, xs))
+        return result
+
+
 
 @app.command()
 def tabseg(
@@ -257,36 +303,40 @@ def tabseg(
     scale=1.0,
     nomerge: bool = False,
     probs: bool = False,
-    slice: str = "999999999",
+    sliced: str = "999999999",
     timeout: float = 1e9,
+    offset: str = "-2,-2",
     check: bool = True,
     verbose: bool = False,
 ):
     segmenter = PubTabnetSegmenter(model)
+    segmenter.offset = eval(f"({offset})")
     if verbose:
         print(segmenter.model)
     segmenter.activate()
     ds = wds.WebDataset(src).decode("rgb").to_tuple("__key__", "png;jpg;jpeg")
-    slicer = eval(f"lambda x: islice(x, {slice})")
+    slicer = eval(f"lambda x: islice(x, {sliced})")
+    plt.ion()
+    plt.gcf().canvas.mpl_connect('close_event', done_exn)
     for count, (key, im) in slicer(enumerate(ds)):
         if scale != 1.0:
             im = ndi.zoom(im, [scale, scale, 1], order=1)
         plt.clf()
-        if probs:
-            plt.title(f"{count}: {key}")
-            z = segmenter.predict_probs(im)
-            assert z.shape[2] == 5
-            z[..., 3] = np.maximum(z[..., 3], z[..., 4])
-            plt.imshow(im * 0.5 + z[..., 1:4] * 0.5)
-        else:
-            from matplotlib.patches import Rectangle
-
-            fig, ax = plt.subplots()
-            boxes = segmenter.predict(im)
-            plt.imshow(im)
-            for ys, xs in boxes:
-                w, h = xs.stop - xs.start, ys.stop - ys.start
-                ax.add_patch(Rectangle((xs.start, ys.start - h), w, h, color="red", alpha=0.2))
+        plt.subplot(122)
+        plt.title(f"{count}: {key}")
+        z = segmenter.predict_probs(im)
+        assert z.shape[2] == 5
+        z[..., 3] = np.maximum(z[..., 3], z[..., 4])
+        plt.imshow(im * 0.05 + z[..., 1:4] * 0.95)
+        plt.subplot(121)
+        from matplotlib.patches import Rectangle
+        ax = plt.gca()
+        boxes = segmenter.predict(im)
+        plt.imshow(im)
+        for ys, xs in boxes:
+            w, h = xs.stop - xs.start, ys.stop - ys.start
+            ax.add_patch(Rectangle((xs.start, ys.start), w, h, color="red", alpha=0.2))
+        enable_kill()
         plt.ginput(1, timeout)
 
 
