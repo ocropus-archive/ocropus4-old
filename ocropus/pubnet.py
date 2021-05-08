@@ -1,32 +1,19 @@
-import os
-import sys
-import time
 import signal
+import sys
 
-import typer
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
-from numpy import amin, median, mean
-from scipy import ndimage as ndi
-from torch import nn, optim
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
-from webdataset import Dataset
-import webdataset as wds
-import torchmore.layers
 import skimage
 import skimage.filters
-from itertools import islice
+import torch
+import torch.nn.functional as F
+import typer
+import webdataset as wds
+from scipy import ndimage as ndi
 
-from .utils import Schedule, repeatedly
-from . import slog
-from . import utils
-from . import loading
-from . import patches
+from . import loading, ocroseg
 from . import slices as sl
-from . import ocroseg
-from .utils import useopt, junk
+from . import slog
 
 
 logger = slog.NoLogger()
@@ -41,13 +28,17 @@ app = typer.Typer()
 def done_exn(*args, **kw):
     raise Exception("done")
 
+
 def enable_kill():
     def handler(signal_received, frame):
         sys.exit(1)
+
     signal.signal(signal.SIGINT, handler)
+
 
 def allboxes(a):
     return ndi.find_objects(ndi.label(a)[0])
+
 
 def removed(l, x):
     return [y for y in l if y != x]
@@ -82,7 +73,7 @@ def opening(a, shape, shape2=None):
     result = ndi.maximum_filter(ndi.minimum_filter(a, shape), shape)
     if shape2 is not None:
         result2 = ndi.maximum_filter(ndi.minimum_filter(a, shape2), shape2)
-        result = nd.maximum(result, result2)
+        result = np.maximum(result, result2)
     return result
 
 
@@ -150,15 +141,14 @@ class PubLaynetSegmenter:
 
         return self.fix(text_boxes), self.fix(merged_table_boxes), self.fix(merged_image_boxes)
 
-
     def fix(self, boxes):
         if boxes is None:
             return []
         result = []
         dy, dx = self.offset
         for ys, xs in removed(boxes, None):
-            xs = slice(xs.start+dx, xs.stop+dx)
-            ys = slice(ys.start+dy, ys.stop+dy)
+            xs = slice(xs.start + dx, xs.stop + dx)
+            ys = slice(ys.start + dy, ys.stop + dy)
             result.append((ys, xs))
         return result
 
@@ -198,7 +188,7 @@ def pageseg(
     ds = wds.WebDataset(src).decode("rgb").to_tuple("__key__", "png;jpg;jpeg")
     slicer = eval(f"lambda x: islice(x, {slice})")
     plt.ion()
-    plt.gcf().canvas.mpl_connect('close_event', done_exn)
+    plt.gcf().canvas.mpl_connect("close_event", done_exn)
     for count, (key, im) in slicer(enumerate(ds)):
         if scale != 1.0:
             im = ndi.zoom(im, [scale, scale, 1][: im.ndim], order=1)
@@ -289,11 +279,10 @@ class PubTabnetSegmenter:
         result = []
         dy, dx = self.offset
         for ys, xs in removed(boxes, None):
-            xs = slice(xs.start+dx, xs.stop+dx)
-            ys = slice(ys.start+dy, ys.stop+dy)
+            xs = slice(xs.start + dx, xs.stop + dx)
+            ys = slice(ys.start + dy, ys.stop + dy)
             result.append((ys, xs))
         return result
-
 
 
 @app.command()
@@ -317,7 +306,7 @@ def tabseg(
     ds = wds.WebDataset(src).decode("rgb").to_tuple("__key__", "png;jpg;jpeg")
     slicer = eval(f"lambda x: islice(x, {sliced})")
     plt.ion()
-    plt.gcf().canvas.mpl_connect('close_event', done_exn)
+    plt.gcf().canvas.mpl_connect("close_event", done_exn)
     for count, (key, im) in slicer(enumerate(ds)):
         if scale != 1.0:
             im = ndi.zoom(im, [scale, scale, 1], order=1)
@@ -330,6 +319,7 @@ def tabseg(
         plt.imshow(im * 0.05 + z[..., 1:4] * 0.95)
         plt.subplot(121)
         from matplotlib.patches import Rectangle
+
         ax = plt.gca()
         boxes = segmenter.predict(im)
         plt.imshow(im)

@@ -6,3 +6,7 @@ tk
 black
 bash_kernel
 pydocstyle
+
+black
+isort
+mypy
