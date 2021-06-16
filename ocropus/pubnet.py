@@ -27,6 +27,7 @@ from . import patches
 from . import slices as sl
 from . import ocroseg
 from .utils import useopt, junk
+from matplotlib.patches import Rectangle
 
 
 logger = slog.NoLogger()
@@ -149,7 +150,9 @@ class PubLaynetSegmenter:
             merged_table_boxes = table_boxes
             merged_image_boxes = image_boxes
 
-        return self.fix(text_boxes), self.fix(merged_table_boxes), self.fix(merged_image_boxes)
+        result = self.fix(text_boxes), self.fix(merged_table_boxes), self.fix(merged_image_boxes)
+        self.last_result = result
+        return result
 
 
     def fix(self, boxes):
@@ -193,6 +196,26 @@ def rescale(im, scale, target=(800, 800)):
         im = ndi.zoom(im, [scale, scale, 1][: im.ndim], order=1)
         return im
 
+def pageseg_display(im, segmenter, title="", timeout=10.0):
+    if timeout < 0:
+        return
+    text, tables, images = segmenter.last_result
+    plt.clf()
+    plt.subplot(122)
+    z = segmenter.last_probs
+    assert z.shape[2] == 5
+    z[..., 3] = np.maximum(z[..., 3], z[..., 4])
+    plt.imshow(z[..., 1:4])
+    plt.subplot(121)
+    plt.title(title)
+    ax = plt.gca()
+    plt.imshow(im)
+    for (boxes, color) in zip([text, tables, images], ["blue", "red", "green"]):
+        for ys, xs in boxes:
+            w, h = xs.stop - xs.start, ys.stop - ys.start
+            ax.add_patch(Rectangle((xs.start, ys.start), w, h, color=color, alpha=0.4))
+    enable_kill()
+    plt.ginput(1, timeout)
 
 @app.command()
 def pageseg(
@@ -217,26 +240,8 @@ def pageseg(
     for count, (key, im) in slicer(enumerate(ds)):
         im = rescale(im, scale, target=(800, 800))
         text, tables, images = segmenter.predict(im)
+        pageseg_display(im, segmenter, title=f"{count}: {key}")
 
-        if True:
-            from matplotlib.patches import Rectangle
-
-            plt.clf()
-            plt.subplot(122)
-            z = segmenter.last_probs
-            assert z.shape[2] == 5
-            z[..., 3] = np.maximum(z[..., 3], z[..., 4])
-            plt.imshow(z[..., 1:4])
-            plt.subplot(121)
-            plt.title(f"{count}: {key}")
-            ax = plt.gca()
-            plt.imshow(im)
-            for (boxes, color) in zip([text, tables, images], ["blue", "red", "green"]):
-                for ys, xs in boxes:
-                    w, h = xs.stop - xs.start, ys.stop - ys.start
-                    ax.add_patch(Rectangle((xs.start, ys.start), w, h, color=color, alpha=0.4))
-            enable_kill()
-            plt.ginput(1, timeout)
 
 
 class PubTabnetSegmenter:
@@ -289,7 +294,9 @@ class PubTabnetSegmenter:
         text = ocroseg.marker_segmentation(markers, regions, maxdist=20)  # this is labels
         text_boxes = ndi.find_objects(text)
 
-        return self.fix(text_boxes)
+        result = self.fix(text_boxes)
+        self.last_result = result
+        return result
 
     def predict_map(self, im, **kw):
         textobj = self.predict(im, **kw)
@@ -312,6 +319,25 @@ class PubTabnetSegmenter:
         return result
 
 
+def tabseg_display(im, segmenter, title="", timeout=10.0):
+    if timeout < 0:
+        return
+    boxes = segmenter.last_result
+    plt.clf()
+    plt.subplot(122)
+    plt.title(title)
+    z = segmenter.last_probs
+    assert z.shape[2] == 5
+    z[..., 3] = np.maximum(z[..., 3], z[..., 4])
+    plt.imshow(im * 0.05 + z[..., 1:4] * 0.95)
+    plt.subplot(121)
+    ax = plt.gca()
+    plt.imshow(im)
+    for ys, xs in boxes:
+        w, h = xs.stop - xs.start, ys.stop - ys.start
+        ax.add_patch(Rectangle((xs.start, ys.start), w, h, color="red", alpha=0.2))
+    enable_kill()
+    plt.ginput(1, timeout)
 
 @app.command()
 def tabseg(
@@ -339,24 +365,7 @@ def tabseg(
     for count, (key, im) in slicer(enumerate(ds)):
         im = rescale(im, scale, target=(800, 800))
         boxes = segmenter.predict(im)
-        if True:
-            plt.clf()
-            plt.subplot(122)
-            plt.title(f"{count}: {key}")
-            z = segmenter.last_probs
-            assert z.shape[2] == 5
-            z[..., 3] = np.maximum(z[..., 3], z[..., 4])
-            plt.imshow(im * 0.05 + z[..., 1:4] * 0.95)
-            plt.subplot(121)
-            from matplotlib.patches import Rectangle
-            ax = plt.gca()
-            plt.imshow(im)
-            for ys, xs in boxes:
-                w, h = xs.stop - xs.start, ys.stop - ys.start
-                ax.add_patch(Rectangle((xs.start, ys.start), w, h, color="red", alpha=0.2))
-            enable_kill()
-            plt.ginput(1, timeout)
-
+        tabseg_display(im, segmenter, title=f"{count}: {key}")
 
 @app.command()
 def noop():
