@@ -1,4 +1,4 @@
-click==7.1.1
+click
 typer
 braceexpand
 bs4

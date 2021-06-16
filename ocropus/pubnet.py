@@ -118,6 +118,7 @@ class PubLaynetSegmenter:
 
     def predict(self, im, merge=True, check=True):
         output = self.predict_probs(im, check=check)
+        self.last_probs = output
         lo, hi = self.hystthresh
 
         # use hysteresis thresholding for all the major regions
@@ -180,11 +181,24 @@ class PubLaynetSegmenter:
         return z
 
 
+def rescale(im, scale, target=(800, 800)):
+    if scale is None or scale == 1:
+        return im
+    if isinstance(scale, (int, float)):
+        im = ndi.zoom(im, [scale, scale, 1][: im.ndim], order=1)
+        return im
+    if isinstance(scale, tuple):
+        scale = np.amin(np.array(target, dtype=float) / np.array(scale))
+        scale = min(scale, 1.0)
+        im = ndi.zoom(im, [scale, scale, 1][: im.ndim], order=1)
+        return im
+
+
 @app.command()
 def pageseg(
     src: str,
     model: str = "publaynet-model.pth",
-    scale=1.0,
+    scale: str = "(800, 800)",
     nomerge: bool = False,
     probs: bool = False,
     slice: str = "999999999",
@@ -192,6 +206,7 @@ def pageseg(
     check: bool = True,
     offset: str = "-2, -2",
 ):
+    scale = eval(scale)
     segmenter = PubLaynetSegmenter(model)
     segmenter.offset = eval(f"({offset})")
     segmenter.activate()
@@ -200,27 +215,28 @@ def pageseg(
     plt.ion()
     plt.gcf().canvas.mpl_connect('close_event', done_exn)
     for count, (key, im) in slicer(enumerate(ds)):
-        if scale != 1.0:
-            im = ndi.zoom(im, [scale, scale, 1][: im.ndim], order=1)
-        from matplotlib.patches import Rectangle
-
-        plt.clf()
-        plt.subplot(122)
-        z = segmenter.predict_probs(im)
-        assert z.shape[2] == 5
-        z[..., 3] = np.maximum(z[..., 3], z[..., 4])
-        plt.imshow(z[..., 1:4])
-        plt.subplot(121)
-        plt.title(f"{count}: {key}")
-        ax = plt.gca()
+        im = rescale(im, scale, target=(800, 800))
         text, tables, images = segmenter.predict(im)
-        plt.imshow(im)
-        for (boxes, color) in zip([text, tables, images], ["blue", "red", "green"]):
-            for ys, xs in boxes:
-                w, h = xs.stop - xs.start, ys.stop - ys.start
-                ax.add_patch(Rectangle((xs.start, ys.start), w, h, color=color, alpha=0.4))
-        enable_kill()
-        plt.ginput(1, timeout)
+
+        if True:
+            from matplotlib.patches import Rectangle
+
+            plt.clf()
+            plt.subplot(122)
+            z = segmenter.last_probs
+            assert z.shape[2] == 5
+            z[..., 3] = np.maximum(z[..., 3], z[..., 4])
+            plt.imshow(z[..., 1:4])
+            plt.subplot(121)
+            plt.title(f"{count}: {key}")
+            ax = plt.gca()
+            plt.imshow(im)
+            for (boxes, color) in zip([text, tables, images], ["blue", "red", "green"]):
+                for ys, xs in boxes:
+                    w, h = xs.stop - xs.start, ys.stop - ys.start
+                    ax.add_patch(Rectangle((xs.start, ys.start), w, h, color=color, alpha=0.4))
+            enable_kill()
+            plt.ginput(1, timeout)
 
 
 class PubTabnetSegmenter:
@@ -257,6 +273,7 @@ class PubTabnetSegmenter:
 
     def predict(self, im, merge=True, check=True):
         output = self.predict_probs(im, check=check)
+        self.last_probs = output
         lo, hi = self.hystthresh
 
         # use hysteresis thresholding for all the major regions
@@ -300,7 +317,7 @@ class PubTabnetSegmenter:
 def tabseg(
     src: str,
     model: str = "pubtabnet-model.pth",
-    scale=1.0,
+    scale: str = "1.0",
     nomerge: bool = False,
     probs: bool = False,
     sliced: str = "999999999",
@@ -309,6 +326,7 @@ def tabseg(
     check: bool = True,
     verbose: bool = False,
 ):
+    scale = eval(scale)
     segmenter = PubTabnetSegmenter(model)
     segmenter.offset = eval(f"({offset})")
     if verbose:
@@ -319,25 +337,25 @@ def tabseg(
     plt.ion()
     plt.gcf().canvas.mpl_connect('close_event', done_exn)
     for count, (key, im) in slicer(enumerate(ds)):
-        if scale != 1.0:
-            im = ndi.zoom(im, [scale, scale, 1], order=1)
-        plt.clf()
-        plt.subplot(122)
-        plt.title(f"{count}: {key}")
-        z = segmenter.predict_probs(im)
-        assert z.shape[2] == 5
-        z[..., 3] = np.maximum(z[..., 3], z[..., 4])
-        plt.imshow(im * 0.05 + z[..., 1:4] * 0.95)
-        plt.subplot(121)
-        from matplotlib.patches import Rectangle
-        ax = plt.gca()
+        im = rescale(im, scale, target=(800, 800))
         boxes = segmenter.predict(im)
-        plt.imshow(im)
-        for ys, xs in boxes:
-            w, h = xs.stop - xs.start, ys.stop - ys.start
-            ax.add_patch(Rectangle((xs.start, ys.start), w, h, color="red", alpha=0.2))
-        enable_kill()
-        plt.ginput(1, timeout)
+        if True:
+            plt.clf()
+            plt.subplot(122)
+            plt.title(f"{count}: {key}")
+            z = segmenter.last_probs
+            assert z.shape[2] == 5
+            z[..., 3] = np.maximum(z[..., 3], z[..., 4])
+            plt.imshow(im * 0.05 + z[..., 1:4] * 0.95)
+            plt.subplot(121)
+            from matplotlib.patches import Rectangle
+            ax = plt.gca()
+            plt.imshow(im)
+            for ys, xs in boxes:
+                w, h = xs.stop - xs.start, ys.stop - ys.start
+                ax.add_patch(Rectangle((xs.start, ys.start), w, h, color="red", alpha=0.2))
+            enable_kill()
+            plt.ginput(1, timeout)
 
 
 @app.command()
