@@ -2,7 +2,7 @@
 library=$1
 shift
 
-python3=${python3:-python3}
+python3="${python3:-python3} $pdb"
 
 help() {
 cat <<EOF

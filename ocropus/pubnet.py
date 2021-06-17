@@ -61,7 +61,15 @@ def intersects_any(x, bg):
     return False
 
 
-def mergeall(fg, bg):
+def large_rect(r):
+    if r[0].stop - r[0].start < 20: 
+        return False
+    if r[1].stop - r[1].start < 20: 
+        return False
+    return True
+
+
+def merge_against_background(fg, bg):
     fg = fg.copy()
     result = []
     while len(fg) > 0:
@@ -86,6 +94,77 @@ def opening(a, shape, shape2=None):
         result = nd.maximum(result, result2)
     return result
 
+def closing(a, shape, shape2=None):
+    result = ndi.minimum_filter(ndi.maximum_filter(a, shape), shape)
+    if shape2 is not None:
+        result2 = ndi.minimum_filter(ndi.maximum_filter(a, shape2), shape2)
+        result = nd.maximum(result, result2)
+    return result
+
+
+def simple_binarize(im):
+    im = im.astype(float)
+    if im.ndim == 3:
+        im = np.mean(im, axis=2)
+    im = im - np.amin(im)
+    im /= np.amax(im)
+    if np.mean(im) > 0.5:
+        im = 1.0 - im
+    threshold = np.mean([np.median(im), np.mean(im)])
+    return (im > threshold).astype(int)
+
+
+def makergb(r, g, b=None):
+    b = b if b is not None else g
+    dimage = np.array([r, g, b]).transpose(1, 2, 0).astype(float)
+    dimage /= np.amax(dimage)
+    return dimage
+
+
+def covering_rectangle(rect, bin, exclude=None, prepad=0, postpad=5, debug=0):
+    assert bin.dtype in [bool, np.uint8, int]
+    assert np.amin(bin) >= 0 and np.amax(bin) <= 1
+    bin = bin.astype(int)
+    if debug:
+        plt.clf()
+        plt.subplot(231)
+        plt.imshow(bin)
+    mask = np.zeros_like(bin)
+    mask[rect[0], rect[1]] = 1
+    mask = ndi.maximum_filter(mask, prepad)
+    if exclude is not None:
+        mask = np.minimum(mask, exclude)
+    if debug:
+        plt.subplot(232); plt.imshow(mask)
+    mbin = (np.maximum(bin, mask) > 0)
+    center = lambda x: int(np.mean([x.stop, x.start]))
+    center_y, center_x = center(rect[0]), center(rect[1])
+    components, n = ndi.label(mbin)
+    if debug:
+        plt.subplot(233); plt.imshow(np.sin(components*17.3), cmap=plt.cm.viridis)
+    the_component = components[center_y, center_x]
+    assert the_component != 0
+    cmask = (components == the_component).astype(int)
+    if debug:
+        plt.subplot(234); plt.imshow(cmask)
+    if debug:
+        plt.subplot(235); plt.imshow(makergb(cmask, exclude, mbin))
+    if exclude is not None:
+        cmask = np.minimum(cmask, exclude)
+    cmask = ndi.maximum_filter(cmask, postpad)
+    cmask = np.clip(cmask, 0, 1)
+    objects = ndi.find_objects(cmask)
+    rrect = objects[0]
+    if debug:
+        plt.subplot(236)
+        dresult = np.zeros_like(bin)
+        dresult[rrect[0], rrect[1]] = 1
+        dimage = np.array([cmask, bin, dresult]).transpose(1, 2, 0).astype(float)
+        plt.imshow(dimage)
+        plt.ginput(1, debug)
+    assert len(objects) == 1
+    return objects[0]
+
 
 class PubLaynetSegmenter:
     def __init__(self, model):
@@ -106,7 +185,9 @@ class PubLaynetSegmenter:
         else:
             self.model.cpu()
 
-    def predict_probs(self, im, check=True):
+    def predict_probs(self, im, scale=1.0, check=True):
+        if scale != 1.0:
+            im = ndi.zoom(im, (scale, scale, 1.0), order=1)
         if check:
             assert im.shape[0] > 500 and im.shape[0] < 1200, im.shape
             assert im.shape[1] > 300 and im.shape[1] < 1000, im.shape
@@ -114,11 +195,13 @@ class PubLaynetSegmenter:
         input = 1 - torch.tensor(im).permute(2, 0, 1).unsqueeze(0)
         with torch.no_grad():
             output = self.model(input).detach().cpu()[0].softmax(0).numpy().transpose(1, 2, 0)
+        if scale != 1.0:
+            output = ndi.zoom(output, (1.0/scale, 1.0/scale, 1.0), order=0)
         assert output.shape[2] == 5
         return output
 
-    def predict(self, im, merge=True, check=True):
-        output = self.predict_probs(im, check=check)
+    def predict(self, im, scale=1.0, merge=True, check=True):
+        output = self.predict_probs(im, scale=1.0, check=check)
         self.last_probs = output
         lo, hi = self.hystthresh
 
@@ -144,8 +227,8 @@ class PubLaynetSegmenter:
         text_boxes = ndi.find_objects(text)
 
         if merge:
-            merged_table_boxes = mergeall(table_boxes, text_boxes + image_boxes)
-            merged_image_boxes = mergeall(image_boxes, text_boxes + table_boxes)
+            merged_table_boxes = merge_against_background(table_boxes, text_boxes + image_boxes)
+            merged_image_boxes = merge_against_background(image_boxes, text_boxes + table_boxes)
         else:
             merged_table_boxes = table_boxes
             merged_image_boxes = image_boxes
@@ -183,6 +266,24 @@ class PubLaynetSegmenter:
             z[tuple(s)] = 2
         return z
 
+def showtypes(d):
+    for k, v in d.items():
+        print("#", k, type(v), getattr(v, "dtype", None))
+
+def simplify(x):
+    if isinstance(x, (int, float, bool, type(None))):
+        return x
+    if isinstance(x, (tuple, list)):
+        return [simplify(y) for y in x]
+    if isinstance(x, dict):
+        return {str(key): simplify(value) for key, value in x.items()}
+    if isinstance(x, slice):
+        result = dict(start=simplify(x.start), stop=simplify(x.stop))
+        if x.step is not None:
+            result["step"] = x.step
+        return result
+    raise ValueError(f"{type(x)}: unknown type, value: {str(x)[:100]}")
+
 
 def rescale(im, scale, target=(800, 800)):
     if scale is None or scale == 1:
@@ -196,10 +297,10 @@ def rescale(im, scale, target=(800, 800)):
         im = ndi.zoom(im, [scale, scale, 1][: im.ndim], order=1)
         return im
 
-def pageseg_display(im, segmenter, title="", timeout=10.0):
+def pageseg_display(im, segmenter, result=None, title="", timeout=10.0):
     if timeout < 0:
         return
-    text, tables, images = segmenter.last_result
+    text, tables, images = result or segmenter.last_result
     plt.clf()
     plt.subplot(122)
     z = segmenter.last_probs
@@ -221,27 +322,69 @@ def pageseg_display(im, segmenter, title="", timeout=10.0):
 def pageseg(
     src: str,
     model: str = "publaynet-model.pth",
-    scale: str = "(800, 800)",
+    scale: float = 1.0,
     nomerge: bool = False,
     probs: bool = False,
     slice: str = "999999999",
     timeout: float = 1e9,
     check: bool = True,
     offset: str = "-2, -2",
+    output: str = "",
+    display: float = -1,
+    outputs: str = "PFT",
+    nocover: bool = False,
 ):
-    scale = eval(scale)
     segmenter = PubLaynetSegmenter(model)
     segmenter.offset = eval(f"({offset})")
     segmenter.activate()
-    ds = wds.WebDataset(src).decode("rgb").to_tuple("__key__", "png;jpg;jpeg")
+    ds = wds.WebDataset(src).decode("rgb").rename(jpg="png;jpg;jpeg")
+    sink = None
+    if output != "":
+        assert not os.path.exists(output)
+        sink = wds.TarWriter(output)
     slicer = eval(f"lambda x: islice(x, {slice})")
     plt.ion()
     plt.gcf().canvas.mpl_connect('close_event', done_exn)
-    for count, (key, im) in slicer(enumerate(ds)):
-        im = rescale(im, scale, target=(800, 800))
-        text, tables, images = segmenter.predict(im)
-        pageseg_display(im, segmenter, title=f"{count}: {key}")
-
+    for count, sample in slicer(enumerate(ds)):
+        key, im = sample["__key__"], sample["jpg"]
+        bin = closing(simple_binarize(im), 5)
+        print(key)
+        text, tables, images = segmenter.predict(im, scale)
+        if not nocover:
+            exclude = np.ones_like(bin, dtype=int)
+            for b in text:
+                exclude[b[0], b[1]] = 0
+            exclude = ndi.minimum_filter(exclude, (5, 20))
+            tables = [covering_rectangle(b, bin, exclude) for b in tables if large_rect(b)]
+            images = [covering_rectangle(b, bin, exclude) for b in images if large_rect(b)]
+        if display>= 0:
+            pageseg_display(bin, segmenter, result=(text, tables, images), title=f"{count}: {key}", timeout=display)
+        seg = segmenter.last_probs.copy()
+        assert seg.shape[2] == 5
+        seg[..., 3] = np.maximum(seg[..., 3], seg[..., 4])
+        seg = seg[..., 1:4]
+        result = dict(sample)
+        add = {
+            "probs.jpg": seg,
+            "text.json": simplify(text),
+            "tables.json": simplify(tables),
+            "images.json": simplify(images),
+        }
+        result.update(add)
+        if sink is not None and "p" in outputs.lower():
+            sink.write(result)
+        if sink is not None and "f" in outputs.lower():
+            for index, bounds in enumerate(images):
+                image = im[bounds[0], bounds[1], ...]
+                result = dict(__key__=key+f"/fig{index}", jpg=image)
+                sink.write(result)
+                print(result["__key__"])
+        if sink is not None and "t" in outputs.lower():
+            for index, bounds in enumerate(tables):
+                image = im[bounds[0], bounds[1], ...]
+                result = dict(__key__=key+f"/tab{index}", jpg=image)
+                sink.write(result)
+                print(result["__key__"])
 
 
 class PubTabnetSegmenter:
@@ -343,7 +486,7 @@ def tabseg_display(im, segmenter, title="", timeout=10.0):
 def tabseg(
     src: str,
     model: str = "pubtabnet-model.pth",
-    scale: str = "1.0",
+    scale: float = 1.0,
     nomerge: bool = False,
     probs: bool = False,
     sliced: str = "999999999",
@@ -352,7 +495,6 @@ def tabseg(
     check: bool = True,
     verbose: bool = False,
 ):
-    scale = eval(scale)
     segmenter = PubTabnetSegmenter(model)
     segmenter.offset = eval(f"({offset})")
     if verbose:
