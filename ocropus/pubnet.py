@@ -42,13 +42,17 @@ app = typer.Typer()
 def done_exn(*args, **kw):
     raise Exception("done")
 
+
 def enable_kill():
     def handler(signal_received, frame):
         sys.exit(1)
+
     signal.signal(signal.SIGINT, handler)
+
 
 def allboxes(a):
     return ndi.find_objects(ndi.label(a)[0])
+
 
 def removed(l, x):
     return [y for y in l if y != x]
@@ -62,9 +66,9 @@ def intersects_any(x, bg):
 
 
 def large_rect(r):
-    if r[0].stop - r[0].start < 20: 
+    if r[0].stop - r[0].start < 20:
         return False
-    if r[1].stop - r[1].start < 20: 
+    if r[1].stop - r[1].start < 20:
         return False
     return True
 
@@ -93,6 +97,7 @@ def opening(a, shape, shape2=None):
         result2 = ndi.maximum_filter(ndi.minimum_filter(a, shape2), shape2)
         result = nd.maximum(result, result2)
     return result
+
 
 def closing(a, shape, shape2=None):
     result = ndi.minimum_filter(ndi.maximum_filter(a, shape), shape)
@@ -135,20 +140,24 @@ def covering_rectangle(rect, bin, exclude=None, prepad=0, postpad=5, debug=0):
     if exclude is not None:
         mask = np.minimum(mask, exclude)
     if debug:
-        plt.subplot(232); plt.imshow(mask)
-    mbin = (np.maximum(bin, mask) > 0)
+        plt.subplot(232)
+        plt.imshow(mask)
+    mbin = np.maximum(bin, mask) > 0
     center = lambda x: int(np.mean([x.stop, x.start]))
     center_y, center_x = center(rect[0]), center(rect[1])
     components, n = ndi.label(mbin)
     if debug:
-        plt.subplot(233); plt.imshow(np.sin(components*17.3), cmap=plt.cm.viridis)
+        plt.subplot(233)
+        plt.imshow(np.sin(components * 17.3), cmap=plt.cm.viridis)
     the_component = components[center_y, center_x]
     assert the_component != 0
     cmask = (components == the_component).astype(int)
     if debug:
-        plt.subplot(234); plt.imshow(cmask)
+        plt.subplot(234)
+        plt.imshow(cmask)
     if debug:
-        plt.subplot(235); plt.imshow(makergb(cmask, exclude, mbin))
+        plt.subplot(235)
+        plt.imshow(makergb(cmask, exclude, mbin))
     if exclude is not None:
         cmask = np.minimum(cmask, exclude)
     cmask = ndi.maximum_filter(cmask, postpad)
@@ -186,21 +195,23 @@ class PubLaynetSegmenter:
             self.model.cpu()
 
     def predict_probs(self, im, scale=1.0, check=True):
+        h, w, _ = im.shape
         if scale != 1.0:
             im = ndi.zoom(im, (scale, scale, 1.0), order=1)
         if check:
             assert im.shape[0] > 500 and im.shape[0] < 1200, im.shape
             assert im.shape[1] > 300 and im.shape[1] < 1000, im.shape
             assert np.mean(im) > 0.5
-        input = 1 - torch.tensor(im).permute(2, 0, 1).unsqueeze(0)
         with torch.no_grad():
-            output = self.model(input).detach().cpu()[0].softmax(0).numpy().transpose(1, 2, 0)
-        if scale != 1.0:
-            output = ndi.zoom(output, (1.0/scale, 1.0/scale, 1.0), order=0)
-        assert output.shape[2] == 5
+            input = 1 - torch.tensor(im).permute(2, 0, 1).unsqueeze(0)
+            output = self.model(input)
+            if output.shape[3] != h or output.shape[4] != w:
+                output = F.interpolate(output, size=(h, w))
+            output = output.detach().cpu()[0].softmax(0).numpy().transpose(1, 2, 0)
+        assert output.shape == (h, w, 5)
         return output
 
-    def predict(self, im, scale=1.0, merge=True, check=True):
+    def predict(self, im, scale=1.0, merge=True, check=True, nocover=False):
         output = self.predict_probs(im, scale=1.0, check=check)
         self.last_probs = output
         lo, hi = self.hystthresh
@@ -233,10 +244,25 @@ class PubLaynetSegmenter:
             merged_table_boxes = table_boxes
             merged_image_boxes = image_boxes
 
-        result = self.fix(text_boxes), self.fix(merged_table_boxes), self.fix(merged_image_boxes)
-        self.last_result = result
-        return result
+        text, tables, images = (
+            self.fix(text_boxes),
+            self.fix(merged_table_boxes),
+            self.fix(merged_image_boxes),
+        )
 
+        # FIXME: add code for self-overlapping table/image boxes
+
+        if not nocover:
+            bin = closing(simple_binarize(im), 5)
+            exclude = np.ones_like(bin, dtype=int)
+            for b in text:
+                exclude[b[0], b[1]] = 0
+            exclude = ndi.minimum_filter(exclude, (5, 20))
+            tables = [covering_rectangle(b, bin, exclude) for b in tables if large_rect(b)]
+            images = [covering_rectangle(b, bin, exclude) for b in images if large_rect(b)]
+
+        self.last_result = result = text, tables, images
+        return result
 
     def fix(self, boxes):
         if boxes is None:
@@ -244,8 +270,8 @@ class PubLaynetSegmenter:
         result = []
         dy, dx = self.offset
         for ys, xs in removed(boxes, None):
-            xs = slice(xs.start+dx, xs.stop+dx)
-            ys = slice(ys.start+dy, ys.stop+dy)
+            xs = slice(xs.start + dx, xs.stop + dx)
+            ys = slice(ys.start + dy, ys.stop + dy)
             result.append((ys, xs))
         return result
 
@@ -266,9 +292,11 @@ class PubLaynetSegmenter:
             z[tuple(s)] = 2
         return z
 
+
 def showtypes(d):
     for k, v in d.items():
         print("#", k, type(v), getattr(v, "dtype", None))
+
 
 def simplify(x):
     if isinstance(x, (int, float, bool, type(None))):
@@ -297,6 +325,7 @@ def rescale(im, scale, target=(800, 800)):
         im = ndi.zoom(im, [scale, scale, 1][: im.ndim], order=1)
         return im
 
+
 def pageseg_display(im, segmenter, result=None, title="", timeout=10.0):
     if timeout < 0:
         return
@@ -317,6 +346,7 @@ def pageseg_display(im, segmenter, result=None, title="", timeout=10.0):
             ax.add_patch(Rectangle((xs.start, ys.start), w, h, color=color, alpha=0.4))
     enable_kill()
     plt.ginput(1, timeout)
+
 
 @app.command()
 def pageseg(
@@ -344,21 +374,15 @@ def pageseg(
         sink = wds.TarWriter(output)
     slicer = eval(f"lambda x: islice(x, {slice})")
     plt.ion()
-    plt.gcf().canvas.mpl_connect('close_event', done_exn)
+    plt.gcf().canvas.mpl_connect("close_event", done_exn)
     for count, sample in slicer(enumerate(ds)):
         key, im = sample["__key__"], sample["jpg"]
-        bin = closing(simple_binarize(im), 5)
         print(key)
-        text, tables, images = segmenter.predict(im, scale)
-        if not nocover:
-            exclude = np.ones_like(bin, dtype=int)
-            for b in text:
-                exclude[b[0], b[1]] = 0
-            exclude = ndi.minimum_filter(exclude, (5, 20))
-            tables = [covering_rectangle(b, bin, exclude) for b in tables if large_rect(b)]
-            images = [covering_rectangle(b, bin, exclude) for b in images if large_rect(b)]
-        if display>= 0:
-            pageseg_display(bin, segmenter, result=(text, tables, images), title=f"{count}: {key}", timeout=display)
+        text, tables, images = segmenter.predict(im, scale, nocover=nocover)
+        if display >= 0:
+            pageseg_display(
+                im, segmenter, result=(text, tables, images), title=f"{count}: {key}", timeout=display
+            )
         seg = segmenter.last_probs.copy()
         assert seg.shape[2] == 5
         seg[..., 3] = np.maximum(seg[..., 3], seg[..., 4])
@@ -376,13 +400,13 @@ def pageseg(
         if sink is not None and "f" in outputs.lower():
             for index, bounds in enumerate(images):
                 image = im[bounds[0], bounds[1], ...]
-                result = dict(__key__=key+f"/fig{index}", jpg=image)
+                result = dict(__key__=key + f"/fig{index}", jpg=image)
                 sink.write(result)
                 print(result["__key__"])
         if sink is not None and "t" in outputs.lower():
             for index, bounds in enumerate(tables):
                 image = im[bounds[0], bounds[1], ...]
-                result = dict(__key__=key+f"/tab{index}", jpg=image)
+                result = dict(__key__=key + f"/tab{index}", jpg=image)
                 sink.write(result)
                 print(result["__key__"])
 
@@ -396,7 +420,6 @@ class PubTabnetSegmenter:
         self.model = model
         self.hystthresh = (0.5, 0.9)
         self.opening = []
-        self.do_interpolate = True
         self.offset = (-2, -2)
 
     def activate(self, active=True):
@@ -405,22 +428,21 @@ class PubTabnetSegmenter:
         else:
             self.model.cpu()
 
-    def predict_probs(self, im, check=True):
+    def predict_probs(self, im, scale=1.0, check=True):
         h, w, d = im.shape
-        input = 1 - torch.tensor(im).permute(2, 0, 1).unsqueeze(0)
+        if scale != 1.0:
+            im = ndi.zoom(im, (scale, scale, 1.0), order=1)
         with torch.no_grad():
+            input = 1 - torch.tensor(im).permute(2, 0, 1).unsqueeze(0)
             output = self.model(input)
             if output.shape[3] != h or output.shape[4] != w:
-                if self.do_interpolate:
-                    output = F.interpolate(output, size=(h, w))
-                else:
-                    output = output[:, :, :h, :w]
+                output = F.interpolate(output, size=(h, w))
             output = output.detach().cpu()[0].softmax(0).numpy().transpose(1, 2, 0)
-        assert output.shape[2] == 5
+        assert output.shape == (h, w, 5)
         return output
 
-    def predict(self, im, merge=True, check=True):
-        output = self.predict_probs(im, check=check)
+    def predict(self, im, scale=1.0, merge=True, check=True):
+        output = self.predict_probs(im, check=check, scale=scale)
         self.last_probs = output
         lo, hi = self.hystthresh
 
@@ -456,8 +478,8 @@ class PubTabnetSegmenter:
         result = []
         dy, dx = self.offset
         for ys, xs in removed(boxes, None):
-            xs = slice(xs.start+dx, xs.stop+dx)
-            ys = slice(ys.start+dy, ys.stop+dy)
+            xs = slice(xs.start + dx, xs.stop + dx)
+            ys = slice(ys.start + dy, ys.stop + dy)
             result.append((ys, xs))
         return result
 
@@ -482,6 +504,7 @@ def tabseg_display(im, segmenter, title="", timeout=10.0):
     enable_kill()
     plt.ginput(1, timeout)
 
+
 @app.command()
 def tabseg(
     src: str,
@@ -503,11 +526,11 @@ def tabseg(
     ds = wds.WebDataset(src).decode("rgb").to_tuple("__key__", "png;jpg;jpeg")
     slicer = eval(f"lambda x: islice(x, {sliced})")
     plt.ion()
-    plt.gcf().canvas.mpl_connect('close_event', done_exn)
+    plt.gcf().canvas.mpl_connect("close_event", done_exn)
     for count, (key, im) in slicer(enumerate(ds)):
-        im = rescale(im, scale, target=(800, 800))
-        boxes = segmenter.predict(im)
+        boxes = segmenter.predict(im, scale=scale)
         tabseg_display(im, segmenter, title=f"{count}: {key}")
+
 
 @app.command()
 def noop():
