@@ -1,0 +1,13 @@
+#!/bin/bash -x
+rm -rf rawsamples
+mkdir -p rawsamples
+gsutil ls gs://lpr-cdip-tess |
+while read x; do
+    base=$(basename $x .tgz)
+    out=rawsamples/$base.tar
+    echo === $base
+    gsutil cat $x | gunzip - |
+    tarp cat --shuffle 2000 - -o - |
+    tarp cat --slice 0:200:1 - -o $out
+    ls -l $out
+done

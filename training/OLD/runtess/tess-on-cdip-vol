@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# set -e
+
+test "$vol" != "" || {
+    echo "set vol="
+    exit 254
+}
+
+gsutil ls -l gs://lpr-cdip-tess/cdip_$vol.tgz && {
+    echo "$vol: already processed"
+    exit 253
+}
+
+basedir=$(pwd)
+cd $basedir
+
+echo === $vol
+result=cdip_$vol
+rm -rf volume volume.archive outputs $result $result.tgz
+gsutil cp gs://lpr-cdip/images.$vol.cpio volume.archive
+mkdir volume && (cd volume && dtrx --one rename ../volume.archive)
+echo "num_tiff $(find volume -name '*.tif' | wc -l)"
+rm -rf outputs
+mkdir outputs
+# find volume -name '*.tif' | sed 10q | parallel convert {} outputs/{/.}-%04d.png
+find volume -name '*.tif' | parallel gm convert {} +adjoin outputs/{/.}-%04d.png
+echo "num_png $(find outputs -name '*.png' | wc -l)"
+# break
+cd $basedir/outputs
+# --oem 0 (original), 1 (lstm), 2 (both), 3 (auto default)
+ls *.png > /dev/null || exit 1
+ls *.png | parallel --joblog ../LOG -j 4 ../run-tess --oem 1 {} {.} -l eng hocr 
+cd $basedir
+test -d outputs
+mv outputs $result
+tar --sort=name -zcf $result.tgz $result
+gsutil cp $result.tgz gs://lpr-cdip-tess/$result.tgz
+# break
+rm -rf volume outputs $result $result.tgz

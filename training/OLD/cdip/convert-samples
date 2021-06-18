@@ -1,0 +1,10 @@
+#!/bin/bash -x
+rm -rf converted
+mkdir -p converted
+for shard in shuffled/*.tar; do
+    echo $shard
+    tarp proc -c '
+        convert sample.png -quality 100 sample.jpg;
+        rm -f sample.png sample.hocr
+    ' $shard -o $(basename $shard)
+done

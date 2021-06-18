@@ -1,0 +1,7 @@
+#!/bin/bash -x
+rm -rf shuffled
+mkdir -p shuffled
+tarp cat -m 700 rawsamples/cdip*.tar -o - |
+tarp cat -s 300 - -o - |
+tarp split -s 1e8 -
+ls split-*.tar | rename 's/split-/shuffled\/cdipsub-/'

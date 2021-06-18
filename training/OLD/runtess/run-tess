@@ -1,0 +1,2 @@
+#!/bin/bash
+docker run -v $(pwd):/work -w /work -t tess tesseract "$@"
