@@ -1,0 +1,33 @@
+#!/bin/bash
+
+OCROPUS4=$HOME/proj/ocropus4
+buckets=./gs
+models=./
+
+vocropus() {
+export PYTHONPATH=$OCROPUS4
+. $OCROPUS4/venv/bin/activate
+$OCROPUS4/ocropus4 "$@"
+}
+
+test -f config.sh && source config.sh
+
+cmd=$1
+shift
+
+case $cmd in
+
+pageseg)
+rm -f test.tar
+vocropus pubnet pageseg ${buckets}/nvdata-publaynet/publaynet-val-000002.tar --model ${models}/publaynet-model.pth --no-check --output test.tar --display 0.1 --scale=0.9 --outputs TF "$@"
+;;
+
+tabseg)
+vocropus pubnet tabseg ${buckets}/nvdata-pubtabnet/pubtabnet-val-000000.tar --model ${models}/pubtabnet-model.pth --no-check "$@"
+;;
+
+tabseg2)
+vocropus pubnet tabseg test.tar --model ${models}/pubtabnet-model.pth --select /tab --no-check --timeout 0.1 "$@"
+;;
+
+esac

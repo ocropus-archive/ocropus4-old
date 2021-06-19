@@ -1,33 +1,24 @@
 import os
-import sys
-import time
 import signal
+import sys
 
-import typer
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
-from numpy import amin, median, mean
-from scipy import ndimage as ndi
-from torch import nn, optim
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
-from webdataset import Dataset
-import webdataset as wds
-import torchmore.layers
 import skimage
 import skimage.filters
+import torch
+import torch.nn.functional as F
+import typer
+import webdataset as wds
+from scipy import ndimage as ndi
 from itertools import islice
 
-from .utils import Schedule, repeatedly
-from . import slog
-from . import utils
-from . import loading
-from . import patches
+from . import loading, ocroseg
 from . import slices as sl
 from . import ocroseg
 from .utils import useopt, junk
 from matplotlib.patches import Rectangle
+from . import slog
 
 
 logger = slog.NoLogger()
@@ -95,7 +86,7 @@ def opening(a, shape, shape2=None):
     result = ndi.maximum_filter(ndi.minimum_filter(a, shape), shape)
     if shape2 is not None:
         result2 = ndi.maximum_filter(ndi.minimum_filter(a, shape2), shape2)
-        result = nd.maximum(result, result2)
+        result = np.maximum(result, result2)
     return result
 
 
@@ -205,7 +196,8 @@ class PubLaynetSegmenter:
         with torch.no_grad():
             input = 1 - torch.tensor(im).permute(2, 0, 1).unsqueeze(0)
             output = self.model(input)
-            if output.shape[3] != h or output.shape[4] != w:
+            assert output.ndim == 4
+            if output.shape[2] != h or output.shape[3] != w:
                 output = F.interpolate(output, size=(h, w))
             output = output.detach().cpu()[0].softmax(0).numpy().transpose(1, 2, 0)
         assert output.shape == (h, w, 5)
@@ -435,7 +427,8 @@ class PubTabnetSegmenter:
         with torch.no_grad():
             input = 1 - torch.tensor(im).permute(2, 0, 1).unsqueeze(0)
             output = self.model(input)
-            if output.shape[3] != h or output.shape[4] != w:
+            assert output.ndim == 4
+            if output.shape[2] != h or output.shape[3] != w:
                 output = F.interpolate(output, size=(h, w))
             output = output.detach().cpu()[0].softmax(0).numpy().transpose(1, 2, 0)
         assert output.shape == (h, w, 5)
@@ -513,23 +506,39 @@ def tabseg(
     nomerge: bool = False,
     probs: bool = False,
     sliced: str = "999999999",
-    timeout: float = 1e9,
+    timeout: float = -1,
     offset: str = "-2,-2",
     check: bool = True,
     verbose: bool = False,
+    select: str = "",
+    output: str = "",
 ):
     segmenter = PubTabnetSegmenter(model)
     segmenter.offset = eval(f"({offset})")
     if verbose:
         print(segmenter.model)
     segmenter.activate()
-    ds = wds.WebDataset(src).decode("rgb").to_tuple("__key__", "png;jpg;jpeg")
+    ds = wds.WebDataset(src).decode("rgb").rename(jpg="png;jpg;jpeg")
     slicer = eval(f"lambda x: islice(x, {sliced})")
-    plt.ion()
-    plt.gcf().canvas.mpl_connect("close_event", done_exn)
-    for count, (key, im) in slicer(enumerate(ds)):
+    sink = None if output == "" else wds.TarWriter(output)
+    if timeout > 0:
+        plt.ion()
+        plt.gcf().canvas.mpl_connect("close_event", done_exn)
+    for count, sample in slicer(enumerate(ds)):
+        key, im = sample["__key__"], sample["jpg"]
+        if select != "" and select not in key:
+            continue
         boxes = segmenter.predict(im, scale=scale)
-        tabseg_display(im, segmenter, title=f"{count}: {key}")
+        if timeout > 0:
+            tabseg_display(im, segmenter, title=f"{count}: {key}", timeout=timeout)
+        result = {
+            "__key__": key,
+            "jpg": im,
+            "cells.json": boxes
+        }
+        if sink is not None:
+            sink.write(result)
+    sink.close()
 
 
 @app.command()
