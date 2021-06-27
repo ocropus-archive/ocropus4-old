@@ -120,6 +120,8 @@ def makergb(r, g, b=None):
 def covering_rectangle(rect, bin, exclude=None, prepad=0, postpad=5, debug=0):
     assert bin.dtype in [bool, np.uint8, int]
     assert np.amin(bin) >= 0 and np.amax(bin) <= 1
+    center = lambda x: int(np.mean([x.stop, x.start]))
+    center_y, center_x = center(rect[0]), center(rect[1])
     bin = bin.astype(int)
     if debug:
         plt.clf()
@@ -127,15 +129,18 @@ def covering_rectangle(rect, bin, exclude=None, prepad=0, postpad=5, debug=0):
         plt.imshow(bin)
     mask = np.zeros_like(bin)
     mask[rect[0], rect[1]] = 1
+    assert mask[center_y, center_x] == 1
     mask = ndi.maximum_filter(mask, prepad)
     if exclude is not None:
         mask = np.minimum(mask, exclude)
+        if mask[center_y, center_x] != 1:
+            # excluded the center, so we'll just return nothing
+            return None
     if debug:
         plt.subplot(232)
         plt.imshow(mask)
     mbin = np.maximum(bin, mask) > 0
-    center = lambda x: int(np.mean([x.stop, x.start]))
-    center_y, center_x = center(rect[0]), center(rect[1])
+    assert mbin[center_y, center_x] == 1
     components, n = ndi.label(mbin)
     if debug:
         plt.subplot(233)
@@ -251,7 +256,9 @@ class PubLaynetSegmenter:
                 exclude[b[0], b[1]] = 0
             exclude = ndi.minimum_filter(exclude, (5, 20))
             tables = [covering_rectangle(b, bin, exclude) for b in tables if large_rect(b)]
+            tables = [x for x in tables if x is not None]
             images = [covering_rectangle(b, bin, exclude) for b in images if large_rect(b)]
+            images = [x for x in images if x is not None]
 
         self.last_result = result = text, tables, images
         return result
