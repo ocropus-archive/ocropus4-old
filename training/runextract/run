@@ -17,7 +17,6 @@ cmd_buildlocal() {  # build o4extract container locally
     set -e
     (cd ../.. && git archive HEAD --prefix=ocropus4/ -o training/runextract/docker/ocropus4.tar.gz)
     (cd docker && docker build -t o4extract .)
-    rm -f docker/ocropus4.tar.gz
 }
 
 cmd_build() {  # build and push container

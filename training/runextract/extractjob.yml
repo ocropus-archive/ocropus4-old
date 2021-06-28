@@ -12,7 +12,7 @@ spec:
       - /bin/bash
       - -c
       - |
-        tess-gs.sh gs://nvdata-ocropus/{{.Item}} gs://nvdata-ocropus/tess/{{.Item}}
+        extract-gs.sh gs://nvdata-ocropus/{{.Item}} gs://nvdata-ocropus/tess/{{.Item}}
     imagePullPolicy: IfNotPresent
     resources:
       requests:

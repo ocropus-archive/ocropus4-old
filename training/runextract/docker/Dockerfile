@@ -44,9 +44,6 @@ RUN cd /tmp/ocropus4 && pip3 install -r requirements.txt
 RUN cd /tmp/ocropus4 && pip3 install -r requirements.dev.txt
 RUN cd /tmp/ocropus4 && python3 setup.py install
 
-COPY tarp /usr/local/bin/tarp
-RUN chmod 755 /usr/local/bin/tarp
-
 COPY *.sh /usr/local/bin/
 RUN chmod 755 /usr/local/bin/*.sh
 

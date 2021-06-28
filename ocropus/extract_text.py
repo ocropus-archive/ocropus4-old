@@ -66,6 +66,9 @@ def hocr2images(
     page = pages[0]
     lines = list(page.xpath("//*[@class='%s']" % element))
     print(f"# got {len(lines)} elements of class {element}", file=sys.stderr)
+    good = badsize = badtext = 0
+    widths = []
+    heights = []
     for line in lines:
         if acceptable_conf >= 0:
             conf = float(get_prop(line, "x_wconf"))
@@ -86,17 +89,23 @@ def hocr2images(
             continue
         bbox = x0, y0, x1, y1
         if not acceptable_size((x0, y0, x1, y1)):
-            if verbose:
-                print(f"# bad size {y1-y0} x {x1-x0}", file=sys.stderr)
+            widths.append(x1-x0)
+            heights.append(y1-y0)
+            badsize += 1
             continue
         lineimage = image[y0:y1, x0:x1, ...]
         linetext = get_text(line)
         if linetext == "":
             continue
         if acceptable_text is not None and not acceptable_text(linetext):
-            print(f"# bad text '{linetext}'", file=sys.stderr)
+            badtext += 1
             continue
         yield lineimage, linetext, bbox
+        good += 1
+    if verbose:
+        print(f"good {good} badsize {badsize} badtext {badtext}", file=sys.stderr)
+        if len(widths) > 0:
+            print(f"widths {np.amin(widths)} {np.amax(widths)} heights {np.amin(heights)} {np.amax(heights)}", file=sys.stderr)
 
 
 def acceptable_chars(text):
@@ -181,7 +190,7 @@ def hocr2framed(
         extensions = extensions.split()
     assert len(extensions) == 2
     ds = (
-        wds.Dataset(src, handler=wds.warn_and_stop)
+        wds.WebDataset(src, handler=wds.warn_and_stop)
         .decode("rgb", handler=wds.warn_and_continue)
         .to_tuple("__key__", *extensions, handler=wds.warn_and_continue)
     )
@@ -246,7 +255,7 @@ def hocr2rec(
     maxcount: int = 9999999999,
     show: int = 0,
     dictionary: str = "NONE",
-    bounds: str = "50,1000,50,200",
+    bounds: str = "40,40,1000,200",
     invert: str = "Auto",
     acceptable_conf: float = -1,
     conf_tag: str = "x_wconf",
@@ -266,7 +275,7 @@ def hocr2rec(
         extensions = extensions.split()
     assert len(extensions) == 2
     ds = (
-        wds.Dataset(src, handler=wds.warn_and_stop)
+        wds.WebDataset(src, handler=wds.warn_and_stop)
         .decode("rgb", handler=wds.warn_and_continue)
         .to_tuple("__key__", *extensions, handler=wds.warn_and_continue)
     )

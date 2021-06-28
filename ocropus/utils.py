@@ -191,7 +191,7 @@ def imshow_tensor(a, order, b=0, ax=None, **kw):
 
 def autoinvert(image, mode, normalize=True):
     assert isinstance(image, np.ndarray)
-    if image.dtype == float:
+    if image.dtype in (float, np.float32, np.float64):
         if normalize:
             image = image - np.amin(image)
             image /= max(0.1, np.amax(image))

@@ -8,15 +8,14 @@ if test -f /auth.json; then
     gcloud auth activate-service-account --key-file=/auth.json
 fi
 
-if gsutil ls "$2"; then
+input="$1"; shift
+output="$2"; shift
+
+if gsutil ls "$output"; then
     echo "output already exists"
     exit
 fi
 
-gsutil cat "$1" |
-tarp proc -c '
-input=$(ls sample.* | egrep -i "(jpg|jpeg|png)$")
-tesseract $input sample -l eng hocr
-echo $(cat sample.__key__) : $input : $(ls)
-' - -o - |
-gsutil cp - "$2"
+gsutil cat "$input" |
+ocropus4 extract-rec hocr2rec - --output - "$@" |
+gsutil cp - "$output"
