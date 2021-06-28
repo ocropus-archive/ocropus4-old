@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: tess
+spec:
+  template:
+    spec:
+      containers:
+      - name: tess
+        image: tmbdev/tess
+        resources:
+          limits:
+            cpu: "8"
+        command:
+        - "bash"
+        - "-c"
+        - |
+          die() {
+            echo "$*" 1>&2
+            exit 255
+          }
+          set -x
+          set -a
+          date; id
+          HOME=/root
+          USER=root
+          basedir="$(pwd)"
+          ls /auth
+          gcloud config set project research-191823
+          gcloud auth activate-service-account --key-file=/auth/Research-1c395429d090.json
+          vol=z.z
+          echo === $vol
+          result=cdip_$vol
+          gsutil ls gs://lpr-cdip-tess/$result.tgz && exit 0
+          rm -rf volume volume.archive outputs $result $result.tgz
+          gsutil cp gs://lpr-cdip/images.$vol.cpio volume.archive
+          mkdir volume && (cd volume && dtrx --one rename ../volume.archive)
+          echo "num_tiff $(find volume -name '*.tif' | wc -l)"
+          rm -rf outputs
+          mkdir outputs
+          find volume -name '*.tif' | parallel gm convert {} +adjoin outputs/{/.}-%04d.png
+          echo "num_png $(find outputs -name '*.png' | wc -l)"
+          cd $basedir/outputs
+          ls *.png > /dev/null || exit 1
+          ls *.png | parallel --joblog ../LOG -j 4 tesseract --oem 1 {} {.} -l eng hocr
+          cd $basedir
+          test -d outputs
+          mv outputs $result
+          tar --sort=name -zcf $result.tgz $result
+          gsutil cp $result.tgz gs://lpr-cdip-tess/$result.tgz
+          rm -rf volume outputs $result $result.tgz
+          date
+          sleep 60
+        volumeMounts:
+        - name: auth
+          mountPath: /auth
+      volumes:
+      - name: auth
+        configMap:
+          name: auth
+      restartPolicy: Never
+  backoffLimit: 1

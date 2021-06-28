@@ -1,0 +1,8 @@
+#!/bin/bash
+export MPLBACKEND=TkAgg
+export CUDA_VISIBLE_DEVICES=0
+pocropus ocroseg train --noutput 12 --extensions 'png target.png' \
+    'publaynet-seg/publaynet-train-{000000..000340}-mseg2.tar' \
+    --display 15 --training-bs 1 --weightmask 5 --bordermask 5 \
+    --invert Auto --model publaynet_model_210429 --noutput 5 \
+    --schedule '0.1 / (1+n//50000)**.5' --prefix publaynet

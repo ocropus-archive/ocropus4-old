@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: jupyter
+  labels:
+    app: jupyter
+spec:
+  containers:
+  - name: jupyter
+    image: gcr.io/tmbmicro/pyvnc:latest
+    command: ["jupyter"]
+    args: ["notebook", "--allow-root", "--ip=*", "--no-browser"]
+    ports:
+    - containerPort: 8888
+  - name: dask-scheduler
+    image: gcr.io/tmbmicro/pyvnc:latest
+    command: ["dask-scheduler"]
+    ports:
+    - containerPort: 8786

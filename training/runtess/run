@@ -1,0 +1,86 @@
+#!/bin/bash
+
+authfile=FIXME
+project=FIXME
+
+test -f config.sh && source config.sh
+
+die() {
+    echo "ERROR: $*" 1>&2
+    exit 1
+}
+
+cmd="$1"
+shift
+
+case "$cmd" in
+
+allpods)
+
+kubectl get pods | awk '$3=="Running"{print $1}' | 
+while read pod; do
+    kubectl exec $pod -- "$@"
+done
+
+;;
+
+build)
+
+set -e
+(cd docker && docker build -t tess .)
+docker tag tess tmbdev/tess
+docker push tmbdev/tess
+docker tag tess gcr.io/$project/tess
+docker push gcr.io/$project/tess || 
+    die "did you run: 'gcloud auth configure-docker'?"
+
+;;
+
+indocker)
+
+docker run -i --rm -v $(pwd):/work \
+    -v "$authfile":/auth.json -w /work -t tess "$@"
+
+;;
+
+gcestart)
+
+gcloud config set project $project
+gcloud config set compute/zone us-west1-a
+gcloud container clusters create tess \
+    --machine-type=n1-standard-8 \
+    --scopes storage-rw,compute-rw \
+    --num-nodes=64 --local-ssd-count 1
+gcloud container clusters get-credentials tess
+
+;;
+
+
+gcestop)
+
+yes | gcloud container clusters delete tess
+
+;;
+
+
+gcemonitor)
+
+watch 'kubectl get pods; echo; kubectl get services'
+
+;;
+
+gcesubmit)
+
+cat -n LIST |
+while read i n; do 
+    echo === $i $n
+    sed "s/{{.Index}}/$i/g;s/{{.Item}}/$n/g" tessjob.yml > tess_$i.yml
+    kubectl apply -f tess_$i.yml
+    rm -f tess_$i.yml
+    sleep 3
+done
+
+;;
+
+
+esac

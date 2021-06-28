@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "tess-{{.Index}}"
+  labels:
+    app: ubuntu-app
+spec:
+  containers:
+  - name: tmbdev-tess
+    image: tmbdev/tess
+    command:
+      - /bin/bash
+      - -c
+      - |
+        tess-gs.sh gs://nvdata-ocropus/{{.Item}} gs://nvdata-ocropus/tess/{{.Item}}
+    imagePullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 2
+        memory: 4G
+      limits:
+        cpu: 2
+        memory: 4G
+  restartPolicy: Never
