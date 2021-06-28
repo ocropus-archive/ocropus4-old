@@ -1,2 +1,0 @@
-#!/bin/bash
-microk8s.kubectl log -f job/tess
