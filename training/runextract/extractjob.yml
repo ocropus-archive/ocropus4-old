@@ -1,19 +1,21 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: "tess-{{.Index}}"
+  name: "extract-{{.Index}}"
   labels:
     app: ubuntu-app
 spec:
   containers:
-  - name: tmbdev-tess
-    image: tmbdev/tess
+  - name: tmbdev-extract
+    image: tmbdev/o4extract
     command:
       - /bin/bash
       - -c
       - |
-        extract-gs.sh gs://nvdata-ocropus/{{.Item}} gs://nvdata-ocropus/tess/{{.Item}}
-    imagePullPolicy: IfNotPresent
+        extract-words.sh gs://nvdata-ocropus/tess/{{.Item}} gs://nvdata-ocropus/words/{{.Item}}
+        extract-lines.sh gs://nvdata-ocropus/tess/{{.Item}} gs://nvdata-ocropus/lines/{{.Item}}
+        extract-wseg.sh gs://nvdata-ocropus/tess/{{.Item}} gs://nvdata-ocropus/wseg/{{.Item}}
+        extract-lseg.sh gs://nvdata-ocropus/tess/{{.Item}} gs://nvdata-ocropus/lseg/{{.Item}}
     resources:
       requests:
         cpu: 2

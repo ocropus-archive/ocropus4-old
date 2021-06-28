@@ -20,7 +20,7 @@ cmd_buildlocal() {  # build o4extract container locally
 }
 
 cmd_build() {  # build and push container
-    cmd_build
+    cmd_buildlocal
     docker tag o4extract tmbdev/o4extract
     docker push tmbdev/o4extract
     docker tag o4extract gcr.io/$project/o4extract
@@ -52,10 +52,11 @@ cmd_gcestop() {
 
 
 cmd_gcesubmit() {
-    cat -n LIST |
-    while read i n; do 
+    gsutil ls gs://nvdata-ocropus/tess/ |
+    fgrep .tar | sed 's!.*/!!' | cat -n | sed "${limit:-9999}q" |
+    while read i n; do
         echo === $i $n
-        sed "s/{{.Index}}/$i/g;s/{{.Item}}/$n/g" extract.yml > extract_$i.yml
+        sed "s/{{.Index}}/$i/g;s/{{.Item}}/$n/g" extractjob.yml > extract_$i.yml
         kubectl apply -f extract_$i.yml
         rm -f extract_$i.yml
         sleep 3
@@ -63,7 +64,7 @@ cmd_gcesubmit() {
 }
 
 cmd_gcemonitor() {
-    watch 'kubectl get pods; echo; kubectl get services'
+    watch 'kubectl get pods | awk "!/STATUS/{print \$3}" | sort | uniq -c'
 }
 
 cmd_allpods() {  # execute command in all running pods

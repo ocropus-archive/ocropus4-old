@@ -493,7 +493,7 @@ def hocr2seg(
         extensions = extensions.split()
     assert len(extensions) == 2
     ds = (
-        wds.Dataset(src, handler=wds.warn_and_stop)
+        wds.WebDataset(src, handler=wds.warn_and_stop)
         .decode("rgb", handler=wds.warn_and_continue)
         .to_tuple("__key__", *extensions, handler=wds.warn_and_continue)
     )
