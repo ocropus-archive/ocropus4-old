@@ -37,7 +37,6 @@ setup(
     version=VERSION,
     description="OCRopus 4",
     long_description=open("README.md").read(),
-    long_description_content_type="text/markdown",
     url="http://github.com/tmbdev/ocropus4",
     author="Thomas Breuel",
     author_email="tmbdev+removeme@gmail.com",
@@ -50,7 +49,8 @@ setup(
     ],
     keywords="ocr, scene text, deep learning, text recognition",
     packages=["ocropus"],
-    python_requires=">=3.6",
     scripts=["ocropus4"],
-    install_requires=PREREQS,
+    # python_requires=">=3.6",
+    # install_requires=PREREQS,
+    # long_description_content_type="text/markdown",
 )
