@@ -384,7 +384,8 @@ def bboxes_for_hocr(
         print("# too many bad bounding boxes on this page")
         return []
     print(
-        f"# {bad_conf} low conf, {no_conf} no conf, {len(bboxes)} good, {bad_text} bad text, {count} total"
+        f"# {bad_conf} low conf, {no_conf} no conf, {len(bboxes)} good, {bad_text} bad text, {count} total",
+        file=sys.stderr
     )
     return bboxes
 
@@ -453,7 +454,7 @@ def segmentation_patches(
             np.array(seg >= 2, "i"), threshold, [page, seg], r=patchsize, n=n
         )
     )
-    print("# interesting patches", len(patchlist))
+    print("# interesting patches", len(patchlist), file=sys.stderr)
     for patch in patchlist:
         yield patch
 
@@ -549,7 +550,7 @@ def hocr2seg(
                     if count >= maxcount:
                         break
                     if count % 1000 == 0:
-                        print(f"{count}", file=sys.stderr)
+                        print(f"# count {count}", file=sys.stderr)
                     count += 1
                     assert np.amax(img) < 2.0
                     key_loc = f"{key}@{y},{x}"

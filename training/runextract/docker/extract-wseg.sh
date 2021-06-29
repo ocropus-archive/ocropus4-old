@@ -17,5 +17,5 @@ if gsutil ls "$output"; then
 fi
 
 gsutil cat "$input" |
-ocropus4 extract-seg hocr2seg - --output - "$@" |
+ocropus4 extract-seg hocr2seg - --output - |
 gsutil cp - "$output"
