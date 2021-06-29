@@ -52,6 +52,7 @@ cmd_gcestop() {
 
 
 cmd_gcesubmit() {
+    kubectl delete pods --all
     gsutil ls gs://nvdata-ocropus/tess/ |
     fgrep .tar | sed 's!.*/!!' | cat -n | sed "${limit:-9999}q" |
     while read i n; do

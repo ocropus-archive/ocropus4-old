@@ -3,6 +3,7 @@ import random
 import sys
 import re
 from itertools import islice
+from functools import partial
 
 import editdistance
 import matplotlib.pyplot as plt
@@ -280,10 +281,15 @@ def normalize_simple(s):
     return s.strip()
 
 
+def good_text(regex, sample):
+    image, txt = sample
+    return re.search(regex, txt)
+
+
 def make_loader(
     fname,
     batch_size=5,
-    shuffle=1000,
+    shuffle=5000,
     invert=False,
     normalize_intensity=False,
     ntrain=-1,
@@ -291,28 +297,31 @@ def make_loader(
     charset=Charset(),
     dewarp_to=-1,
     text_normalizer="simple",
+    text_select_re="[0-9A-Za-z]",
     extensions="line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt",
     **kw,
 ):
-    training = wds.Dataset(fname)
+    training = wds.WebDataset(fname)
     if mode == "train" and shuffle > 0:
-        training.shuffle(shuffle)
-    training.decode("l8").to_tuple(extensions)
+        training = training.shuffle(shuffle)
+    training = training.decode("l8").to_tuple(extensions)
     text_normalizer = eval(f"normalize_{text_normalizer}")
-    training.map_tuple(identity, text_normalizer)
-    training.map_tuple(lambda a: a.astype(float) / 255.0, charset.preptargets)
+    training = training.map_tuple(identity, text_normalizer)
+    if text_select_re != "":
+        training = training.select(partial(good_text, text_select_re))
+    training = training.map_tuple(lambda a: a.astype(float) / 255.0, charset.preptargets)
     if invert:
-        training.map_tuple(invert_image, identity)
+        training = training.map_tuple(invert_image, identity)
     if normalize_intensity:
-        training.map_tuple(normalize_image, identity)
+        training = training.map_tuple(normalize_image, identity)
     if dewarp_to > 0:
         dewarper = lineest.CenterNormalizer(target_height=dewarp_to)
-        training.map_tuple(dewarper.measure_and_normalize, identity)
-    training.map_tuple(lambda x: torch.tensor(x).unsqueeze(0), identity)
-    training.select(goodsize)
+        training = training.map_tuple(dewarper.measure_and_normalize, identity)
+    training = training.map_tuple(lambda x: torch.tensor(x).unsqueeze(0), identity)
+    training = training.select(goodsize)
     if ntrain > 0:
         print(ntrain)
-        training = wds.ResizedDataset(training, length=ntrain)
+        training = training.with_epoch(ntrain)
     training_dl = DataLoader(
         training, collate_fn=collate4ocr, batch_size=batch_size, **kw
     )
@@ -405,6 +414,7 @@ def train(
     test_bs: int = 20,
     ntest: int = int(1e12),
     schedule: str = "1e-3 * (0.9**((n//100000)**.5))",
+    text_select_re: str = "[A-Za-z0-9]",
     # lr: float = 1e-3,
     # checkerr: float = 1e12,
     charset_file: str = None,
@@ -412,6 +422,7 @@ def train(
     log_to: str = "",
     ntrain: int = (1 << 31),
     display: float = -1.0,
+    num_workers: int = 4,
 ):
 
     charset = Charset(chardef=charset_file)
@@ -440,6 +451,8 @@ def train(
         normalize_intensity=normalize_intensity,
         ntrain=ntrain,
         dewarp_to=dewarp_to,
+        text_select_re=text_select_re,
+        num_workers=4,
     )
     print(next(iter(training_dl))[0].size())
     if test is not None:
