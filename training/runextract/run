@@ -51,13 +51,13 @@ cmd_gcestop() {
 }
 
 
-cmd_gcesubmit() {
+gcesubmit() {
     kubectl delete pods --all
-    gsutil ls gs://nvdata-ocropus/tess/ |
+    gsutil ls gs://nvdata-ocropus-tess/ |
     fgrep .tar | sed 's!.*/!!' | cat -n | sed "${limit:-9999}q" |
     while read i n; do
         echo === $i $n
-        sed "s/{{.Index}}/$i/g;s/{{.Item}}/$n/g" extractjob.yml > extract_$i.yml
+        sed "s/{{.Index}}/$i/g;s/{{.Item}}/$n/g" $1 > extract_$i.yml
         kubectl apply -f extract_$i.yml
         rm -f extract_$i.yml
         sleep 3
@@ -66,6 +66,26 @@ cmd_gcesubmit() {
 
 cmd_gcemonitor() {
     watch 'kubectl get pods | awk "!/STATUS/{print \$3}" | sort | uniq -c'
+}
+
+cmd_extractwords() {
+    gcesubmit extract-words.yml
+    cmd_gcemonitor
+}
+
+cmd_extractlines() {
+    gcesubmit extract-lines.yml
+    cmd_gcemonitor
+}
+
+cmd_extractwseg() {
+    gcesubmit extract-wseg.yml
+    cmd_gcemonitor
+}
+
+cmd_extractlseg() {
+    gcesubmit extract-lseg.yml
+    cmd_gcemonitor
 }
 
 cmd_allpods() {  # execute command in all running pods

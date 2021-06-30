@@ -485,6 +485,7 @@ def hocr2seg(
     global acceptable_bboxes
     check_acceptable = eval(f"check_acceptable_{check}")
     check_text = eval(f"check_text_{check}")
+    print("# checks", check_acceptable, check_text, file=sys.stderr)
     labels = eval(f"[{labels}]")
     if show > 0:
         pylab.ion()

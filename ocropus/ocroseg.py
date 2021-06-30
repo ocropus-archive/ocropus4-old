@@ -13,10 +13,11 @@ from torch import nn, optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import webdataset as wds
-import torchmore.layers
+from torchmore import layers
 import traceback
 import skimage
 import skimage.filters
+from functools import partial
 
 from .utils import Schedule, repeatedly
 from . import slog
@@ -54,6 +55,8 @@ def simple_bg_fg(binimage, amplitude=0.3, imsigma=1.0, sigma=3.0):
 @useopt
 def augmentation_none(sample):
     image, target = sample
+    assert isinstance(image, np.ndarray), type(image)
+    assert isinstance(target, np.ndarray), type(image)
     if image.dtype == np.uint8:
         image = image.astype(np.float32) / 255.0
     if image.ndim == 4:
@@ -133,6 +136,11 @@ def np2tensor(sample):
     target = torch.tensor(target).long()
     return image, target
 
+def checktypes(message, sample):
+    image, target = sample
+    assert isinstance(image, np.ndarray), (message, type(image))
+    assert isinstance(target, np.ndarray), (message, type(image))
+    return sample
 
 def make_loader(
     urls,
@@ -154,8 +162,11 @@ def make_loader(
         return remapper[y]
 
     training = wds.WebDataset(urls).shuffle(shuffle).decode("rgb8").to_tuple(extensions)
+    training = training.map(partial(checktypes, "A"))
     training = training.map_tuple(autoinvert, remap)
+    training = training.map(partial(checktypes, "B"))
     training = training.map(augmentation)
+    training = training.map(partial(checktypes, "C"))
     training = training.map(np2tensor)
     return DataLoader(training, batch_size=batch_size, num_workers=num_workers)
 
@@ -295,7 +306,7 @@ class SegTrainer:
         self.nbatches = 0
         self.weightmask = weightmask
         self.bordermask = bordermask
-        self.weightlayer = torchmore.layers.WeightedGrad()
+        self.weightlayer = layers.weighted_grad
         self.last_mask = None
         self.set_lr(lr)
         self.old_interpolate = False
@@ -351,7 +362,7 @@ class SegTrainer:
                 mask[:, :, -d:] = 0
             mask = torch.tensor(mask)
             self.last_mask = mask
-            outputs = self.weightlayer.forward(outputs, mask)
+            outputs = self.weightlayer(outputs, mask.unsqueeze(1).to(outputs.device))
         assert inputs.size(0) == outputs.size(0)
         loss = self.compute_loss(outputs, targets)
         if math.isnan(float(loss)):

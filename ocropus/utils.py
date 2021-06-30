@@ -195,29 +195,33 @@ def autoinvert(image, mode, normalize=True):
         if normalize:
             image = image - np.amin(image)
             image /= max(0.1, np.amax(image))
-        if mode == "False":
+        if mode == "False" or mode is False:
             return image
-        elif mode == "True":
+        elif mode == "True" or mode is True:
             return 1.0 - image
         elif mode == "Auto":
             if np.mean(image) > np.mean([np.amax(image), np.amin(image)]):
                 return 1.0 - image
             else:
                 return image
+        else:
+            raise ValueError(f"{image.dtype}: unsupported dtype")
     elif image.dtype == np.uint8:
         if normalize:
             image = image.astype(np.float) - float(np.amin(image))
             image *= 255.0 / max(0.1, np.amax(image))
             image = image.astype(np.uint8)
-        if mode == "False":
+        if mode == "False" or mode is False:
             return image
-        elif mode == "True":
+        elif mode == "True" or mode is True:
             return 255 - image
         elif mode == "Auto":
             if np.mean(image) > np.mean([np.amax(image), np.amin(image)]):
                 return 255 - image
             else:
                 return image
+        else:
+            raise ValueError(f"unknown mode {mode}")
     else:
         raise ValueError(f"{image.dtype}: unsupported dtype")
 
