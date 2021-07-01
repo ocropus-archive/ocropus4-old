@@ -161,12 +161,10 @@ def make_loader(
             return y
         return remapper[y]
 
-    training = wds.WebDataset(urls).shuffle(shuffle).decode("rgb8").to_tuple(extensions)
-    training = training.map(partial(checktypes, "A"))
+    training = wds.WebDataset(urls).shuffle(shuffle).decode("rgb8")
+    training = training.to_tuple(extensions, handler=wds.warn_and_continue)
     training = training.map_tuple(autoinvert, remap)
-    training = training.map(partial(checktypes, "B"))
     training = training.map(augmentation)
-    training = training.map(partial(checktypes, "C"))
     training = training.map(np2tensor)
     return DataLoader(training, batch_size=batch_size, num_workers=num_workers)
 
@@ -362,7 +360,8 @@ class SegTrainer:
                 mask[:, :, -d:] = 0
             mask = torch.tensor(mask)
             self.last_mask = mask
-            outputs = self.weightlayer(outputs, mask.unsqueeze(1).to(outputs.device))
+            umask = mask.unsqueeze(1).expand(-1, outputs.size(1), -1, -1)
+            outputs = self.weightlayer(outputs, umask.to(outputs.device))
         assert inputs.size(0) == outputs.size(0)
         loss = self.compute_loss(outputs, targets)
         if math.isnan(float(loss)):
