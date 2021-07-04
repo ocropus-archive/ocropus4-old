@@ -542,7 +542,7 @@ def hocr2seg(
                     )
                 except ValueError as exn:
                     if ignore_errors:
-                        print("===", key, "===")
+                        print("===", key, "===", file=sys.stderr)
                         print(exn, file=sys.stderr)
                         continue
                     raise exn

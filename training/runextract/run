@@ -95,6 +95,35 @@ cmd_allpods() {  # execute command in all running pods
     done
 }
 
+local_ocropus() {
+    OCROPUS4=$(realpath ../..)
+    export PYTHONPATH=$OCROPUS4
+    . $OCROPUS4/venv/bin/activate
+    $OCROPUS4/ocropus4 "$@"
+}
+
+cmd_uw3() {
+    set -x
+    src=gs/lpr-uw3/uw3-tess.tar
+    extensions="page.jpg tess.html"
+    if ! test -f uw3-word-000000.tar; then
+        local_ocropus extract-rec hocr2rec --extensions "$extensions" $src --output - | tarp split -c 20000 -
+        ls split-*.tar | rename 's/split/uw3-word/'
+    fi
+    if ! test -f uw3-wseg-000000.tar; then
+        local_ocropus extract-seg hocr2seg --extensions "$extensions" --check word $src --output - | tarp split - -c 20000
+        ls split-*.tar | rename 's/split/uw3-wseg/'
+    fi
+    if ! test -f uw3-line-000000.tar; then
+        local_ocropus extract-rec hocr2rec --extensions "$extensions" --bounds 40,40,3000,400 --element ocr_line $src --output - "$@" | tarp split -c 20000 -
+        ls split-*.tar | rename 's/split/uw3-line/'
+    fi
+    if ! test -f uw3-lseg-000000.tar; then
+        local_ocropus extract-seg hocr2seg --extensions "$extensions" --check line --element ocr_line $src --output - "$@" | tarp split -c 20000 -
+        ls split-*.tar | rename 's/split/uw3-lseg/'
+    fi
+}
+
 
 cmd="${1:-help}"
 shift
