@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get -qqy update
 
 RUN apt-get install -qqy curl gcc openssh-client git
-RUN apt-get install -qqy iputils-ping dnsutils parallel dtrx
+RUN apt-get install -qqy iputils-ping dnsutils parallel
 RUN apt-get install -qqy apt-transport-https lsb-release gnupg apt-utils
 
 ENV TZ="America/Los Angeles"
@@ -33,6 +33,7 @@ RUN pip3 install tensorboard
 RUN apt-get install -qqy wamerican-large
 RUN apt-get install -qqy tesseract-ocr-all
 RUN apt-get install -qqy python3-pip
+RUN pip3 install dtrx
 RUN pip3 install virtualenv
 
 RUN mkdir /work
