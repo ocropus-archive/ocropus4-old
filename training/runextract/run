@@ -107,20 +107,28 @@ cmd_uw3() {
     src=gs/lpr-uw3/uw3-tess.tar
     extensions="page.jpg tess.html"
     if ! test -f uw3-word-000000.tar; then
-        local_ocropus extract-rec hocr2rec --extensions "$extensions" $src --output - | tarp split -c 20000 -
+        local_ocropus extract-rec hocr2rec --extensions "$extensions" $src --output temp.tar 
+        tarp split -c 20000 temp.tar
         ls split-*.tar | rename 's/split/uw3-word/'
+        rm -f temp.tar
     fi
     if ! test -f uw3-wseg-000000.tar; then
-        local_ocropus extract-seg hocr2seg --extensions "$extensions" --check word $src --output - | tarp split - -c 20000
+        local_ocropus extract-seg hocr2seg --extensions "$extensions" --check word $src --output temp.tar
+        tarp split -c 2000 temp.tar
         ls split-*.tar | rename 's/split/uw3-wseg/'
+        rm -f temp.tar
     fi
     if ! test -f uw3-line-000000.tar; then
-        local_ocropus extract-rec hocr2rec --extensions "$extensions" --bounds 40,40,3000,400 --element ocr_line $src --output - "$@" | tarp split -c 20000 -
+        local_ocropus extract-rec hocr2rec --extensions "$extensions" --bounds 40,40,3000,400 --element ocr_line $src --output temp.tar
+        tarp split -c 20000 temp.tar
         ls split-*.tar | rename 's/split/uw3-line/'
+        rm -f temp.tar
     fi
     if ! test -f uw3-lseg-000000.tar; then
-        local_ocropus extract-seg hocr2seg --extensions "$extensions" --check line --element ocr_line $src --output - "$@" | tarp split -c 20000 -
+        local_ocropus extract-seg hocr2seg --extensions "$extensions" --check line --element ocr_line $src --output temp.tar
+        tarp split -c 2000 temp.tar
         ls split-*.tar | rename 's/split/uw3-lseg/'
+        rm -f temp.tar
     fi
 }
 
