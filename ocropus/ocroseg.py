@@ -166,6 +166,8 @@ def make_loader(
     training = training.map_tuple(autoinvert, remap)
     training = training.map(augmentation)
     training = training.map(np2tensor)
+    if "LOGKEYS" in os.environ:
+        training = training.log_keys(os.environ["LOGKEYS"])
     return DataLoader(training, batch_size=batch_size, num_workers=num_workers)
 
 
