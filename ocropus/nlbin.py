@@ -221,7 +221,7 @@ def binarize1(
 def binarize(
     fname: str,
     extensions: str = "jpg;jpeg;png",
-    threshold: float = -1,
+    threshold: float = 0.5,
     zoom: float = 0.5,
     escale: float = 1.0,
     bignore: float = 0.1,
@@ -236,6 +236,7 @@ def binarize(
     output: str = "",
     maxrec: int = 999999999999,
     deskew: bool = False,
+    display: int = -1,
 ):
     """Binarize a shard of images."""
     args = utils.Record(**locals())
@@ -255,6 +256,18 @@ def binarize(
             result["bin.png"] = np.array(flat > args.threshold, dtype=np.uint8) * 255
         result["nrm.jpg"] = np.array(flat * 255, dtype=np.uint8)
         sink.write(result)
+        if display > 0 and count % display == 0:
+            plt.ion()
+            plt.clf()
+            plt.subplot(131)
+            plt.imshow(image, cmap="gray")
+            plt.subplot(132)
+            plt.imshow(result["nrm.jpg"], cmap="gray")
+            if threshold >= 0:
+                plt.subplot(133)
+                plt.imshow(result["bin.png"], cmap="gray")
+        if display > 0:
+            plt.ginput(1, 0.02)
         count += 1
     sink.close()
 
