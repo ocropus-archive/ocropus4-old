@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "bin-{{.Index}}"
+  labels:
+    app: ubuntu-app
+spec:
+  containers:
+  - name: tmbdev-extract
+    image: tmbdev/o4extract
+    command:
+      - /bin/bash
+      - -c
+      - |
+        /usr/local/bin/binarize.sh gs://nvdata-ocropus-tess/{{.Item}}
+    resources:
+      requests:
+        cpu: 2
+        memory: 16G
+      limits:
+        cpu: 2
+        memory: 16G
+  restartPolicy: Never

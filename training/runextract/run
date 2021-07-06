@@ -89,7 +89,8 @@ cmd_extractlseg() {
 }
 
 cmd_binarize() {
-    gcesubmit binjob.yml 'gsub.*tar'
+    # gcesubmit binjob.yml 'gsub.*tar'
+    gcesubmit binjob.yml 'ia1.*tar'
     cmd_gcemonitor
 }
 
