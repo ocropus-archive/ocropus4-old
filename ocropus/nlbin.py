@@ -12,6 +12,7 @@ from itertools import islice
 from scipy.ndimage import filters, interpolation, morphology
 from scipy import stats
 import webdataset as wds
+from webdataset.iterators import getfirst
 from . import utils
 
 
@@ -237,19 +238,28 @@ def binarize(
     maxrec: int = 999999999999,
     deskew: bool = False,
     display: int = -1,
+    fresh: bool = False
 ):
     """Binarize a shard of images."""
     args = utils.Record(**locals())
-    ds = wds.WebDataset(fname).decode("l8").to_tuple("__key__", extensions)
+    ds = wds.WebDataset(fname).decode("l8")
     sink = wds.TarWriter(output)
     count = 0
-    for key, image in islice(ds, 0, maxrec):
+    for sample in islice(ds, 0, maxrec):
+        key = sample["__key__"]
+        image = getfirst(sample, extensions, None, False)
+        if image is None:
+            print(f"{count}/{maxrec} {key} NO IMAGE", file=sys.stderr)
+            continue
         print(f"{count}/{maxrec} {key}", file=sys.stderr)
         assert image.dtype == np.uint8
         image = image / 255.0
         flat = nlbin(image, args, deskew=deskew)
         assert flat.dtype == float
-        result = dict(__key__=key)
+        if fresh:
+            result = dict(__key__=key)
+        else:
+            result = dict(sample)
         if gray:
             result["jpg"] = image
         if threshold >= 0:
