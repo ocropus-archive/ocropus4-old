@@ -24,6 +24,12 @@ cmd_cleanlogs() { # clean up log files
     mv -v $(python3 -m ocropus.slog findempty *.sqlite3) ./JUNK/.
 }
 
+cmd_build() {
+    git commit -a || true
+    (cd docker && docker build - -t ocropus4-base < Dockerfile-base)
+    git archive --format=tar -o docker/ocropus4.tar HEAD
+    (cd docker && docker build --no-cache . -t ocropus4)
+}
 
 cmd_download_uw3() {
     mkdir -p uw3

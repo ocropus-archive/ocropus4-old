@@ -119,6 +119,8 @@ def marker_segmentation_target_for_bboxes(
 def nzrange(a):
     """Return a pair of indexes: minimum, maximum non-zero element in array."""
     indexes = np.nonzero(a)[0]
+    if len(indexes) == 0:
+        return 0, 0
     return indexes[0], indexes[-1] + 1
 
 
@@ -126,12 +128,16 @@ def fix_bbox(bbox, image, sigma=5.0, threshold=0.3, pad=1):
     """Given an image and a bounding box, adjust the bounding box to content."""
     h, w = image.shape
     x0, y0, x1, y1 = bbox
+    if x1-x0 <= 0 or y1-y0 <= 0:
+        return None
     patch = image[y0:y1, x0:x1]
     smoothed = ndi.gaussian_filter(patch, sigma, mode="constant")
     smoothed /= np.amax(smoothed)
     thresholded = smoothed > threshold
     dy0, dy1 = nzrange(np.sum(thresholded, 1))
     dx0, dx1 = nzrange(np.sum(thresholded, 0))
+    if dx1-dx0 <= 0 or dy1-dy0 <= 0:
+        return None
     return (
         max(x0 + dx0 - pad, 0),
         max(y0 + dy0 - pad, 0),
@@ -219,6 +225,11 @@ def marker_segmentation_target_for_bboxes_2(
         fix_bbox(bbox, image, pad=pad, sigma=fbb_sigma, threshold=fbb_threshold)
         for bbox in bboxes
     ]
+    nbefore = len(bboxes)
+    bboxes = [x for x in bboxes if x is not None]
+    nafter = len(bboxes)
+    if nbefore - nafter > 0:
+        print(f"fix_bboxes returned {nbefore-nafter} empty boxes (out of {nbefore})", file=sys.stderr)
     for bbox in bboxes:
         x0, y0, x1, y1 = bbox
         textmask = make_text_mask(bbox, image)
@@ -542,7 +553,7 @@ def hocr2seg(
                     )
                 except ValueError as exn:
                     if ignore_errors:
-                        print("===", key, "===")
+                        print("===", key, "===", file=sys.stderr)
                         print(exn, file=sys.stderr)
                         continue
                     raise exn

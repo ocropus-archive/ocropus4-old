@@ -1,19 +1,29 @@
 datasets:
 
   - name: CDIP
+    choose: 50
     buckets:
       - ./gs/nvdata-ocropus-wseg-sub/
     shards:
       - cdipsub-{000000..000092}.tar
 
   - name: Google 1000 Books
+    choose: 50
     buckets:
       - ./gs/nvdata-ocropus-wseg-sub/
     shards:
       - gsub-{000000..000167}.tar
 
   - name: Internet Archive Sample
+    choose: 30
     buckets:
       - ./gs/nvdata-ocropus-wseg-sub/
     shards:
       - ia1-{000000..000033}.tar
+
+  - name: UW3 sample
+    choose: 50
+    buckets:
+      - ./gs/nvdata-ocropus-wseg-sub/
+    shards:
+      - uw3-wseg-{000000..000117}.tar

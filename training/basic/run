@@ -1,0 +1,46 @@
+#!/bin/bash
+
+authfile=FIXME
+project=FIXME
+numnodes=64
+zone=us-west1-a
+machinetype=n1-standard-8
+
+test -f config.sh && source config.sh
+
+die() {
+    echo "ERROR: $*" 1>&2
+    exit 1
+}
+
+
+local_ocropus() {
+    OCROPUS4=$(realpath ../..)
+    export PYTHONPATH=$OCROPUS4
+    . $OCROPUS4/venv/bin/activate
+    $OCROPUS4/ocropus4 "$@"
+}
+
+cmd_train_word() {
+    local_ocropus ocrorec train words.shards.yml --display 20
+}
+
+cmd_train_wseg() {
+    local_ocropus ocroseg train wseg.shards.yml --display 20
+}
+
+cmd=$(echo "${1:-help}" | sed 's/-/_/g')
+shift
+
+set -e
+
+case $cmd in
+    help)
+        echo; echo available commands:; echo
+        grep '^cmd_[_0-9a-z]*() {' "$0" | sed 's/cmd_//;s/\(.*\)() *{* *#* */\1 -- /'
+        ;;
+    *)
+        set -e
+        eval "cmd_$cmd" "$@"
+        ;;
+esac
