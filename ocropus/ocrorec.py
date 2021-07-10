@@ -286,6 +286,9 @@ def good_text(regex, sample):
 
 def augment_transform(image, p=0.5):
     if random.uniform() < p:
+        image = degrade.normalize(image)
+        image = 1.0 * (image > 0.5)
+    if random.uniform() < p:
         (image,) = degrade.transform_all(image)
     if random.uniform() < p:
         image = degrade.noisify(image)
@@ -293,6 +296,9 @@ def augment_transform(image, p=0.5):
 
 
 def augment_distort(image, p=0.5):
+    if random.uniform() < p:
+        image = degrade.normalize(image)
+        image = 1.0 * (image > 0.5)
     if random.uniform() < p:
         (image,) = degrade.transform_all(image)
     if random.uniform() < p:
@@ -316,6 +322,7 @@ def make_loader(
     text_normalizer="simple",
     text_select_re="[0-9A-Za-z]",
     extensions="line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt",
+    augmentent="transform",
     **kw,
 ):
     training = wds.WebDataset(fname)
