@@ -10,6 +10,7 @@ import json
 authfile = "gceauth.json"
 authinfo = json.load(open(authfile))
 project = authinfo["project_id"]
+assert isinstance(project, str)
 numnodes = 64
 zone = "us-west1-a"
 machinetype = "n1-standard-8"
@@ -34,13 +35,13 @@ def build(c):
 @task
 def gcestart(c):
     assert os.path.exists(authfile)
-    c.run("gcloud config set project {project}")
-    c.run("gcloud config set compute/zone {zone}")
+    c.run(f"gcloud config set project {project}")
+    c.run(f"gcloud config set compute/zone {zone}")
     c.run(
         f"gcloud container clusters create {image} "
-        + "--machine-type=$machinetype "
+        + f"--num-nodes={numnodes} "
+        + f"--machine-type={machinetype} "
         + "--scopes storage-rw,compute-rw "
-        + "--num-nodes=$numnodes"
     )
     c.run(f"gcloud container clusters get-credentials {image}")
 
@@ -73,10 +74,9 @@ spec:
 """
 
 
-script = """
-echo hello
-echo world
-"""
+@task
+def status(c):
+    c.run("kubectl get pods | grep -v STATUS | awk '{print $3}' | sort | uniq -c")
 
 
 def submit_script(name, script, cpu="2", mem="4G"):
@@ -93,26 +93,86 @@ def submit_script(name, script, cpu="2", mem="4G"):
     return job
 
 
-@task
-def getwords(c):
+def runscript(c, src, dst, template):
     c.run("kubectl delete pods --all")
-    sources = os.popen("gsutil ls gs://nvdata-ocropus-tess").readlines()
+    sources = os.popen(f"gsutil ls {src}").readlines()
     sources = set(re.sub(".*/", "", s).strip() for s in sources)
-    existing = os.popen("gsutil ls gs://nvdata-ocropus-words").readlines()
+    existing = os.popen(f"gsutil ls {dst}").readlines()
     existing = set(re.sub(".*/", "", s).strip() for s in existing)
     missing = sources.difference(existing)
+    missing = sorted(list(missing))
+    if len(missing) == 0:
+        print("nothing to be done")
+        return
     print(f"# submitting {len(missing)} jobs")
-    for index, shard in enumerate(sorted(missing)):
-        word_script = inspect.cleandoc(
-            f"""
-            gsutil cat "gs://nvdata-ocropus-tess/{shard}" |
-            ocropus4 extract-rec hocr2rec --extensions "nrm.jpg;jpg;png;page.jpg;page.png hocr;hocr.html" - --output - |
-            gsutil cp - "gs://nvdata-ocropus-words/{shard}"
-        """
-        )
-        name = f"words-{index}"
-        job = submit_script(name, word_script, mem="16G")
+    print(f"# {missing[::max(len(missing)//10, 1)]}")
+    print(f"# starting in 5 seconds")
+    time.sleep(5)
+    for index, shard in enumerate(missing):
+        script = inspect.cleandoc(template.format(src=src, dst=dst, shard=shard, index=index))
+        name = f"job-{index}"
+        job = submit_script(name, script, mem="16G")
         with os.popen("kubectl apply -f -", "w") as stream:
             stream.write(job)
         print(name, shard)
+        if index < 4:
+            print()
+            print(job)
+            print()
         time.sleep(1)
+
+
+@task
+def words(c):
+    runscript(
+        c,
+        "gs://nvdata-ocropus-tess",
+        "gs://nvdata-ocropus-words",
+        """
+        gsutil cat "{src}/{shard}" |
+        ocropus4 extract-rec hocr2rec --extensions "nrm.jpg;jpg;png;page.jpg;page.png hocr;hocr.html" - --output - |
+        gsutil cp - "{dst}/{shard}"
+    """,
+    )
+
+
+@task
+def lines(c):
+    runscript(
+        c,
+        "gs://nvdata-ocropus-tess",
+        "gs://nvdata-ocropus-lines",
+        """
+        gsutil cat "{src}/{shard}" |
+        ocropus4 extract-rec hocr2rec --bounds 40,40,3000,400 --element ocr_line --extensions "nrm.jpg;jpg;png;page.jpg;page.png hocr;hocr.html" - --output - |
+        gsutil cp - "{dst}/{shard}"
+    """,
+    )
+
+
+@task
+def wseg(c):
+    runscript(
+        c,
+        "gs://nvdata-ocropus-tess",
+        "gs://nvdata-ocropus-wseg",
+        """
+        gsutil cat "{src}/{shard}" |
+        ocropus4 extract-seg hocr2seg --check word - --output - |
+        gsutil cp - "{dst}/{shard}"
+    """,
+    )
+
+
+@task
+def lseg(c):
+    runscript(
+        c,
+        "gs://nvdata-ocropus-tess",
+        "gs://nvdata-ocropus-lseg",
+        """
+        gsutil cat "{src}/{shard}" |
+        ocropus4 extract-seg hocr2seg --check line --element ocr_line - --output - |
+        gsutil cp - "{dst}/{shard}"
+    """,
+    )
