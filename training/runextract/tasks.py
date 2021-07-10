@@ -5,8 +5,52 @@ import os
 import re
 import inspect
 import time
+import json
 
-job_template = """
+authfile = "gceauth.json"
+authinfo = json.load(open(authfile))
+project = authinfo["project_id"]
+numnodes = 64
+zone = "us-west1-a"
+machinetype = "n1-standard-8"
+image = "o4extract"
+
+
+@task
+def buildlocal(c):
+    c.run("cd ../.. && git archive HEAD --prefix=ocropus4/ -o training/runextract/docker/ocropus4.tar.gz")
+    c.run(f"cd docker && docker build -t o4extract .")
+
+
+@task
+def build(c):
+    buildlocal(c)
+    c.run(f"docker tag {image} tmbdev/{image}")
+    c.run(f"docker push tmbdev/{image}")
+    c.run(f"docker tag {image} gcr.io/{project}/{image}")
+    c.run(f"docker push gcr.io/{project}/{image}")
+
+
+@task
+def gcestart(c):
+    assert os.path.exists(authfile)
+    c.run("gcloud config set project {project}")
+    c.run("gcloud config set compute/zone {zone}")
+    c.run(
+        f"gcloud container clusters create {image} "
+        + "--machine-type=$machinetype "
+        + "--scopes storage-rw,compute-rw "
+        + "--num-nodes=$numnodes"
+    )
+    c.run(f"gcloud container clusters get-credentials {image}")
+
+
+@task
+def gcestop(c):
+    c.run(f"yes | gcloud container clusters delete {image}")
+
+
+job_template = f"""
 apiVersion: v1
 kind: Pod
 metadata:
@@ -16,15 +60,15 @@ metadata:
 spec:
   containers:
   - name: tmbdev-extract
-    image: tmbdev/o4extract
+    image: tmbdev/{image}
     command: ["/bin/bash", "-c", "date"]
     resources:
       requests:
         cpu: 2
-        memory: 4G
+        memory: 8G
       limits:
         cpu: 2
-        memory: 4G
+        memory: 8G
   restartPolicy: Never
 """
 
@@ -67,8 +111,8 @@ def getwords(c):
         """
         )
         name = f"words-{index}"
-        job = submit_script(name, word_script)
+        job = submit_script(name, word_script, mem="16G")
         with os.popen("kubectl apply -f -", "w") as stream:
             stream.write(job)
-        print(job)
+        print(name, shard)
         time.sleep(1)

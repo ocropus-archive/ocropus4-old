@@ -16,6 +16,11 @@ if gsutil ls "$output"; then
     exit
 fi
 
+ocropus=${ocropus:-ocropus4}
+page=${page:-"page.jpg;jpg;jpeg"}
+hocr=${hocr:-"page.hocr;hocr.html;hocr"}
+extensions=${extensions:-"$page $hocr"}
+
 gsutil cat "$input" |
-ocropus4 extract-rec hocr2rec - --output - "$@" |
+$ocropus extract-rec hocr2rec --extensions="$extensions" - --output - "$@" |
 gsutil cp - "$output"
