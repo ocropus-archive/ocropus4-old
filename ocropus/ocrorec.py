@@ -131,9 +131,7 @@ class TextTrainer:
             return
         if lr != self.last_lr:
             print(f"setting learning rate to {lr:4.1e}", file=sys.stderr)
-            self.optimizer = optim.SGD(
-                self.model.parameters(), lr=lr, momentum=momentum
-            )
+            self.optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=momentum)
             self.last_lr = lr
 
     def set_lr_schedule(self, f):
@@ -286,6 +284,24 @@ def good_text(regex, sample):
     return re.search(regex, txt)
 
 
+def augment_transform(image, p=0.5):
+    if random.uniform() < p:
+        (image,) = degrade.transform_all(image)
+    if random.uniform() < p:
+        image = degrade.noisify(image)
+    return image
+
+
+def augment_distort(image, p=0.5):
+    if random.uniform() < p:
+        (image,) = degrade.transform_all(image)
+    if random.uniform() < p:
+        (image,) = degrade.distort_all(image)
+    if random.uniform() < p:
+        image = degrade.noisify(image)
+    return image
+
+
 def make_loader(
     fname,
     batch_size=5,
@@ -296,6 +312,7 @@ def make_loader(
     mode="train",
     charset=Charset(),
     dewarp_to=-1,
+    augment="",
     text_normalizer="simple",
     text_select_re="[0-9A-Za-z]",
     extensions="line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt",
@@ -310,6 +327,9 @@ def make_loader(
     if text_select_re != "":
         training = training.select(partial(good_text, text_select_re))
     training = training.map_tuple(lambda a: a.astype(float) / 255.0, charset.preptargets)
+    if augment != "":
+        f = eval(f"augment_{augment}")
+        training = training.map_tuple(f, identity)
     if invert:
         training = training.map_tuple(invert_image, identity)
     if normalize_intensity:
@@ -322,18 +342,14 @@ def make_loader(
     if ntrain > 0:
         print(ntrain)
         training = training.with_epoch(ntrain)
-    training_dl = DataLoader(
-        training, collate_fn=collate4ocr, batch_size=batch_size, **kw
-    )
+    training_dl = DataLoader(training, collate_fn=collate4ocr, batch_size=batch_size, **kw)
     return training_dl
 
 
 def print_progress(trainer):
     avgloss = mean(trainer.losses[-100:]) if len(trainer.losses) > 0 else 0.0
     print(
-        f"{trainer.nsamples:3d} {trainer.nbatches:9d} {avgloss:10.4f}",
-        file=sys.stderr,
-        flush=True,
+        f"{trainer.nsamples:3d} {trainer.nbatches:9d} {avgloss:10.4f}", file=sys.stderr, flush=True,
     )
 
 
@@ -343,9 +359,7 @@ log_progress_every = Every(60)
 def log_progress(trainer):
     if log_progress_every():
         avgloss = mean(trainer.losses[-100:]) if len(trainer.losses) > 0 else 0.0
-        logger.scalar(
-            "train/loss", avgloss, step=trainer.nsamples, json=dict(lr=trainer.last_lr)
-        )
+        logger.scalar("train/loss", avgloss, step=trainer.nsamples, json=dict(lr=trainer.last_lr))
         logger.flush()
 
 
@@ -385,9 +399,7 @@ def load_model(fname):
     assert fname.endswith(".py"), f"{fname} must be a .py file"
     src = open(fname).read()
     mod = slog.load_module("mmod", src)
-    assert "make_model" in dir(
-        mod
-    ), f"{fname} source does not define make_model function"
+    assert "make_model" in dir(mod), f"{fname} source does not define make_model function"
     return mod, src
 
 

@@ -44,6 +44,8 @@ RUN cd /tmp/ocropus4 && pip3 install -r requirements.txt
 RUN cd /tmp/ocropus4 && pip3 install -r requirements.dev.txt
 RUN cd /tmp/ocropus4 && python3 setup.py install
 
+RUN pip3 install -e git+git://github.com/ocropus/ocrodeg.git#egg=ocrodeg
+
 COPY *.sh /usr/local/bin/
 RUN chmod 755 /usr/local/bin/*.sh
 
