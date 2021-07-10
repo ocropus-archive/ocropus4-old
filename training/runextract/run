@@ -16,7 +16,7 @@ die() {
 cmd_buildlocal() {  # build o4extract container locally
     set -e
     (cd ../.. && git archive HEAD --prefix=ocropus4/ -o training/runextract/docker/ocropus4.tar.gz)
-    (cd docker && docker build -t o4extract .)
+    (cd docker && docker build -t o4extract "$@" .)
 }
 
 cmd_build() {  # build and push container
@@ -54,7 +54,7 @@ cmd_gcestop() {
 gcesubmit() {
     kubectl delete pods --all
     gsutil ls gs://nvdata-ocropus-tess/ |
-    fgrep .tar | sed 's!.*/!!' | cat -n | sed "${limit:-9999}q" |
+    fgrep .tar | grep "${2:-.}" | sed 's!.*/!!' | cat -n | sed "${limit:-9999}q" |
     while read i n; do
         echo === $i $n
         sed "s/{{.Index}}/$i/g;s/{{.Item}}/$n/g" $1 > extract_$i.yml
@@ -85,6 +85,17 @@ cmd_extractwseg() {
 
 cmd_extractlseg() {
     gcesubmit extract-lseg.yml
+    cmd_gcemonitor
+}
+
+cmd_binarize() {
+    # gcesubmit binjob.yml 'gsub.*tar'
+    gcesubmit binjob.yml 'ia1.*tar'
+    cmd_gcemonitor
+}
+
+cmd_degrade() {
+    gcesubmit degjob.yml
     cmd_gcemonitor
 }
 
