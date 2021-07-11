@@ -444,6 +444,7 @@ def train(
     display: float = -1.0,
     num_workers: int = 4,
     data_parallel: str = "",
+    shuffle: int = 20000,
 ):
 
     charset = Charset(chardef=charset_file)
@@ -474,6 +475,7 @@ def train(
         dewarp_to=dewarp_to,
         text_select_re=text_select_re,
         num_workers=4,
+        shuffle=shuffle,
     )
     print(next(iter(training_dl))[0].size())
     if test is not None:
