@@ -4,6 +4,7 @@ import sys
 import re
 from itertools import islice
 from functools import partial
+import random
 
 import editdistance
 import matplotlib.pyplot as plt
@@ -22,6 +23,7 @@ from . import lineest, linemodels, slog
 from .utils import Every, Charset, useopt, junk
 from . import utils
 from . import loading
+from . import degrade
 
 _ = linemodels
 
@@ -285,25 +287,25 @@ def good_text(regex, sample):
 
 
 def augment_transform(image, p=0.5):
-    if random.uniform() < p:
+    if random.uniform(0, 1) < p:
         image = degrade.normalize(image)
         image = 1.0 * (image > 0.5)
-    if random.uniform() < p:
+    if random.uniform(0, 1) < p:
         (image,) = degrade.transform_all(image)
-    if random.uniform() < p:
+    if random.uniform(0, 1) < p:
         image = degrade.noisify(image)
     return image
 
 
 def augment_distort(image, p=0.5):
-    if random.uniform() < p:
+    if random.uniform(0, 1) < p:
         image = degrade.normalize(image)
         image = 1.0 * (image > 0.5)
-    if random.uniform() < p:
+    if random.uniform(0, 1) < p:
         (image,) = degrade.transform_all(image)
-    if random.uniform() < p:
+    if random.uniform(0, 1) < p:
         (image,) = degrade.distort_all(image)
-    if random.uniform() < p:
+    if random.uniform(0, 1) < p:
         image = degrade.noisify(image)
     return image
 
@@ -318,11 +320,10 @@ def make_loader(
     mode="train",
     charset=Charset(),
     dewarp_to=-1,
-    augment="",
+    augment="distort",
     text_normalizer="simple",
     text_select_re="[0-9A-Za-z]",
     extensions="line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt",
-    augmentent="transform",
     **kw,
 ):
     training = wds.WebDataset(fname)
@@ -425,14 +426,14 @@ def save_model(logger, trainer, test_dl, ntest=999999999):
 @app.command()
 def train(
     training: str,
-    training_bs: int = 3,
+    training_bs: int = 4,
     invert: bool = False,
     normalize_intensity: bool = False,
     model: str = "text_model_210218",
     test: str = None,
     test_bs: int = 20,
     ntest: int = int(1e12),
-    schedule: str = "1e-3 * (0.9**((n//100000)**.5))",
+    schedule: str = "3e-4 * (0.9**((n//200000)**.5))",
     text_select_re: str = "[A-Za-z0-9]",
     # lr: float = 1e-3,
     # checkerr: float = 1e12,
@@ -442,6 +443,7 @@ def train(
     ntrain: int = (1 << 31),
     display: float = -1.0,
     num_workers: int = 4,
+    data_parallel: str = "",
 ):
 
     charset = Charset(chardef=charset_file)
@@ -487,11 +489,17 @@ def train(
         test_dl = None
 
     model = loading.load_or_construct_model(model, len(charset))
+    model.cuda()
+    if data_parallel != "":
+        data_parallel = eval(f"[{data_parallel}]")
+        model_dp = torch.nn.DataParallel(model, device_ids=data_parallel)
+        for a in "mname_ margs_".split():
+            setattr(model_dp, a, getattr(model, a, None))
+        model = model_dp
     if not hasattr(model, "extra_"):
         model.extra_ = {}
     model.extra_.setdefault("charset", charset)
     model.extra_.setdefault("dewarp_to", dewarp_to)
-    model.cuda()
     print(model)
 
     trainer = TextTrainer(model)

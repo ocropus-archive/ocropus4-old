@@ -22,7 +22,12 @@ local_ocropus() {
 }
 
 cmd_train_word() {
-    local_ocropus ocrorec train words.shards.yml --display 20
+    #local_ocropus ocrorec train words.shards.yml --display 20
+    local_ocropus ocrorec train words.shards.yml --training-bs 16 --num-workers 12 --display 5
+}
+
+cmd_train_word2() {
+    local_ocropus ocrorec train words.shards.yml --training-bs 6 --num-workers 12 --display 5 --data-parallel 0,1
 }
 
 cmd_train_wseg() {

@@ -14,6 +14,13 @@ datasets:
     shards:
       - gsub-{000000..000167}.tar
 
+  - name: Google 1000 Books (binarized)
+    perepoch: 10
+    buckets:
+      - ./gs/nvdata-ocropus-words/
+    shards:
+      - bin-gsub-{000000..000167}.tar
+
   - name: Internet Archive Sample
     perepoch: 10
     buckets:
@@ -21,9 +28,23 @@ datasets:
     shards:
       - ia1-{000000..000033}.tar
 
+  - name: Internet Archive Sample (binarized)
+    perepoch: 10
+    buckets:
+      - ./gs/nvdata-ocropus-words/
+    shards:
+      - bin-ia1-{000000..000033}.tar
+
   - name: words sampled from UW3
     perepoch: 20
     buckets:
       - ./gs/nvdata-ocropus-words/
     shards:
       - uw3-word-{000000..000022}.tar
+
+  - name: generated words
+    perepoch: 10
+    buckets:
+      - ./gs/nvdata-ocropus-words/
+    shards:
+      - generate-{000000..000199}.tar

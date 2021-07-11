@@ -2,6 +2,7 @@ import random as pyr
 import warnings
 from random import randint
 import math
+import random
 
 import numpy as np
 import pylab
@@ -10,7 +11,7 @@ import scipy.ndimage as ndi
 
 def normalize(image, lo=0.005, hi=0.995):
     lo, hi = np.percentile(image.flat, lo * 100), np.percentile(image.flat, hi * 100)
-    return np.clip((image - lo) / (hi - lo), 0.0, 1.0)
+    return np.clip((image - lo) / max(hi - lo, 0.1), 0.0, 1.0)
 
 
 def autoinvert(image):
@@ -22,16 +23,17 @@ def autoinvert(image):
         return image
 
 
-def fgbg(selector, fg, bg):
+def fgbg(selector, fg, bg, check=False):
     lo, hi = np.amin(selector), np.amax(selector)
     assert selector.shape == fg.shape
     assert selector.shape == bg.shape
-    assert lo >= 0 and lo <= 0.1
-    assert hi >= 0.9 and hi <= 1.0
+    if check:
+        assert lo >= 0 and lo <= 0.1
+        assert hi >= 0.9 and hi <= 1.0
     return selector * fg + (1.0 - selector) * bg
 
 
-def random_transform(translation=(-0.05, 0.05), rotation=(-2, 2), scale=(-0.1, 0.1), aniso=(-0.1, 0.1)):
+def random_transform(translation=(-0.01, 0.01), rotation=(-2, 2), scale=(-0.1, 0.0), aniso=(-0.1, 0.1)):
     """Generate a random affine transform. Return a dict."""
     dx = pyr.uniform(*translation)
     dy = pyr.uniform(*translation)
@@ -95,7 +97,11 @@ def noise_distort1d(shape, sigma=100.0, magnitude=100.0):
     return deltas
 
 
-def distort_all(*args, sigma=1.0, maxdelta=5.0, order=1):
+def distort_all(*args, sigma=(0.5, 3.0), maxdelta=(0.1, 2.0), order=1):
+    if isinstance(sigma, tuple):
+        sigma = random.uniform(*sigma)
+    if isinstance(maxdelta, tuple):
+        maxdelta = random.uniform(*maxdelta)
     if not isinstance(order, list):
         order = [order] * len(args)
     noise = bounded_gaussian_noise(args[0].shape, sigma, maxdelta)
@@ -141,7 +147,7 @@ def noisify(image, sigma=(0.0, 2.0), amp1=0.1, sigma1=(0.5, 2.0), amp2=0.1, sigm
     if isinstance(amp2, tuple):
         amp2 = random.uniform(*amp2)
     image = normalize(image)
-    blurred = binary_blur(image)
+    blurred = binary_blur(image, sigma)
     fg1 = 1.0 - amp1 * make_noise_at_scale(image.shape, sigma1)
     bg1 = amp1 * make_noise_at_scale(image.shape, sigma1)
     fg2 = 1.0 - amp2 * make_noise_at_scale(image.shape, sigma2)
