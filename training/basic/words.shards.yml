@@ -47,4 +47,4 @@ datasets:
     buckets:
       - ./gs/nvdata-ocropus-words/
     shards:
-      - generate-{000000..000199}.tar
+      - generated-{000000..000199}.tar

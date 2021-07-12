@@ -436,7 +436,7 @@ def info(fnames: List[str], verbose: bool = False):
 
 
 @app.command()
-def findempty(fnames: List[str]):
+def findempty(fnames: List[str], n=0):
     """Find all files that don't contain a saved model.
 
     This is used for deleting partial logs.
@@ -450,8 +450,30 @@ def findempty(fnames: List[str]):
                     "select step, scalar from log where key='model' order by scalar"
                 )
             )
-            if len(models) == 0:
+            if len(models) <= 0:
                 print(fname)
+        except Exception as exn:
+            print(f"ERROR: {fname} {repr(exn)[:30]}", file=sys.stderr)
+
+
+@app.command()
+def steps(fnames: List[str], clean:int=-1):
+    """Find all files that don't contain a saved model.
+
+    This is used for deleting partial logs.
+    """
+    fnames = sorted(fnames)
+    for fname in fnames:
+        try:
+            con = sqlite3.connect(fname)
+            result = list( con.execute("select max(step) from log"))
+            value = result[0][0]
+            value = int(value) if isinstance(value, float) else 0
+            if value < clean:
+                print(f"{value:12d} {fname} REMOVING")
+                os.unlink(fname)
+            else:
+                print(f"{value:12d} {fname}")
         except Exception as exn:
             print(f"ERROR: {fname} {repr(exn)[:30]}", file=sys.stderr)
 
