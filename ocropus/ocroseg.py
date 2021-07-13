@@ -351,10 +351,10 @@ class SegTrainer:
                 mask[:, :, -d:] = 0
             mask = torch.tensor(mask)
             self.last_mask = mask
-            #umask = mask.unsqueeze(1).expand(-1, outputs.size(1), -1, -1)
-            #outputs = self.weightlayer(outputs, umask.to(outputs.device))
+            # umask = mask.unsqueeze(1).expand(-1, outputs.size(1), -1, -1)
+            # outputs = self.weightlayer(outputs, umask.to(outputs.device))
         assert inputs.size(0) == outputs.size(0)
-        loss = self.compute_loss(outputs, targets)
+        loss = self.compute_loss(outputs, targets, mask=mask)
         if math.isnan(float(loss)):
             print("got NaN loss", file=sys.stderr)
             return 999.0
@@ -388,11 +388,13 @@ class SegTrainer:
             m = self.margin
             outputs = outputs[:, :, m:-m, m:-m]
             targets = targets[:, m:-m, m:-m]
+            if mask is not None:
+                mask = mask[:, m:-m, m:-m]
         if mask is None:
             loss = nn.CrossEntropyLoss()(outputs, targets.to(outputs.device))
         else:
             loss = nn.CrossEntropyLoss(reduction='none')(outputs, targets.to(outputs.device))
-            loss = torch.mean(loss * mask.to(loss.device))
+            loss = torch.sum(loss * mask.to(loss.device)) / (0.1 + mask.sum())
         return loss
 
     def probs_batch(self, inputs):
