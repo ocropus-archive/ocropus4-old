@@ -74,6 +74,12 @@ def augmentation_none(sample):
     return image, target
 
 
+def masked_norm(image, target):
+    a = image.ravel()[target.ravel() > 0]
+    lo, hi = np.amin(a), np.amax(a)
+    return np.clip((image - lo) / (hi - lo), 0, 1)
+
+
 @useopt
 def augmentation_default(sample):
     image, target = sample
@@ -86,13 +92,20 @@ def augmentation_default(sample):
     if target.ndim == 3:
         target = target[..., 0]
     #print(image.dtype, image.shape, target.dtype, target.shape)
-    if random.uniform(0.0, 1.0) < 0.5:
+    x = random.uniform(0, 1)
+    if x < 0.3:
+        image = masked_norm(image, target)
+    else:
+        image = image - np.amin(image)
+        image /= max(np.amax(image), 0.001)
+    if random.uniform(0.0, 1.0) < 0.3:
         image, target = degrade.transform_all(image, target, order=[1, 0])
-    if random.uniform(0.0, 1.0) < 0.0:
+    if False and random.uniform(0.0, 1.0) < 0.5:
         # FIXME this generates bad masks somehow
         image, target = degrade.distort_all(image, target, order=[1, 0], sigma=(3.0, 10.0), maxdelta=(0.1, 5.0))
     if random.uniform(0.0, 1.0) < 0.5:
         image = degrade.noisify(image)
+    image = np.clip(image, 0.0, 1.0)
     #print(image.dtype, image.shape, target.dtype, target.shape)
     image = np.array([image, image, image], dtype=np.float32).transpose(1, 2, 0)
     assert image.ndim == 3
