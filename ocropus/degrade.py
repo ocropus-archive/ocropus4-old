@@ -45,7 +45,9 @@ def random_transform(translation=(-0.01, 0.01), rotation=(-2, 2), scale=(-0.1, 0
 
 
 def transform_image(image, angle=0.0, scale=1.0, aniso=1.0, translation=(0, 0), order=1):
-    """Transform an image with a random set of transformations."""
+    """Transform an image with a random set of transformations.
+
+    Output is same size as input."""
     dx, dy = translation
     scale = 1.0 / scale
     c = np.cos(angle)
@@ -56,15 +58,38 @@ def transform_image(image, angle=0.0, scale=1.0, aniso=1.0, translation=(0, 0), 
     w, h = image.shape
     c = np.array([w, h]) / 2.0
     d = c - np.dot(m, c) + np.array([dx * w, dy * h])
-    return ndi.affine_transform(image, m, offset=d, order=order, mode="nearest", output=np.dtype("f"))
+    return ndi.affine_transform(image, m, offset=d, order=order, mode="constant", output=image.dtype)
 
 
 def transform_all(*args, order=1, **kw):
-    """Perform the same random transformation to all images."""
+    """Perform the same random transformation to all images.
+
+    Output is same size as input."""
     if not isinstance(order, list):
         order = [order] * len(args)
     t = random_transform(**kw)
     return tuple(transform_image(x, order=o, **t) for x, o in zip(args, order))
+
+
+def xtransform_image(image, angle=0.0, scale=1.0, aniso=1.0, translation=(0, 0), order=1):
+    """Transform an image with a random set of transformations.
+
+    Uses individual transforms and grows/shrinks image as necessary."""
+    if angle != 0.0:
+        image = ndi.rotate(image, angle, order=1, mode="constant")
+    if scale != 1.0 or aniso != 1.0:
+        image = ndi.zoom(image, (scale*aniso, scale/aniso), order=1, mode="constant")
+    return image
+
+
+def xtransform_all(*args, order=1, **kw):
+    """Perform the same random transformation to all images.
+
+    Output is same size as input."""
+    if not isinstance(order, list):
+        order = [order] * len(args)
+    t = random_transform(**kw)
+    return tuple(xtransform_image(x, order=o, **t) for x, o in zip(args, order))
 
 
 def bounded_gaussian_noise(shape, sigma, maxdelta):
