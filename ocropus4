@@ -84,6 +84,9 @@ models)  # list and show models
 genwords)  # list and show models
     $python3 -m ocropus.genwords "$@"
     ;;
+pdfproc)  # list and show models
+    $python3 -m ocropus.pdfproc "$@"
+    ;;
 misc)  # list and show models
     $python3 -m ocropus.misc "$@"
     ;;
