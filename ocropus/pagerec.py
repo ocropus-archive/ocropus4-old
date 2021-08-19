@@ -222,7 +222,7 @@ def recognize(
     recmodel: str = "",
     segmodel: str = "",
     lgmodel: str = "",
-    extensions: str = "jpg;png;page.jpg;page.png",
+    extensions: str = "jpg;png;page.jpg;page.png;jpeg",
     segment_type: str = "span",
     maxrec: int = 999999999,
     full_html: str = "",
