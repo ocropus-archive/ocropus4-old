@@ -117,7 +117,7 @@ def page_orientation_210113(size=256):
         return result
 
     r = 3
-    B, D, H, W = (2, 128), (1, 512), size, size
+    B, D, H, W = (1, 128), (1, 3), size, size
     model = nn.Sequential(
         layers.CheckSizes(B, D, H, W),
         *block(32, r),

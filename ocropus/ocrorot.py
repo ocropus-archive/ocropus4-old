@@ -105,7 +105,7 @@ def make_loader(
         .decode("l")
         .to_tuple(extensions)
         .map_tuple(lambda image: utils.autoinvert(image, invert))
-        .pipe(pipe)
+        .then(pipe)
         .shuffle(shuffle)
     )
     if limit > 0:
@@ -132,6 +132,7 @@ class PageOrientation:
                 batch = [x[0] for x in islice(patches, bs)]
                 if len(batch) == 0:
                     break
+                batch = np.array(batch)
                 inputs = torch.tensor(batch).unsqueeze(1).cuda()
                 with torch.no_grad():
                     outputs = self.model(inputs).softmax(1).cpu().detach()
@@ -166,13 +167,13 @@ def train(
     bs: int = 64,
     prefix: str = "rot",
     lrfun="0.3**(3+n//5000000)",
-    output: str = "",
+    log_to: str = "",
     model: str = "page_orientation_210113",
     extensions: str = default_extensions,
     display: float = 0.0,
     invert: str = "Auto",
 ):
-    logger = slog.Logger(fname=output, prefix=prefix)
+    logger = slog.Logger(fname=log_to, prefix=prefix)
     logger.sysinfo()
     logger.json("args", sys.argv)
     model = loading.load_or_construct_model(model)
