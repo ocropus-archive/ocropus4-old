@@ -533,6 +533,7 @@ def recognize(
     invert: str = "Auto",
     limit: int = 999999999,
     normalize: bool = True,
+    display: bool = True,
 ):
     model = loading.load_only_model(model)
     textrec = TextRec(model)
@@ -551,11 +552,12 @@ def recognize(
             print(sample.get("__key__", image.shape))
             continue
         result = textrec.recognize(image)
-        plt.clf()
-        plt.imshow(textrec.last_image)
-        plt.title(result)
-        plt.ginput(1, 1.0)
-        print(sample.get("__key__"), image.shape, result)
+        if display:
+            plt.clf()
+            plt.imshow(textrec.last_image)
+            plt.title(result)
+            plt.ginput(1, 1.0)
+            print(sample.get("__key__"), image.shape, result)
 
 
 @app.command()
