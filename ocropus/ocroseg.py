@@ -62,8 +62,6 @@ def augmentation_none(sample):
     print(image.dtype, image.shape, target.dtype, target.shape)
     if image.dtype == np.uint8:
         image = image.astype(np.float32) / 255.0
-    if image.ndim == 3:
-        image = np.mean(image, 2)
     if target.ndim == 3:
         target = target[..., 0]
     assert image.ndim == 3
@@ -485,9 +483,10 @@ class Segmenter:
             self.model.cpu()
 
     def segment(self, page):
+        assert isinstance(page, np.ndarray)
         assert page.ndim == 2
-        assert page.shape[0] >= 100 and page.shape[0] < 20000
-        assert page.shape[1] >= 100 and page.shape[1] < 20000
+        assert page.shape[0] >= 100 and page.shape[0] < 20000, page.shape
+        assert page.shape[1] >= 100 and page.shape[1] < 20000, page.shape
         self.page = page
         self.activate()
         self.model.eval()
@@ -657,24 +656,35 @@ def predict(
     fname: str,
     model: str,
     extensions: str = "png;image.png;framed.png;ipatch.png seg.png;target.png;lines.png;spatch.png",
-    prefix: str = "ocroseg",
     output: str = "",
+    display: bool = True,
 ):
-    training_dl = make_loader(fname, batch_size=1, extensions=extensions, num_workers=1,)
     model = loading.load_only_model(model)
     model.cuda()
-
     segmenter = Segmenter(model)
 
-    for images, targets in training_dl:
-        result = segmenter.segment(images[0])
-        plt.subplot(131)
-        plt.imshow(images[0])
-        plt.imshow(132)
-        plt.imshow(targets[0, :, :, 1:])
-        plt.imshow(133)
-        plt.imshow(result[0, :, :, 1:])
-        plt.show()
+    pass # FIXME do something here
+
+@app.command()
+def segment(
+    fname: str,
+    model: str,
+    extensions: str = "png;image.png;framed.png;ipatch.png;jpg;jpeg;JPEG",
+    output: str = "",
+    display: bool = True,
+):
+    model = loading.load_only_model(model)
+    model.cuda()
+    segmenter = Segmenter(model)
+
+    dataset = wds.WebDataset(fname).decode("rgb")
+
+    for sample in dataset:
+        image = wds.getfirst(sample, extensions)
+        image = np.mean(image, 2)
+        result = segmenter.segment(image)
+
+        pass # FIXME do something here
 
 
 @app.command()
