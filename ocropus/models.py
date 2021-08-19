@@ -72,10 +72,30 @@ def cbinarization_210429():
         ocrlayers.GrayDocument(),
         layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
         inputstats.InputStats("cbinarization"),
-        layers.ModPaded(
+        layers.ModPadded(
             32,
             combos.make_unet(
                 [32, 64, 128, 256, 512], sub=nn.Sequential(*combos.conv2d_block(256, 3, repeat=1))
+            ),
+        ),
+        flex.Conv2d(1, 3, padding=1),
+        nn.Sigmoid(),
+    )
+    flex.shape_inference(model, (2, 1, 161, 391))
+    return model
+
+
+@model
+def cbinarization_210819():
+    """A purely convolutional U-net based model."""
+    model = nn.Sequential(
+        ocrlayers.GrayDocument(),
+        layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
+        inputstats.InputStats("cbinarization", mode="nocheck"),
+        layers.ModPadded(
+            32,
+            combos.make_unet(
+                [8, 16, 24, 32, 64], sub=nn.Sequential(*combos.conv2d_block(64, 3, repeat=1))
             ),
         ),
         flex.Conv2d(1, 3, padding=1),
