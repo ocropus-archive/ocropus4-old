@@ -17,7 +17,7 @@ def test_hocr2seg(tmp_path):
         check="none",
     )
     count = 0
-    for sample in wds.Dataset(f"{tmp_path}/_seg.tar"):
+    for sample in wds.WebDataset(f"{tmp_path}/_seg.tar"):
         count += 1
     assert count == 50
 
@@ -31,6 +31,6 @@ def test_hocr2seg_pipe(tmp_path):
         check="none",
     )
     count = 0
-    for sample in wds.Dataset(f"{tmp_path}/_seg2.tar"):
+    for sample in wds.WebDataset(f"{tmp_path}/_seg2.tar"):
         count += 1
     assert count == 50

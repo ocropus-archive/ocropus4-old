@@ -255,7 +255,7 @@ def generate(
     limit: int = 999999999,
 ):
     """Given binary image training data, generate artificial binarization data using ocrodeg."""
-    ds = wds.Dataset(input).decode("l").rename(__key__="__key__", image=extensions)
+    ds = wds.WebDataset(input).decode("l").rename(__key__="__key__", image=extensions)
     sink = wds.TarWriter(output)
     for i, sample in enumerate(islice(ds, limit)):
         key = sample["__key__"]
@@ -349,7 +349,7 @@ def binarize(
     show: int = 0,
     limit: int = 99999999,
 ):
-    src = wds.Dataset(fname).decode("rgb")
+    src = wds.WebDataset(fname).decode("rgb")
     binarizer = Binarizer(model)
     with wds.TarWriter(output) as sink:
         for index, sample in enumerate(islice(src, limit)):

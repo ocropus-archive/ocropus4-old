@@ -262,7 +262,7 @@ def recognize(
     print("# starting", file=sys.stderr)
     lgmodel = loading.load_only_model(lgmodel)
     lg = LineGrouper(lgmodel)
-    ds = wds.Dataset(tarfile).decode("l").to_tuple(f"__key__ {extensions}")
+    ds = wds.WebDataset(tarfile).decode("l").to_tuple(f"__key__ {extensions}")
     sink = None
     if output != "":
         sink = wds.TarWriter(output)

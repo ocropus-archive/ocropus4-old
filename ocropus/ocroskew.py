@@ -264,7 +264,7 @@ def correct(
 ):
     assert model != ""
     skewtest = PageSkew(model)
-    dataset = wds.Dataset(urls).decode("l").to_tuple("__key__ " + extensions)
+    dataset = wds.WebDataset(urls).decode("l").to_tuple("__key__ " + extensions)
     sink = wds.TarWriter(output)
     for key, image in islice(dataset, nsamples):
         image = utils.autoinvert(image, invert)

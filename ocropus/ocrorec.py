@@ -538,8 +538,8 @@ def recognize(
     textrec = TextRec(model)
     textrec.invert = invert
     textrec.normalize = normalize
-    dataset = wds.Dataset(fname)
-    dataset.decode("l8").rename(image=extensions)
+    dataset = wds.WebDataset(fname)
+    dataset = dataset.decode("l8").rename(image=extensions)
     plt.ion()
     for sample in islice(dataset, limit):
         image = sample["image"]
