@@ -290,8 +290,10 @@ def augment_transform(image, p=0.5):
     if random.uniform(0, 1) < p:
         image = degrade.normalize(image)
         image = 1.0 * (image > 0.5)
+    if image.shape[0] > 80.0:
+        image = ndi.zoom(image, 80.0 / image.shape[0], order=1)
     if random.uniform(0, 1) < p:
-        (image,) = degrade.transform_all(image)
+        (image,) = degrade.transform_all(image, scale=(-0.3, 0))
     if random.uniform(0, 1) < p:
         image = degrade.noisify(image)
     return image
@@ -301,8 +303,10 @@ def augment_distort(image, p=0.5):
     if random.uniform(0, 1) < p:
         image = degrade.normalize(image)
         image = 1.0 * (image > 0.5)
+    if image.shape[0] > 80.0:
+        image = ndi.zoom(image, 80.0 / image.shape[0], order=1)
     if random.uniform(0, 1) < p:
-        (image,) = degrade.transform_all(image)
+        (image,) = degrade.transform_all(image, scale=(-0.3, 0))
     if random.uniform(0, 1) < p:
         (image,) = degrade.distort_all(image)
     if random.uniform(0, 1) < p:

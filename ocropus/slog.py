@@ -248,6 +248,7 @@ class Logger:
 @app.command()
 def getargs(fname):
     """Get the arguments used for training from a logfile."""
+    assert os.path.exists(fname), fname
     con = sqlite3.connect(fname)
     query = "select json from log where key='args'"
     result = list(con.execute(query))
@@ -260,6 +261,7 @@ def getargs(fname):
 @app.command()
 def getmodel(fname):
     """Get the model definition used for training from a logfile."""
+    assert os.path.exists(fname), fname
     con = sqlite3.connect(fname)
     query = "select obj from log where key='model'"
     result = list(con.execute(query))
@@ -274,6 +276,7 @@ def getstep(fname, step: int, output=None):
     """Get the model at the given step."""
     assert output is not None
     assert not os.path.exists(output)
+    assert os.path.exists(fname), fname
     con = sqlite3.connect(fname)
     query = f"select obj, step, scalar from log where key='model' order by abs({step}-step) limit 1"
     result = list(con.execute(query))
@@ -285,6 +288,7 @@ def getstep(fname, step: int, output=None):
 
 
 def gettrained(fname, query, output=None):
+    assert os.path.exists(fname), fname
     con = sqlite3.connect(fname)
     result = list(con.execute(query))
     assert len(result) > 0, "found no model"
@@ -318,6 +322,7 @@ def getlast(fname, output=None):
 @app.command()
 def val2model(fname):
     """Move the validation values into the scalar field for the corresponding model."""
+    assert os.path.exists(fname), fname
     con = sqlite3.connect(fname)
     print(list(con.execute("select step, scalar from log where key='model'")))
     query = "select step, scalar from log where key='val/err'"
@@ -333,6 +338,7 @@ def val2model(fname):
 
 @app.command()
 def schema(fname):
+    assert os.path.exists(fname), fname
     con = sqlite3.connect(fname)
     print(
         list(con.execute("select sql from sqlite_master where name = 'log'"))[0][0])
@@ -342,6 +348,7 @@ def schema(fname):
 @app.command()
 def show(fname, keys="model", xscale="linear", yscale="linear"):
     plt.title(fname)
+    assert os.path.exists(fname), fname
     con = sqlite3.connect(fname)
     plt.xscale(xscale)
     plt.yscale(yscale)
@@ -372,6 +379,9 @@ def info(fnames: List[str], verbose: bool = False):
     result = []
     for fname in fnames:
         try:
+            if not os.path.exists(fname):
+                print(f"{fname}: not found", file=sys.stderr)
+                continue
             con = sqlite3.connect(fname)
             args = list(con.execute("select json from log where key='args'"))
             if len(args) == 0:
@@ -421,6 +431,9 @@ def findempty(fnames: List[str], n=0):
     fnames = sorted(fnames)
     for fname in fnames:
         try:
+            if not os.path.exists(fname):
+                print(f"{fname}: not found", file=sys.stderr)
+                continue
             con = sqlite3.connect(fname)
             models = list(
                 con.execute(
@@ -442,6 +455,9 @@ def steps(fnames: List[str], clean: int = -1):
     fnames = sorted(fnames)
     for fname in fnames:
         try:
+            if not os.path.exists(fname):
+                print(f"{fname}: not found", file=sys.stderr)
+                continue
             con = sqlite3.connect(fname)
             result = list(con.execute("select max(step) from log"))
             value = result[0][0]
