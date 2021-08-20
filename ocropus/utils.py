@@ -208,7 +208,7 @@ def autoinvert(image, mode, normalize=True):
             raise ValueError(f"{image.dtype}: unsupported dtype")
     elif image.dtype == np.uint8:
         if normalize:
-            image = image.astype(np.float) - float(np.amin(image))
+            image = image.astype(float) - float(np.amin(image))
             image *= 255.0 / max(0.1, np.amax(image))
             image = image.astype(np.uint8)
         if mode == "False" or mode is False:

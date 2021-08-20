@@ -4,6 +4,7 @@
 # See the LICENSE file for licensing terms (TBD).
 #
 
+import os
 import webdataset as wds
 from ocropus import ocrorec
 from ocropus import ocroseg
@@ -21,6 +22,20 @@ mbucket = "pipe:curl -sL https://storage.googleapis.com/ocropus4-models"
 def test_data():
     ds = wds.WebDataset(f"{bucket}/gsub-words-test.tar")
     next(iter(ds))
+
+
+def test_ocrorec_pretrained(tmpdir):
+    mname = "wordmodel.pth"
+    assert 0 == os.system(f"curl -sL {mbucket}/{mname} > {tmpdir}/{mname}")
+    ocrorec.recognize(f"{bucket}/gsub-words-test.tar",
+                      model=f"{tmpdir}/{mname}", display=False, limit=3)
+
+
+def test_ocroseg_pretrained(tmpdir):
+    mname = "wsegmodel.pth"
+    assert 0 == os.system(f"curl -sL {mbucket}/{mname} > {tmpdir}/{mname}")
+    ocroseg.segment(f"{bucket}/gsub-test.tar",
+                    model=f"{tmpdir}/{mname}", display=False, limit=3)
 
 
 def test_ocrorec(tmpdir):
@@ -78,6 +93,7 @@ def test_ocroskew(tmpdir):
     slog.getbest(f"{tmpdir}/ocroskew-train.sqlite3", f"{tmpdir}/ocroskew.pth")
     ocroskew.correct([f"{bucket}/gsub-bin-test.tar"], nsamples=10,
                      output=f"{tmpdir}/skewated.tar", model=f"{tmpdir}/ocroskew.pth")
+
 
 def test_pagerec(tmpdir):
     pass

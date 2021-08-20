@@ -19,6 +19,7 @@ import traceback
 import skimage
 import skimage.filters
 from functools import partial
+from itertools import islice
 
 from .utils import Schedule, repeatedly
 from . import slog
@@ -658,6 +659,7 @@ def predict(
     extensions: str = "png;image.png;framed.png;ipatch.png seg.png;target.png;lines.png;spatch.png",
     output: str = "",
     display: bool = True,
+    limit: int = 999999999,
 ):
     model = loading.load_only_model(model)
     model.cuda()
@@ -672,6 +674,7 @@ def segment(
     extensions: str = "png;image.png;framed.png;ipatch.png;jpg;jpeg;JPEG",
     output: str = "",
     display: bool = True,
+    limit: int = 999999999,
 ):
     model = loading.load_only_model(model)
     model.cuda()
@@ -679,7 +682,7 @@ def segment(
 
     dataset = wds.WebDataset(fname).decode("rgb")
 
-    for sample in dataset:
+    for sample in islice(dataset, 0, limit):
         image = wds.getfirst(sample, extensions)
         image = np.mean(image, 2)
         result = segmenter.segment(image)
