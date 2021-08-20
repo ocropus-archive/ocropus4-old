@@ -98,8 +98,6 @@ class Logger:
                 time.sleep(1.0)
         self.commit()
         self.last = time.time()
-        if self.wandb is not None:
-            self.wandb.flush()
 
     def commit(self):
         self.con.commit()
