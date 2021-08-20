@@ -367,8 +367,7 @@ log_progress_every = Every(60)
 def log_progress(trainer):
     if log_progress_every():
         avgloss = mean(trainer.losses[-100:]) if len(trainer.losses) > 0 else 0.0
-        logger.scalar("train/loss", avgloss, step=trainer.nsamples, json=dict(lr=trainer.last_lr))
-        logger.flush()
+        logger.log_progress(trainer.nsamples, train_loss=avgloss, lr=trainer.last_lr)
 
 
 def display_progress(trainer):
@@ -415,12 +414,12 @@ def save_model(logger, trainer, test_dl, ntest=999999999):
     if test_dl is not None:
         errors, total = trainer.errors(test_dl, ntest=ntest)
         err = float(errors) / total
-        logger.scalar("val/err", err, step=trainer.nsamples)
+        logger.log_progress(trainer.nsamples, val_err=err)
         print("test set:", err, errors, total)
         loss = err
     else:
         loss = np.mean(trainer.losses[-100:])
-    loading.log_model(logger, trainer.model, step=trainer.nsamples, loss=loss)
+    logger.save_ocrmodel(trainer.model, step=trainer.nsamples, loss=loss)
 
 
 @app.command()
@@ -452,9 +451,7 @@ def train(
     if log_to == "":
         log_to = None
     logger = slog.Logger(fname=log_to, prefix="ocrorec")
-    logger.sysinfo()
-    logger.json(
-        "args",
+    logger.save_config(
         dict(
             mdef=model,
             training=training,

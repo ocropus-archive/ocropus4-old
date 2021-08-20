@@ -65,7 +65,7 @@ class NoLogger:
 
 
 class Logger:
-    def __init__(self, fname=None, prefix="", sysinfo=True):
+    def __init__(self, fname=None, prefix="", sysinfo=True, config=None):
         if fname is None or fname == "":
             import datetime
 
@@ -79,14 +79,16 @@ class Logger:
         self.con.execute(log_schema)
         self.last = 0
         self.interval = 10
+
         if "WANDB" in os.environ:
+            self.wandb = True
             import wandb
-            wandb.init(project=os.environ["WANDB"])
+            wandb.init(project=os.environ["WANDB"], config=config)
             self.wandb = wandb
         if sysinfo:
             self.sysinfo()
 
-    def maybe_commit(self):
+    def _maybe_commit(self):
         if time.time() - self.last < self.interval:
             return
         for i in range(10):
@@ -99,24 +101,12 @@ class Logger:
         self.commit()
         self.last = time.time()
 
-    def commit(self):
-        self.con.commit()
-
-    def flush(self):
-        self.commit()
-
-    def close(self):
-        self.con.commit()
-        self.con.close()
-        if self.wandb is not None:
-            self.wandb.finish()
-            self.wandb = None
-
-    def raw(
+    def _raw(
         self, key, step=None, msg=None, scalar=None, json=None, obj=None, walltime=None
     ):
         if log_verbose:
-            print("#LOG#", key, step, msg, scalar, json, type(obj), file=sys.stderr)
+            print("#LOG#", key, step, msg, scalar,
+                  json, type(obj), file=sys.stderr)
         if msg is not None:
             assert isinstance(msg, (str, bytes)), msg
         if step is not None:
@@ -134,9 +124,9 @@ class Logger:
             "values (?, ?, ?, ?, ?, ?, ?)",
             (walltime, step, key, msg, scalar, json, obj),
         )
-        self.maybe_commit()
+        self._maybe_commit()
 
-    def insert(
+    def _insert(
         self,
         key,
         step=None,
@@ -144,14 +134,14 @@ class Logger:
         scalar=None,
         json=None,
         obj=None,
-        dumps=pickle.dumps,
+        dumps=torch_dumps,
         walltime=None,
     ):
         if json is not None:
             json = jsonlib.dumps(json)
         if obj is not None:
             obj = dumps(obj)
-        self.raw(
+        self._raw(
             key,
             step=step,
             msg=msg,
@@ -161,38 +151,82 @@ class Logger:
             walltime=walltime,
         )
 
-    def scalar(self, key, scalar, step=None, **kw):
-        self.insert(key, scalar=scalar, step=step, **kw)
+    def _scalar(self, key, scalar, step=None, **kw):
+        self._insert(key, scalar=scalar, step=step, **kw)
         if self.wandb is not None:
             self.wandb.log({key: scalar}, step=step)
 
+    def _json(self, key, json, step=None, **kw):
+        self._insert(key, json=json, step=step, **kw)
+
+    def _save(self, key, obj, step=None, **kw):
+        self._insert(key, obj=obj, dumps=torch_dumps, step=step, **kw)
+
+    def _save_model(self, obj, key="model", step=None, **kw):
+        self._insert(key, obj=obj, dumps=torch_dumps, step=step, **kw)
+        self.flush()
+
+    def _save_dict(self, key="model", step=None, **kw):
+        self._insert(key, obj=kw, dumps=torch_dumps, step=step, **kw)
+        self.flush()
+
+    def _get_sysinfo(self):
+        cmd = "hostname; uname"
+        cmd += "; lsb_release -a"
+        cmd += "; cat /proc/meminfo; cat /proc/cpuinfo"
+        cmd += "; nvidia-smi -L"
+        with os.popen(cmd) as stream:
+            info = stream.read()
+        return info
+
+    # These are high level methods (preferred)
+
+    def commit(self):
+        self.con.commit()
+
+    def flush(self):
+        self.commit()
+
+    def close(self):
+        self.con.commit()
+        self.con.close()
+        if self.wandb is not None:
+            self.wandb.finish()
+            self.wandb = None
+
+    def sysinfo(self):
+        self.message("__sysinfo__", self._get_sysinfo())
+
     def message(self, key, msg, step=None, **kw):
-        self.insert(key, msg=msg, step=step, **kw)
+        self._insert(key, msg=msg, step=step, **kw)
 
-    def json(self, key, json, step=None, **kw):
-        self.insert(key, json=json, step=step, **kw)
-        if self.wandb is not None and isinstance(json, dict):
-            self.wandb.log(json, step=step)
+    def log_progress(self, step, **kw):
+        for key, value in kw.items():
+            self._scalar(key, value, step=step)
 
-    def save(self, key, obj, step=None, **kw):
-        self.insert(key, obj=obj, dumps=torch_dumps, step=step, **kw)
+    def save_config(self, config):
+        assert isinstance(config, dict)
+        config = dict(config)
+        config["__sysinfo__"] = self._get_sysinfo()
+        self._json("config", config)
+        if self.wandb is not None:
+            self.wandb.config.update(config)
 
-    def save_model(self, obj, key="model", step=None, **kw):
-        self.insert(key, obj=obj, dumps=torch_dumps, step=step, **kw)
+    def save_ocrmodel(self, model, key="model", step=None, loss=None, extra={}):
+        obj = loading.model_to_dict(model)
+        if not "extra" in obj:
+            obj["extra"] = {}
+        obj["extra"].update(extra)
+        self._insert(key, obj=obj, step=step, scalar=loss)
         self.flush()
         if self.wandb is not None:
-            with tempfile.NamedTemporaryFile(suffix=".pth") as stream:
-                torch.save(obj, stream)
-                stream.flush()
-                self.wandb.save(stream.name)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                with open(f"{tmpdir}/model.pth", "wb") as stream:
+                    torch.save(obj, stream)
+                    stream.flush()
+                self.wandb.save(f"{tmpdir}/model.pth", base_path=tmpdir)
 
-    def save_dict(self, key="model", step=None, **kw):
-        self.insert(key, obj=kw, dumps=torch_dumps, step=step, **kw)
-        self.flush()
-
-    def save_smodel(self, obj, key="model", step=None, **kw):
-        self.insert(key, obj=obj, dumps=loading.dump_model_as_dict, step=step, **kw)
-        self.flush()
+    # Helpers
 
     def load_last(self, key="model"):
         obj, step = self.con.execute(
@@ -209,82 +243,6 @@ class Logger:
         state = torch_loads(obj)
         state["step"] = step
         return state
-
-    def sysinfo(self):
-        cmd = "hostname; uname"
-        cmd += "; lsb_release -a"
-        cmd += "; cat /proc/meminfo; cat /proc/cpuinfo"
-        cmd += "; nvidia-smi -L"
-        with os.popen(cmd) as stream:
-            info = stream.read()
-        self.message("__sysinfo__", info)
-
-    # The following methods are for compatibility with Tensorboard
-
-    def add_hparams(self, hparam_dict=None, metric_dict=None):
-        if hparam_dict is not None:
-            self.json("__hparams__", hparam_dict)
-        if metric_dict is not None:
-            self.json("__metrics__", metric_dict)
-
-    def add_image(self, tag, obj, step=-1, walltime=None):
-        # FIXME: convert to PNG
-        self.save(tag, obj, step=step, walltime=walltime)
-
-    def add_figure(self, tag, obj, step=-1, bins=None, walltime=None):
-        # FIXME: convert to PNG
-        self.save(tag, obj, step=step, walltime=walltime)
-
-    def add_video(self, tag, obj, step=-1, bins=None, walltime=None):
-        # FIXME: convert to MJPEG
-        self.save(tag, obj, step=step, walltime=walltime)
-
-    def add_audio(self, tag, obj, step=-1, bins=None, walltime=None):
-        # FIXME: convert to FLAC
-        self.save(tag, obj, step=step, walltime=walltime)
-
-    def add_text(self, tag, obj, step=-1, bins=None, walltime=None):
-        self.message(tag, obj, step=step, walltime=walltime)
-
-    def add_embedding(self, tag, obj, step=-1, bins=None, walltime=None):
-        raise Exception("unimplemented")
-
-    def add_graph(self, tag, obj, step=-1, bins=None, walltime=None):
-        raise Exception("unimplemented")
-
-    def add_scalar(self, tag, value, step=-1, walltime=None):
-        self.scalar(tag, value, step=step, walltime=walltime)
-
-    def add_scalars(self, tag, value, step=-1, bins=None, walltime=None):
-        for k, v in value.items():
-            self.add_scalar(f"{tag}/{k}", v, step=step, walltime=walltime)
-
-    def add_histogram(self, tag, values, step=-1, bins=None, walltime=None):
-        raise Exception("unimplemented")
-
-    def add_pr_curve(
-        self,
-        tag,
-        labels,
-        predictions,
-        global_step=None,
-        num_thresholds=127,
-        weights=None,
-        walltime=None,
-    ):
-        raise Exception("unimplemented")
-
-    def add_mesh(
-        self,
-        tag,
-        vertices,
-        colors=None,
-        faces=None,
-        config_dict=None,
-        global_step=None,
-        walltime=None,
-    ):
-        raise Exception("unimplemented")
 
 
 @app.command()
@@ -376,7 +334,8 @@ def val2model(fname):
 @app.command()
 def schema(fname):
     con = sqlite3.connect(fname)
-    print(list(con.execute("select sql from sqlite_master where name = 'log'"))[0][0])
+    print(
+        list(con.execute("select sql from sqlite_master where name = 'log'"))[0][0])
     print(list(con.execute("select distinct(key) from log")))
 
 
@@ -387,7 +346,8 @@ def show(fname, keys="model", xscale="linear", yscale="linear"):
     plt.xscale(xscale)
     plt.yscale(yscale)
     for k in keys.split(","):
-        values = list(con.execute(f"select step, scalar from log where key = '{k}'"))
+        values = list(con.execute(
+            f"select step, scalar from log where key = '{k}'"))
         xs, ys = zip(*values)
         plt.ylim(np.amin(ys), min(np.amax(ys), 6*np.median(ys)))
         plt.plot(xs, ys, label=k)
@@ -474,7 +434,7 @@ def findempty(fnames: List[str], n=0):
 
 
 @app.command()
-def steps(fnames: List[str], clean:int=-1):
+def steps(fnames: List[str], clean: int = -1):
     """Find all files that don't contain a saved model.
 
     This is used for deleting partial logs.
@@ -483,7 +443,7 @@ def steps(fnames: List[str], clean:int=-1):
     for fname in fnames:
         try:
             con = sqlite3.connect(fname)
-            result = list( con.execute("select max(step) from log"))
+            result = list(con.execute("select max(step) from log"))
             value = result[0][0]
             value = int(value) if isinstance(value, float) else 0
             if value < clean:

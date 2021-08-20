@@ -535,7 +535,7 @@ def save_model(logger, trainer, test_dl, ntest=999999):
         err = np.mean(trainer.losses[-100:])
     print(f"# saving {trainer.nsamples}", file=sys.stderr)
     print(model)
-    loading.log_model(logger, model, loss=err, step=trainer.nsamples)
+    logger.save_ocrmodel(model, loss=err, step=trainer.nsamples)
 
 
 ###
@@ -576,8 +576,7 @@ def train(
         log_to = None
     logger = slog.Logger(fname=log_to, prefix=prefix)
     logger.sysinfo()
-    logger.json(
-        "args",
+    logger.save_config(
         dict(
             model=model,
             training=training,

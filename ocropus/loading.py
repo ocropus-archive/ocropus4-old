@@ -156,28 +156,29 @@ def load_or_construct_model(path, *args, module_path=module_path, **kw):
         return construct_model(path, *args, module_path=module_path, **kw)
 
 
+##
+## Model Saving
+##
 #
-# Model Saving
 #
-
-
-def save_model_as_dict(model, fname, step=None):
-    """Save a PyTorch model (parameters and source code) to a file."""
-    state = model_to_dict(model)
-    torch.save(state, fname)
-
-
-def dump_model_as_dict(model):
-    """Dump a model to a string using torch.save."""
-    buf = io.BytesIO()
-    save_model_as_dict(model, buf)
-    return buf.getbuffer()
-
-
-def log_model(logger, model, loss=None, step=None, optimizer=None, **kw):
-    assert loss is not None
-    assert step is not None
-    state = model_to_dict(model)
-    state.update(kw)
-    logger.save("model", state, scalar=loss, step=step)
-    logger.flush()
+#def save_model_as_dict(model, fname, step=None):
+#    """Save a PyTorch model (parameters and source code) to a file."""
+#    state = model_to_dict(model)
+#    torch.save(state, fname)
+#
+#
+#def dump_model_as_dict(model):
+#    """Dump a model to a string using torch.save."""
+#    buf = io.BytesIO()
+#    save_model_as_dict(model, buf)
+#    return buf.getbuffer()
+#
+#
+#def log_model(logger, model, loss=None, step=None, optimizer=None, **kw):
+#    assert loss is not None
+#    assert step is not None
+#    state = model_to_dict(model)
+#    state.update(kw)
+#    logger.save_ocrmodel(model, scalar=loss, step=step)
+#    logger.flush()
+#
