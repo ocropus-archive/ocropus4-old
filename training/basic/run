@@ -31,7 +31,7 @@ cmd_train_word2() {
 }
 
 cmd_train_wseg() {
-    local_ocropus ocroseg train wseg.shards.yml --display 20
+    local_ocropus ocroseg train wseg.shards.yml --display 5
 }
 
 cmd=$(echo "${1:-help}" | sed 's/-/_/g')

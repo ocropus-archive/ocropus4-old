@@ -537,13 +537,14 @@ def recognize(
     invert: str = "Auto",
     limit: int = 999999999,
     normalize: bool = True,
+    display: bool = True,
 ):
     model = loading.load_only_model(model)
     textrec = TextRec(model)
     textrec.invert = invert
     textrec.normalize = normalize
-    dataset = wds.Dataset(fname)
-    dataset.decode("l8").rename(image=extensions)
+    dataset = wds.WebDataset(fname)
+    dataset = dataset.decode("l8").rename(image=extensions)
     plt.ion()
     for sample in islice(dataset, limit):
         image = sample["image"]
@@ -555,11 +556,12 @@ def recognize(
             print(sample.get("__key__", image.shape))
             continue
         result = textrec.recognize(image)
-        plt.clf()
-        plt.imshow(textrec.last_image)
-        plt.title(result)
-        plt.ginput(1, 1.0)
-        print(sample.get("__key__"), image.shape, result)
+        if display:
+            plt.clf()
+            plt.imshow(textrec.last_image)
+            plt.title(result)
+            plt.ginput(1, 1.0)
+            print(sample.get("__key__"), image.shape, result)
 
 
 @app.command()

@@ -73,11 +73,16 @@ class Logger:
             fname += datetime.datetime.now().strftime("%y%m%d-%H%M%S")
             fname += ".sqlite3"
             print(f"log is {fname}", file=sys.stderr)
+        self.wandb = None
         self.fname = fname
         self.con = sqlite3.connect(fname)
         self.con.execute(log_schema)
         self.last = 0
         self.interval = 10
+        if "WANDB" in os.environ:
+            import wandb
+            wandb.init(project=os.environ["WANDB"])
+            self.wandb = wandb
         if sysinfo:
             self.sysinfo()
 
@@ -103,6 +108,9 @@ class Logger:
     def close(self):
         self.con.commit()
         self.con.close()
+        if self.wandb is not None:
+            self.wandb.finish()
+            self.wandb = None
 
     def raw(
         self, key, step=None, msg=None, scalar=None, json=None, obj=None, walltime=None
@@ -155,12 +163,16 @@ class Logger:
 
     def scalar(self, key, scalar, step=None, **kw):
         self.insert(key, scalar=scalar, step=step, **kw)
+        if self.wandb is not None:
+            self.wandb.log({key: scalar}, step=step)
 
     def message(self, key, msg, step=None, **kw):
         self.insert(key, msg=msg, step=step, **kw)
 
     def json(self, key, json, step=None, **kw):
         self.insert(key, json=json, step=step, **kw)
+        if self.wandb is not None and isinstance(json, dict):
+            self.wandb.log(json, step=step)
 
     def save(self, key, obj, step=None, **kw):
         self.insert(key, obj=obj, dumps=torch_dumps, step=step, **kw)
@@ -168,6 +180,11 @@ class Logger:
     def save_model(self, obj, key="model", step=None, **kw):
         self.insert(key, obj=obj, dumps=torch_dumps, step=step, **kw)
         self.flush()
+        if self.wandb is not None:
+            with tempfile.NamedTemporaryFile(suffix=".pth") as stream:
+                torch.save(obj, stream)
+                stream.flush()
+                self.wandb.save(stream.name)
 
     def save_dict(self, key="model", step=None, **kw):
         self.insert(key, obj=kw, dumps=torch_dumps, step=step, **kw)

@@ -7,6 +7,13 @@ datasets:
     shards:
       - cdipsub-{000000..000092}.tar
 
+  - name: UW3 sample
+    choose: 50
+    buckets:
+      - ./gs/nvdata-ocropus-wseg-sub/
+    shards:
+      - uw3-wseg-{000000..000117}.tar
+
   - name: Google 1000 Books
     choose: 50
     buckets:
@@ -21,9 +28,16 @@ datasets:
     shards:
       - ia1-{000000..000033}.tar
 
-  - name: UW3 sample
+  - name: Google 1000 Books (binarized)
     choose: 50
     buckets:
       - ./gs/nvdata-ocropus-wseg-sub/
     shards:
-      - uw3-wseg-{000000..000117}.tar
+      - bin-gsub-{000000..000167}.tar
+
+  - name: Internet Archive Sample (binarized)
+    choose: 30
+    buckets:
+      - ./gs/nvdata-ocropus-wseg-sub/
+    shards:
+      - bin-ia1-{000000..000033}.tar

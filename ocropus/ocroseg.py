@@ -3,6 +3,7 @@ import sys
 import time
 import math
 
+import random
 import typer
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,6 +19,7 @@ import traceback
 import skimage
 import skimage.filters
 from functools import partial
+from itertools import islice
 
 from .utils import Schedule, repeatedly
 from . import slog
@@ -26,6 +28,7 @@ from . import loading
 from . import patches
 from . import slices as sl
 from .utils import useopt, junk
+from . import degrade
 
 
 logger = slog.NoLogger()
@@ -57,10 +60,9 @@ def augmentation_none(sample):
     image, target = sample
     assert isinstance(image, np.ndarray), type(image)
     assert isinstance(target, np.ndarray), type(image)
+    print(image.dtype, image.shape, target.dtype, target.shape)
     if image.dtype == np.uint8:
         image = image.astype(np.float32) / 255.0
-    if image.ndim == 4:
-        image = np.mean(image, 3)
     if target.ndim == 3:
         target = target[..., 0]
     assert image.ndim == 3
@@ -71,56 +73,45 @@ def augmentation_none(sample):
     return image, target
 
 
+def masked_norm(image, target):
+    a = image.ravel()[target.ravel() > 0]
+    lo, hi = np.amin(a), np.amax(a)
+    return np.clip((image - lo) / (hi - lo), 0, 1)
+
+
 @useopt
-def augmentation_gray(sample):
+def augmentation_default(sample):
     image, target = sample
+    assert isinstance(image, np.ndarray), type(image)
+    assert isinstance(target, np.ndarray), type(image)
     if image.dtype == np.uint8:
         image = image.astype(np.float32) / 255.0
+    if image.ndim == 3:
+        image = np.mean(image, 2)
     if target.ndim == 3:
         target = target[..., 0]
+    #print(image.dtype, image.shape, target.dtype, target.shape)
+    x = random.uniform(0, 1)
+    if x < 0.3:
+        image = masked_norm(image, target)
+    else:
+        image = image - np.amin(image)
+        image /= max(np.amax(image), 0.001)
+    if random.uniform(0.0, 1.0) < 0.3:
+        image, target = degrade.transform_all(image, target, order=[1, 0])
+    if False and random.uniform(0.0, 1.0) < 0.5:
+        # FIXME this generates bad masks somehow
+        image, target = degrade.distort_all(image, target, order=[1, 0], sigma=(3.0, 10.0), maxdelta=(0.1, 5.0))
+    if random.uniform(0.0, 1.0) < 0.5:
+        image = degrade.noisify(image)
+    image = np.clip(image, 0.0, 1.0)
+    #print(image.dtype, image.shape, target.dtype, target.shape)
+    image = np.array([image, image, image], dtype=np.float32).transpose(1, 2, 0)
     assert image.ndim == 3
     assert target.ndim == 2
     assert image.dtype == np.float32
     assert target.dtype in (np.uint8, np.int16, np.int32, np.int64), target.dtype
     assert image.shape[:2] == target.shape[:2]
-    if np.random.uniform() > 0.5:
-        image = simple_bg_fg(
-            image,
-            amplitude=np.random.uniform(0.01, 0.3),
-            imsigma=np.random.uniform(0.01, 2.0),
-            sigma=np.random.uniform(0.5, 10.0),
-        )
-    return image, target
-
-
-@useopt
-def augmentation_page(sample, max_distortion=0.05):
-    image, target = sample
-    if image.dtype == np.uint8:
-        image = image.astype(np.float32) / 255.0
-    if target.ndim == 3:
-        target = target[..., 0]
-    assert image.ndim == 3
-    assert target.ndim == 2
-    assert image.dtype == np.float32
-    assert target.dtype in (np.uint8, np.int16, np.int32, np.int64), target.dtype
-    assert image.shape[:2] == target.shape[:2]
-    d = min(image.shape[0], image.shape[1]) * max_distortion
-    src = [
-        np.random.uniform(-d, d),
-        image.shape[0] + np.random.uniform(-d, d),
-        np.random.uniform(-d, d),
-        image.shape[1] + np.random.uniform(-d, d),
-    ]
-    image = patches.get_affine_patch(image, image.shape[:2], src, order=1)
-    if np.random.uniform() > 0.5:
-        image = simple_bg_fg(
-            image,
-            amplitude=np.random.uniform(0.01, 0.3),
-            imsigma=np.random.uniform(0.01, 2.0),
-            sigma=np.random.uniform(0.5, 10.0),
-        )
-    target = patches.get_affine_patch(target, target.shape[:2], src, order=0)
     return image, target
 
 
@@ -278,7 +269,6 @@ class SegTrainer:
         self,
         model,
         *,
-        lossfn=None,
         lr=1e-4,
         every=3.0,
         device=None,
@@ -291,8 +281,6 @@ class SegTrainer:
         super().__init__()
         self.model = model
         self.device = None
-        # self.lossfn = nn.CTCLoss()
-        self.lossfn = nn.CrossEntropyLoss()
         self.every = every
         self.atsamples = []
         self.losses = []
@@ -362,10 +350,10 @@ class SegTrainer:
                 mask[:, :, -d:] = 0
             mask = torch.tensor(mask)
             self.last_mask = mask
-            umask = mask.unsqueeze(1).expand(-1, outputs.size(1), -1, -1)
-            outputs = self.weightlayer(outputs, umask.to(outputs.device))
+            # umask = mask.unsqueeze(1).expand(-1, outputs.size(1), -1, -1)
+            # outputs = self.weightlayer(outputs, umask.to(outputs.device))
         assert inputs.size(0) == outputs.size(0)
-        loss = self.compute_loss(outputs, targets)
+        loss = self.compute_loss(outputs, targets, mask=mask)
         if math.isnan(float(loss)):
             print("got NaN loss", file=sys.stderr)
             return 999.0
@@ -385,7 +373,7 @@ class SegTrainer:
         self.losses.append(loss)
         return loss
 
-    def compute_loss(self, outputs, targets):
+    def compute_loss(self, outputs, targets, mask=None):
         """Compute loss taking a margin into account."""
         b, d, h, w = outputs.shape
         b1, h1, w1 = targets.shape
@@ -399,7 +387,13 @@ class SegTrainer:
             m = self.margin
             outputs = outputs[:, :, m:-m, m:-m]
             targets = targets[:, m:-m, m:-m]
-        loss = self.lossfn(outputs, targets.to(outputs.device))
+            if mask is not None:
+                mask = mask[:, m:-m, m:-m]
+        if mask is None:
+            loss = nn.CrossEntropyLoss()(outputs, targets.to(outputs.device))
+        else:
+            loss = nn.CrossEntropyLoss(reduction='none')(outputs, targets.to(outputs.device))
+            loss = torch.sum(loss * mask.to(loss.device)) / (0.1 + mask.sum())
         return loss
 
     def probs_batch(self, inputs):
@@ -490,9 +484,10 @@ class Segmenter:
             self.model.cpu()
 
     def segment(self, page):
+        assert isinstance(page, np.ndarray)
         assert page.ndim == 2
-        assert page.shape[0] >= 100 and page.shape[0] < 20000
-        assert page.shape[1] >= 100 and page.shape[1] < 20000
+        assert page.shape[0] >= 100 and page.shape[0] < 20000, page.shape
+        assert page.shape[1] >= 100 and page.shape[1] < 20000, page.shape
         self.page = page
         self.activate()
         self.model.eval()
@@ -562,7 +557,7 @@ def train(
     ntrain: int = int(1e12),
     ntest: int = int(1e12),
     schedule: str = "1e-3 * (0.9 ** (n//100000))",
-    augmentation: str = "none",
+    augmentation: str = "default",
     extensions: str = "png;image.png;framed.png;ipatch.png seg.png;target.png;lines.png;spatch.png",
     prefix: str = "ocroseg",
     weightmask: int = 0,
@@ -662,24 +657,37 @@ def predict(
     fname: str,
     model: str,
     extensions: str = "png;image.png;framed.png;ipatch.png seg.png;target.png;lines.png;spatch.png",
-    prefix: str = "ocroseg",
     output: str = "",
+    display: bool = True,
+    limit: int = 999999999,
 ):
-    training_dl = make_loader(fname, batch_size=1, extensions=extensions, num_workers=1,)
     model = loading.load_only_model(model)
     model.cuda()
-
     segmenter = Segmenter(model)
 
-    for images, targets in training_dl:
-        result = segmenter.segment(images[0])
-        plt.subplot(131)
-        plt.imshow(images[0])
-        plt.imshow(132)
-        plt.imshow(targets[0, :, :, 1:])
-        plt.imshow(133)
-        plt.imshow(result[0, :, :, 1:])
-        plt.show()
+    pass # FIXME do something here
+
+@app.command()
+def segment(
+    fname: str,
+    model: str,
+    extensions: str = "png;image.png;framed.png;ipatch.png;jpg;jpeg;JPEG",
+    output: str = "",
+    display: bool = True,
+    limit: int = 999999999,
+):
+    model = loading.load_only_model(model)
+    model.cuda()
+    segmenter = Segmenter(model)
+
+    dataset = wds.WebDataset(fname).decode("rgb")
+
+    for sample in islice(dataset, 0, limit):
+        image = wds.getfirst(sample, extensions)
+        image = np.mean(image, 2)
+        result = segmenter.segment(image)
+
+        pass # FIXME do something here
 
 
 @app.command()

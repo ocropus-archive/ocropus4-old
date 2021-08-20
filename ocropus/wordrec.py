@@ -334,7 +334,7 @@ def recognize(
     pr.load_recognizer(recmodel)
     pr.load_segmenter(segmodel)
     print("# starting", file=sys.stderr)
-    ds = wds.Dataset(tarfile).decode("l").to_tuple(f"__key__ {extensions}")
+    ds = wds.WebDataset(tarfile).decode("l").to_tuple(f"__key__ {extensions}")
     sink = None
     if output != "":
         sink = wds.TarWriter(output)

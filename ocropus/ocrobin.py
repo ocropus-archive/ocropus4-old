@@ -138,7 +138,7 @@ def make_loader(
         .decode("l")
         .to_tuple(extensions)
         .map_tuple(inverter, inverter)
-        .pipe(pipe)
+        .then(pipe)
         .shuffle(shuffle)
     )
     if absnorm[0] < absnorm[1]:
@@ -242,7 +242,7 @@ class Binarizer:
             image = np.mean(image, 2)
         inputs = torch.tensor(image).unsqueeze(0).unsqueeze(0).cuda()
         outputs = self.model(inputs)[0, 0]
-        result = np.array(outputs.detach().cpu().numpy(), dtype=np.float)
+        result = np.array(outputs.detach().cpu().numpy(), dtype=float)
         return result
 
 
@@ -255,7 +255,7 @@ def generate(
     limit: int = 999999999,
 ):
     """Given binary image training data, generate artificial binarization data using ocrodeg."""
-    ds = wds.Dataset(input).decode("l").rename(__key__="__key__", image=extensions)
+    ds = wds.WebDataset(input).decode("l").rename(__key__="__key__", image=extensions)
     sink = wds.TarWriter(output)
     for i, sample in enumerate(islice(ds, limit)):
         key = sample["__key__"]
@@ -278,14 +278,14 @@ def generate(
 @app.command()
 def train(
     fnames: List[str],
-    extensions: str = "png;page.png;jpg;page.jpg bin.png",
+    extensions: str = "png;page.png;jpg;page.jpg;jpg;jpeg bin.png",
     num_workers: int = 4,
-    model: str = "cbinarization_210317",  # "binarization_210113",
+    model: str = "cbinarization_210819",
     bs: int = 32,
     lr: str = "1e-3",
     show: int = 0,
     num_epochs: int = 100,
-    output: str = "_ocrobin.sqlite3",
+    log_to: str = "_ocrobin.sqlite3",
     replicate: int = 1,
     shuffle: int = 10000,
     display: float = 0.0,
@@ -310,7 +310,7 @@ def train(
         fracnorm=fracnorm,
         absnorm=absnorm,
     )
-    logger = slog.Logger(fname=output, prefix="bin")
+    logger = slog.Logger(fname=log_to, prefix="bin")
     model = loading.load_or_construct_model(model)
     model.cuda()
     print(model)
@@ -335,7 +335,10 @@ def train(
         if display > 0 and schedule("display", display, initial=True):
             trainer.show_batch()
 
+    trainer.to("cpu")
     save()
+    del trainer.model
+    del trainer
 
 
 @app.command()
@@ -343,18 +346,18 @@ def binarize(
     fname: str,
     output: str = None,
     model: str = None,
-    iext: str = "png",
+    iext: str = "png;png;jpg;jpeg",
     oext: str = "bin.png",
     keep: bool = True,
     show: int = 0,
     limit: int = 99999999,
 ):
-    src = wds.Dataset(fname).decode("rgb")
+    src = wds.WebDataset(fname).decode("rgb")
     binarizer = Binarizer(model)
     with wds.TarWriter(output) as sink:
         for index, sample in enumerate(islice(src, limit)):
             print(f"{sample['__key__']}")
-            image = sample.get(iext)
+            image = wds.getfirst(sample, iext)
             result = binarizer.binarize(image)
             if not keep:
                 del sample[iext]
