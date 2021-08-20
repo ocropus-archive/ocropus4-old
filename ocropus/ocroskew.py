@@ -179,8 +179,7 @@ def train(
     invert: str = "Auto",
 ):
     logger = slog.Logger(fname=log_to, prefix=prefix)
-    logger.sysinfo()
-    logger.json("args", sys.argv)
+    logger.save_config(dict(args=sys.argv))
     model = loading.load_or_construct_model(model, nbins)
     model.cuda()
     print(model)
@@ -206,7 +205,7 @@ def train(
 
     def save():
         avgloss = np.mean(losses[-100:])
-        loading.log_model(logger, model, step=count, loss=avgloss, bins=bins)
+        logger.save_ocrmodel(model, step=count, loss=avgloss, extra=dict(bins=bins))
         print("\nsaved at", count)
 
     schedule = utils.Schedule()

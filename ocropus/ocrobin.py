@@ -319,10 +319,9 @@ def train(
     trainer.to("cuda")
 
     def save():
-        logger.save_smodel(
-            model, step=trainer.count, scalar=np.mean(trainer.losses[-100:])
+        logger.save_ocrmodel(
+            model, step=trainer.count, loss=np.mean(trainer.losses[-100:])
         )
-        logger.flush()
 
     schedule = utils.Schedule()
 

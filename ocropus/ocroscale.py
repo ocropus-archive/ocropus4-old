@@ -187,8 +187,7 @@ def train(
     patchsize: str = "200, 600",
 ):
     logger = slog.Logger(fname=log_to, prefix=prefix)
-    logger.sysinfo()
-    logger.json("args", sys.argv)
+    logger.save_config(dict(args=sys.argv))
     patchsize = eval(f"({patchsize})")
     model = loading.load_or_construct_model(model, nbins, size=patchsize)
     model.cuda()
@@ -217,7 +216,7 @@ def train(
 
     def save():
         avgloss = np.mean(losses[-100:])
-        loading.log_model(logger, model, step=count, loss=avgloss, bins=bins, patchsize=patchsize)
+        logger.save_ocrmodel(model, step=count, loss=avgloss, extra=dict(bins=bins))
         print("\nsaved at", count)
 
     schedule = utils.Schedule()

@@ -5,6 +5,7 @@
 #
 
 import os
+import pytest
 import webdataset as wds
 from ocropus import ocrorec
 from ocropus import ocroseg
@@ -17,7 +18,6 @@ from ocropus import ocroskew
 
 bucket = "pipe:curl -sL https://storage.googleapis.com/ocropus4-test"
 mbucket = "pipe:curl -sL https://storage.googleapis.com/ocropus4-models"
-
 
 def test_data():
     ds = wds.WebDataset(f"{bucket}/gsub-words-test.tar")
