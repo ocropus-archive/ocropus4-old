@@ -20,6 +20,7 @@ from ocropus import pubnet
 bucket = "pipe:curl -sL https://storage.googleapis.com/ocropus4-test"
 mbucket = "pipe:curl -sL https://storage.googleapis.com/ocropus4-models"
 
+
 def test_data():
     ds = wds.WebDataset(f"{bucket}/gsub-words-test.tar")
     next(iter(ds))
@@ -96,17 +97,21 @@ def test_ocroskew(tmpdir):
                      output=f"{tmpdir}/skewated.tar", model=f"{tmpdir}/ocroskew.pth")
 
 
-def test_pagerec(tmpdir):
-    pass
-
-
 def test_publaynet_pretrained(tmpdir):
     mname = "publaynet-model.pth"
     assert 0 == os.system(f"curl -sL {mbucket}/{mname} > {tmpdir}/{mname}")
-    pubnet.pageseg(f"{bucket}/publaynet-train-test.tar", model=f"{tmpdir}/{mname}", display=-1, slice="3")
+    pubnet.pageseg(f"{bucket}/publaynet-train-test.tar",
+                   model=f"{tmpdir}/{mname}", display=-1, slice="3")
 
 
 def test_pubtabnet_pretrained(tmpdir):
     mname = "pubtabnet-model.pth"
     assert 0 == os.system(f"curl -sL {mbucket}/{mname} > {tmpdir}/{mname}")
-    pubnet.tabseg(f"{bucket}/pubtabnet-train-test.tar", model=f"{tmpdir}/{mname}", display=-1, slice="3")
+    pubnet.tabseg(f"{bucket}/pubtabnet-train-test.tar",
+                  model=f"{tmpdir}/{mname}", display=-1, slice="3")
+
+
+# TODO:
+# - hocr2... command tests
+# - pubnet training data generation as commands
+# - test cases for pagerec etc.
