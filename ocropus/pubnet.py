@@ -512,8 +512,8 @@ def tabseg(
     scale: float = 1.0,
     nomerge: bool = False,
     probs: bool = False,
-    sliced: str = "999999999",
-    timeout: float = -1,
+    slice: str = "999999999",
+    display: float = -1,
     offset: str = "-2,-2",
     check: bool = True,
     verbose: bool = False,
@@ -526,9 +526,9 @@ def tabseg(
         print(segmenter.model)
     segmenter.activate()
     ds = wds.WebDataset(src).decode("rgb").rename(jpg="png;jpg;jpeg")
-    slicer = eval(f"lambda x: islice(x, {sliced})")
+    slicer = eval(f"lambda x: islice(x, {slice})")
     sink = None if output == "" else wds.TarWriter(output)
-    if timeout > 0:
+    if display > 0:
         plt.ion()
         plt.gcf().canvas.mpl_connect("close_event", done_exn)
     for count, sample in slicer(enumerate(ds)):
@@ -536,8 +536,8 @@ def tabseg(
         if select != "" and select not in key:
             continue
         boxes = segmenter.predict(im, scale=scale)
-        if timeout > 0:
-            tabseg_display(im, segmenter, title=f"{count}: {key}", timeout=timeout)
+        if display > 0:
+            tabseg_display(im, segmenter, title=f"{count}: {key}", timeout=display)
         result = {
             "__key__": key,
             "jpg": im,
@@ -545,7 +545,8 @@ def tabseg(
         }
         if sink is not None:
             sink.write(result)
-    sink.close()
+    if sink is not None:
+        sink.close()
 
 
 @app.command()

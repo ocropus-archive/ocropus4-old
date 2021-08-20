@@ -15,6 +15,7 @@ from ocropus import ocrobin
 from ocropus import ocrorot
 from ocropus import ocroscale
 from ocropus import ocroskew
+from ocropus import pubnet
 
 bucket = "pipe:curl -sL https://storage.googleapis.com/ocropus4-test"
 mbucket = "pipe:curl -sL https://storage.googleapis.com/ocropus4-models"
@@ -97,3 +98,15 @@ def test_ocroskew(tmpdir):
 
 def test_pagerec(tmpdir):
     pass
+
+
+def test_publaynet_pretrained(tmpdir):
+    mname = "publaynet-model.pth"
+    assert 0 == os.system(f"curl -sL {mbucket}/{mname} > {tmpdir}/{mname}")
+    pubnet.pageseg(f"{bucket}/publaynet-train-test.tar", model=f"{tmpdir}/{mname}", display=-1, slice="3")
+
+
+def test_pubtabnet_pretrained(tmpdir):
+    mname = "pubtabnet-model.pth"
+    assert 0 == os.system(f"curl -sL {mbucket}/{mname} > {tmpdir}/{mname}")
+    pubnet.tabseg(f"{bucket}/pubtabnet-train-test.tar", model=f"{tmpdir}/{mname}", display=-1, slice="3")
