@@ -18,9 +18,9 @@ echo
 type python3
 }
 
-if test -d ./venv; then
-    source ./venv/bin/activate
-fi
+#if test -d ./venv; then
+#    source ./venv/bin/activate
+#fi
 
 case $library in
 
