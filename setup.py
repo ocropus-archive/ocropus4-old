@@ -14,22 +14,21 @@ if sys.version_info < (3, 6):
 VERSION = "0.0.0"
 
 PREREQS = """
-click
-typer
 braceexpand
 bs4
 editdistance
+humanhash3
 lxml
 matplotlib
 scikit-image
 scipy
-humanhash3
 tabulate
-webdataset@git+git://github.com/tmbdev/webdataset.git
-tensorcom@git+git://github.com/NVlabs/tensorcom.git
+tasker
+typer
 torchmore@git+git://github.com/tmbdev/torchmore.git
-ocrodeg@git+git://github.com/NVlabs/ocrodeg.git
+webdataset@git+git://github.com/tmbdev/webdataset.git
 """.split()
+
 print(PREREQS)
 
 setup(
