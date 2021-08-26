@@ -544,7 +544,7 @@ def tabseg(
         result = {
             "__key__": key,
             "jpg": im,
-            "cells.json": boxes
+            "cells.json": [[(coord.start, coord.stop) for coord in box] for box in boxes]
         }
         if sink is not None:
             sink.write(result)
