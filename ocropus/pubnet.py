@@ -172,7 +172,8 @@ def covering_rectangle(rect, bin, exclude=None, prepad=0, postpad=5, debug=0):
 
 
 class PubLaynetSegmenter:
-    def __init__(self, model):
+    def __init__(self, model, device=None):
+        self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         if isinstance(model, str):
             model = loading.load_or_construct_model(model)
             model.eval()
@@ -186,7 +187,7 @@ class PubLaynetSegmenter:
 
     def activate(self, active=True):
         if active:
-            self.model.cuda()
+            self.model.to(self.device)
         else:
             self.model.cpu()
 
@@ -411,7 +412,8 @@ def pageseg(
 
 
 class PubTabnetSegmenter:
-    def __init__(self, model):
+    def __init__(self, model, device=None):
+        self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         if isinstance(model, str):
             model = loading.load_or_construct_model(model)
             model.eval()
@@ -423,7 +425,7 @@ class PubTabnetSegmenter:
 
     def activate(self, active=True):
         if active:
-            self.model.cuda()
+            self.model.to(self.device)
         else:
             self.model.cpu()
 

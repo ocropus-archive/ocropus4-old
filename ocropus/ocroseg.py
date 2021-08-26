@@ -569,6 +569,7 @@ def train(
     noutput: int = 4,
     invert: str = False,
     remap: str = "",
+    device: str = None,
 ):
     global logger
 
@@ -620,12 +621,11 @@ def train(
         test_dl = None
 
     model = loading.load_or_construct_model(model, noutput=noutput)
-    model.cuda()
     if parallel and torch.cuda.device_count() > 1:
         model = torch.nn.DataParallel(model)
     print(model)
 
-    trainer = SegTrainer(model, weightmask=weightmask, bordermask=bordermask)
+    trainer = SegTrainer(model, weightmask=weightmask, bordermask=bordermask, device=device)
     trainer.set_lr_schedule(eval(f"lambda n: {schedule}"))
 
     schedule = Schedule()
@@ -661,7 +661,6 @@ def predict(
     limit: int = 999999999,
 ):
     model = loading.load_only_model(model)
-    model.cuda()
     segmenter = Segmenter(model)
 
     pass # FIXME do something here

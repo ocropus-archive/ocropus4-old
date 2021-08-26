@@ -122,7 +122,8 @@ def make_loader(
 
 @public
 class PageScale:
-    def __init__(self, fname, check=True):
+    def __init__(self, fname, check=True, device=None):
+        self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model = loading.load_only_model(fname)
         self.bins = self.model.extra_["bins"]
         self.patchsize = self.model.extra_.get("patchsize", (200, 600))
@@ -133,7 +134,7 @@ class PageScale:
         if self.check:
             assert np.mean(page) < 0.5
         try:
-            self.model.cuda()
+            self.model.to(self.device)
             self.model.eval()
             patches = scale_samples(page, alpha=(0, 0), patchsize=self.patchsize)
             result = []
@@ -142,7 +143,7 @@ class PageScale:
                 if len(batch) == 0:
                     break
                 batch = np.array(batch)
-                inputs = torch.tensor(batch).unsqueeze(1).cuda()
+                inputs = torch.tensor(batch).unsqueeze(1).to(self.device)
                 with torch.no_grad():
                     outputs = self.model(inputs).softmax(1).cpu().detach()
                 result.append(outputs)
@@ -185,12 +186,14 @@ def train(
     display: float = 0.0,
     invert: str = "Auto",
     patchsize: str = "200, 600",
+    device: str = None,
 ):
+    device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     logger = slog.Logger(fname=log_to, prefix=prefix)
     logger.save_config(dict(args=sys.argv))
     patchsize = eval(f"({patchsize})")
     model = loading.load_or_construct_model(model, nbins, size=patchsize)
-    model.cuda()
+    model.to(device)
     print(model)
     urls = urls * replicate
     scale = eval(f"({scale})")
@@ -206,7 +209,7 @@ def train(
         bins=bins,
         pipe=partial(scale_pipe, logscale=logscale, patchsize=patchsize),
     )
-    criterion = nn.CrossEntropyLoss().cuda()
+    criterion = nn.CrossEntropyLoss().to(device)
     lrfun = eval(f"lambda n: {lrfun}")
     lr = lrfun(0)
     optimizer = optim.SGD(model.parameters(), lr=lr)
@@ -227,10 +230,10 @@ def train(
         if len(patches) < 2:
             print("skipping small batch", file=sys.stderr)
             continue
-        patches = patches.type(torch.float).unsqueeze(1).cuda()
+        patches = patches.type(torch.float).unsqueeze(1).to(device)
         optimizer.zero_grad()
         outputs = model(patches)
-        loss = criterion(outputs, targets.cuda())
+        loss = criterion(outputs, targets.to(device))
         loss.backward()
         optimizer.step()
         count += len(patches)

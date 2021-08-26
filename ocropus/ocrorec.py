@@ -448,8 +448,10 @@ def train(
     num_workers: int = 4,
     data_parallel: str = "",
     shuffle: int = 20000,
+    device: str = None,
 ):
 
+    device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     charset = Charset(chardef=charset_file)
 
     if log_to == "":
@@ -492,7 +494,6 @@ def train(
         test_dl = None
 
     model = loading.load_or_construct_model(model, len(charset))
-    model.cuda()
     if data_parallel != "":
         data_parallel = eval(f"[{data_parallel}]")
         model_dp = torch.nn.DataParallel(model, device_ids=data_parallel)
@@ -505,7 +506,7 @@ def train(
     model.extra_.setdefault("dewarp_to", dewarp_to)
     print(model)
 
-    trainer = TextTrainer(model)
+    trainer = TextTrainer(model, device=device)
     trainer.charset = charset
     trainer.set_lr_schedule(eval(f"lambda n: {schedule}"))
 
