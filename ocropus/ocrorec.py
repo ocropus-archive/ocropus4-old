@@ -213,19 +213,19 @@ class TextTrainer:
 class TextRec:
     """A line recognizer (without training logic)."""
 
-    def __init__(self, model, *, charset=Charset()):
+    def __init__(self, model, *, charset=Charset(), device=None):
         self.model = model
         self.charset = model.extra_.get("charset", charset)
         self.dewarp_to = model.extra_.get("dewarp_to", -1)
+        self.device = device
         if self.dewarp_to > 0:
             self.dewarper = lineest.CenterNormalizer(target_height=self.dewarp_to)
         else:
             self.dewarper = None
-        model.cuda()
 
     def activate(self, active):
         if active:
-            self.model.cuda()
+            self.model.to(self.device)
         else:
             self.model.cpu()
 
@@ -239,7 +239,7 @@ class TextRec:
                 return None
         self.last_image = image
         batch = torch.FloatTensor(image.reshape(1, 1, *image.shape))
-        self.probs = self.model(batch.cuda()).softmax(1)
+        self.probs = self.model(batch.to(self.device)).softmax(1)
         if not full:
             decoded = ctc_decode(self.probs[0])
             return self.charset.decode_str(decoded)
@@ -535,9 +535,10 @@ def recognize(
     limit: int = 999999999,
     normalize: bool = True,
     display: bool = True,
+    device: str = None,
 ):
     model = loading.load_only_model(model)
-    textrec = TextRec(model)
+    textrec = TextRec(model, device=device)
     textrec.invert = invert
     textrec.normalize = normalize
     dataset = wds.WebDataset(fname)

@@ -61,9 +61,9 @@ def torch_dumps(obj):
     return buf.getbuffer()
 
 
-def torch_loads(buf):
+def torch_loads(buf, device="cpu"):
     """Load a data structure from a string using torch.load."""
-    return torch.load(io.BytesIO(buf))
+    return torch.load(io.BytesIO(buf), map_location=torch.device(device))
 
 
 #
@@ -137,21 +137,21 @@ def construct_model(name, *args, module_path=module_path, **kw):
 #
 
 
-def load_only_model(fname, *args, module_path=module_path, **kw):
+def load_only_model(fname, *args, module_path=module_path, device="cpu", **kw):
     if fname.endswith(".sqlite3"):
         assert os.path.exists(fname)
         logger = slog.Logger(fname)
         state = logger.load_last()
     else:
-        state = torch.load(fname)
+        state = torch.load(fname, map_location=torch.device(device))
     model = dict_to_model(state, module_path=module_path)
     return model
 
 
-def load_or_construct_model(path, *args, module_path=module_path, **kw):
+def load_or_construct_model(path, *args, module_path=module_path, device="cpu", **kw):
     _, ext = os.path.splitext(path)
     if ext in [".py", ".sqlite3", ".pth"]:
-        return load_only_model(path, *args, module_path=module_path, **kw)
+        return load_only_model(path, *args, module_path=module_path, device=device, **kw)
     else:
         return construct_model(path, *args, module_path=module_path, **kw)
 
