@@ -22,7 +22,6 @@ lxml
 matplotlib
 scikit-image
 scipy
-tabulate
 tasker
 typer
 torchmore@git+git://github.com/tmbdev/torchmore.git

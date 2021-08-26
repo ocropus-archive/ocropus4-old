@@ -6,7 +6,6 @@ lxml
 matplotlib
 scikit-image
 scipy
-tabulate
 tasker
 typer
 -e git+git://github.com/tmbdev/torchmore.git#egg=torchmore
