@@ -171,10 +171,10 @@ class BinTrainer:
         self.maxcount = 1e21
         self.nsamples = 0
         self.criterion = nn.MSELoss()
-        self.to(device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu"))
+        self.to(utils.device(device))
 
     def to(self, device="cpu"):
-        self.device = device
+        self.device = utils.device(device)
         self.model.to(device)
         self.criterion.to(device)
         # self.optimizer.to(device)
@@ -230,7 +230,7 @@ class BinTrainer:
 
 class Binarizer:
     def __init__(self, fname=None, device=None):
-        self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = utils.device(device)
         self.model = loading.load_only_model(fname)
 
     def activate(self, yes=True):
@@ -354,7 +354,7 @@ def binarize(
     limit: int = 99999999,
     device: str = None,
 ):
-    device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = utils.device(device)
     src = wds.WebDataset(fname).decode("rgb")
     binarizer = Binarizer(model, device=device)
     with wds.TarWriter(output) as sink:

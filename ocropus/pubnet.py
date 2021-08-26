@@ -17,6 +17,7 @@ from . import loading, ocroseg
 from . import slices as sl
 from . import ocroseg
 from .utils import useopt, junk
+from . import utils
 from matplotlib.patches import Rectangle
 from . import slog
 
@@ -173,7 +174,7 @@ def covering_rectangle(rect, bin, exclude=None, prepad=0, postpad=5, debug=0):
 
 class PubLaynetSegmenter:
     def __init__(self, model, device=None):
-        self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = utils.device(device)
         if isinstance(model, str):
             model = loading.load_or_construct_model(model)
             model.eval()
@@ -413,7 +414,7 @@ def pageseg(
 
 class PubTabnetSegmenter:
     def __init__(self, model, device=None):
-        self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = utils.device(device)
         if isinstance(model, str):
             model = loading.load_or_construct_model(model)
             model.eval()

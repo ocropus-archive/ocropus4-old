@@ -116,7 +116,7 @@ def make_loader(
 @public
 class PageOrientation:
     def __init__(self, fname, check=True, device=None):
-        self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = utils.device(device)
         self.model = loading.load_only_model(fname)
         self.check = check
         self.debug = int(os.environ.get("DEBUG_PAGEORIENTATION", 0))
@@ -175,10 +175,11 @@ def train(
     invert: str = "Auto",
     device: str = None,
 ):
-    device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = utils.device(device)
     logger = slog.Logger(fname=log_to, prefix=prefix)
     logger.save_config(dict(argv=sys.argv))
     model = loading.load_or_construct_model(model)
+    model.to(device)
     print(model)
     urls = urls * replicate
     training = make_loader(

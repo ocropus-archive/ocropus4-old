@@ -123,8 +123,9 @@ def make_loader(
 @public
 class PageScale:
     def __init__(self, fname, check=True, device=None):
-        self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = utils.device(device)
         self.model = loading.load_only_model(fname)
+        self.model.to(self.device)
         self.bins = self.model.extra_["bins"]
         self.patchsize = self.model.extra_.get("patchsize", (200, 600))
         self.check = check
@@ -188,7 +189,7 @@ def train(
     patchsize: str = "200, 600",
     device: str = None,
 ):
-    device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = utils.device(device)
     logger = slog.Logger(fname=log_to, prefix=prefix)
     logger.save_config(dict(args=sys.argv))
     patchsize = eval(f"({patchsize})")

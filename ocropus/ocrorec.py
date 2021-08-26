@@ -110,8 +110,8 @@ class TextTrainer:
         :param maxgrad: gradient clipping, defaults to 10.0
         """
         super().__init__()
-        self.model = model
-        self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = utils.device(device)
+        self.model = model.to(self.device)
         self.losses = []
         self.last_lr = None
         self.set_lr(lr)
@@ -217,7 +217,7 @@ class TextRec:
         self.model = model
         self.charset = model.extra_.get("charset", charset)
         self.dewarp_to = model.extra_.get("dewarp_to", -1)
-        self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = utils.device(device)
         if self.dewarp_to > 0:
             self.dewarper = lineest.CenterNormalizer(target_height=self.dewarp_to)
         else:
@@ -451,7 +451,7 @@ def train(
     device: str = None,
 ):
 
-    device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = utils.device(device)
     charset = Charset(chardef=charset_file)
 
     if log_to == "":

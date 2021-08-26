@@ -279,8 +279,10 @@ class SegTrainer:
         **kw,
     ):
         super().__init__()
-        self.model = model
-        self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = utils.device(device)
+        if self.device.type == "cpu":
+            print("SegTrain using CPU")
+        self.model = model.to(self.device)
         self.every = every
         self.atsamples = []
         self.losses = []
@@ -475,7 +477,7 @@ class Segmenter:
         self.maxdist = 100
         self.patchsize = (512, 512)
         self.overlap = (64, 64)
-        self.device = device
+        self.device = utils.device(device)
 
     def activate(self, yes=True):
         if yes:
@@ -675,7 +677,9 @@ def segment(
     limit: int = 999999999,
     device: str = None,
 ):
-    device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = utils.device(device)
+    if device.type == "cpu":
+        print("segment using CPU")
     model = loading.load_only_model(model)
     segmenter = Segmenter(model, device=device)
 

@@ -14,6 +14,7 @@ from lxml.builder import E
 import webdataset as wds
 
 from .utils import BBox
+from . import utils
 from . import ocrorec, ocroseg, loading
 
 Charset = ocrorec.Charset
@@ -55,24 +56,25 @@ class BasicRecognizer:
     - (optionally) perform a topological sort for minimal reading order
     """
 
-    def __init__(self, segment_type="span"):
+    def __init__(self, segment_type="span", device=None):
         self.segmenter = None
         self.lineseg = None
         self.recognizer = None
         self.segment_type = segment_type
         self.after_segmentation_hook = lambda x: None
         self.after_recognition_hook = lambda x, y: None
+        self.device = utils.device(device)
 
     def load_segmenter(self, fname):
         print(f"# loading segmenter {fname}", file=sys.stderr)
         model = loading.load_only_model(fname)
-        self.segmenter = ocroseg.Segmenter(model)
+        self.segmenter = ocroseg.Segmenter(model, device=self.device)
         self.segmenter.activate(False)
 
     def load_recognizer(self, fname):
         print(f"# loading recognizer {fname}", file=sys.stderr)
         model = loading.load_only_model(fname)
-        self.recognizer = ocrorec.TextRec(model)
+        self.recognizer = ocrorec.TextRec(model, device=self.device)
         self.recognizer.activate(False)
 
     def run_recognizers(self, image):
@@ -305,6 +307,7 @@ def recognize(
     output_html: bool = True,
     output_json: bool = True,
     output_image: bool = True,
+    device: str = None,
 ):
 
     assert recmodel != "", "must give --recmodel argument"
@@ -326,7 +329,7 @@ def recognize(
         plt.title(text)
         plt.ginput(1, 100)
 
-    pr = BasicRecognizer(segment_type=segment_type)
+    pr = BasicRecognizer(segment_type=segment_type, device=device)
     if debug_rec:
         pr.after_recognition_hook = show_segment
     if debug_seg:
