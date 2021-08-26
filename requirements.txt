@@ -8,5 +8,6 @@ scikit-image
 scipy
 tasker
 typer
+tabulate
 -e git+git://github.com/tmbdev/torchmore.git#egg=torchmore
 -e git+git://github.com/tmbdev/webdataset.git#egg=webdataset

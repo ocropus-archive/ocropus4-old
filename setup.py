@@ -24,6 +24,7 @@ scikit-image
 scipy
 tasker
 typer
+tabulate
 torchmore@git+git://github.com/tmbdev/torchmore.git
 webdataset@git+git://github.com/tmbdev/webdataset.git
 """.split()
