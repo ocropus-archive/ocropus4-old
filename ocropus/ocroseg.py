@@ -280,7 +280,7 @@ class SegTrainer:
     ):
         super().__init__()
         self.model = model
-        self.device = None
+        self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.every = every
         self.atsamples = []
         self.losses = []
@@ -467,19 +467,19 @@ def smooth_probabilities(probs, smooth):
 
 
 class Segmenter:
-    def __init__(self, model, scale=0.5):
+    def __init__(self, model, scale=0.5, device=None):
         self.smooth = 0.0
         self.model = model
         self.marker_threshold = 0.3
         self.region_threshold = 0.3
         self.maxdist = 100
-        self.activate()
         self.patchsize = (512, 512)
         self.overlap = (64, 64)
+        self.device = device
 
     def activate(self, yes=True):
         if yes:
-            self.model.cuda()
+            self.model.to(self.device)
         else:
             self.model.cpu()
 
@@ -674,10 +674,11 @@ def segment(
     output: str = "",
     display: bool = True,
     limit: int = 999999999,
+    device: str = None,
 ):
+    device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = loading.load_only_model(model)
-    model.cuda()
-    segmenter = Segmenter(model)
+    segmenter = Segmenter(model, device=device)
 
     dataset = wds.WebDataset(fname).decode("rgb")
 

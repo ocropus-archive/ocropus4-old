@@ -111,7 +111,7 @@ class TextTrainer:
         """
         super().__init__()
         self.model = model
-        self.device = None
+        self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.losses = []
         self.last_lr = None
         self.set_lr(lr)
@@ -217,7 +217,7 @@ class TextRec:
         self.model = model
         self.charset = model.extra_.get("charset", charset)
         self.dewarp_to = model.extra_.get("dewarp_to", -1)
-        self.device = device
+        self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         if self.dewarp_to > 0:
             self.dewarper = lineest.CenterNormalizer(target_height=self.dewarp_to)
         else:

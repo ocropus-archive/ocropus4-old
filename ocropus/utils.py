@@ -16,6 +16,13 @@ do_trace = int(os.environ.get("OCROTRACE", "0"))
 all_models = []
 
 
+def maybe_cuda():
+    if torch.cuda.is_available():
+        return "cuda"
+    else:
+        return "cpu"
+
+
 def unused(f):
     """Used to mark functions that are currently not used but are kept for future reference.
     """
