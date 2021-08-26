@@ -49,7 +49,7 @@ setup(
     keywords="ocr, scene text, deep learning, text recognition",
     packages=["ocropus"],
     scripts=["ocropus4"],
-    # python_requires=">=3.6",
-    # install_requires=PREREQS,
+    python_requires=">=3.8",
+    install_requires=PREREQS,
     # long_description_content_type="text/markdown",
 )
