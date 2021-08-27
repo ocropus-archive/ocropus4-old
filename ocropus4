@@ -37,6 +37,12 @@ extract-lines)
 extract-text)
     $python3 -m ocropus.extract_text "$@"
     ;;
+pdf-extraction)  # Run pdf extraction
+   $python3 -m ocropus.pdf_extraction pdf-extraction "$@"
+   ;;
+table-analysis)  # Run table analysis
+  $python3 -m ocropus.table_analysis table-analysis "$@"
+  ;;
 
 # inference
 
