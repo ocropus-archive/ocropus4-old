@@ -249,7 +249,7 @@ def boxfactor(s):
         return 1.5
 
 
-def html_for_words(key, words, image=None, wordscale=0.6):
+def html_for_words(key, words, image=None, wordscale=0.6, max_height=80):
     if image is not None:
         pageheight, pagewidth = image.shape[0], image.shape[1]
     else:
@@ -275,6 +275,8 @@ def html_for_words(key, words, image=None, wordscale=0.6):
         if s == "":
             s = "☒"
         bh = wordscale * (y1 - y0) * boxfactor(s)
+        if bh > max_height:
+            bh = max_height
         style = f"position: absolute; top: {y0}px; left: {x0}px;"
         style += f"font-size: {int(bh)+1}px;"
         style += "font-weight: bold;"

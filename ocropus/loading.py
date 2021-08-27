@@ -1,3 +1,13 @@
+import requests
+import hashlib
+import os.path
+import tempfile
+import shutil
+import time
+import os
+import sys
+import re
+from urllib.parse import urlparse
 import importlib
 import torch
 import io
@@ -137,7 +147,26 @@ def construct_model(name, *args, module_path=module_path, **kw):
 #
 
 
+def download_cache(url, cache_dir=None):
+    """Download a file to a cache directory and return the path to the file."""
+
+    if cache_dir is None:
+        cache_dir = os.environ["HOME"] + "/.cache/ocropus"
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+    cache_path = os.path.join(cache_dir, hashlib.sha1(url.encode("utf-8")).hexdigest())
+    if os.path.exists(cache_path):
+        return cache_path
+    print(f"# downloading {url} to {cache_path}", file=sys.stderr)
+    r = requests.get(url, stream=True)
+    with open(cache_path, "wb") as f:
+        shutil.copyfileobj(r.raw, f)
+    return cache_path
+
+
 def load_only_model(fname, *args, module_path=module_path, device="cpu", **kw):
+    if re.search(r"(?i)^https?:.*\.pth$", fname):
+        return load_only_model(download_cache(fname), *args, module_path=module_path, device=device, **kw)
     if fname.endswith(".sqlite3"):
         assert os.path.exists(fname)
         logger = slog.Logger(fname)
