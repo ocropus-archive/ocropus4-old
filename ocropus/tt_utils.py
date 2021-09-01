@@ -63,9 +63,7 @@ def get_data(
     for dirname_with_tab in dirnames_with_tab:
         pdf_image = os.path.join(untar_dir_name, dirname_with_tab + ".jpg")
         tab_cords = os.path.join(untar_dir_name, dirname_with_tab + ".tables.json")
-
-        if '17' in pdf_image:
-            pdf_data.append((pdf_image, tab_cords))
+        pdf_data.append((pdf_image, tab_cords))
 
     return pdf_data
 
