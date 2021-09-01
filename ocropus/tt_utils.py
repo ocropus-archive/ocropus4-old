@@ -107,7 +107,7 @@ def create_probmap_from_coords(
     binary_map = np.zeros([image_size[0], image_size[1], 3])
     for tab_cell_coord in tab_cell_coords:
         binary_map[tab_cell_coord[1]:tab_cell_coord[3], tab_cell_coord[0]:tab_cell_coord[2]] = 255
-
+    #Image.fromarray(image_array[:, :, 0]).convert('RGB').save('16.png')
     return binary_map
 
 def get_right_cell_format(

@@ -189,9 +189,33 @@ def get_row_col(
     res.update({f"row_{k}": v for k, v in rows.items()})
     res.update({f"col_{k}": v for k, v in cols.items()})
 
-    res["bbox"] = x1, y1, x2, y2
+    res["bbox"] = [x1, y1, x2, y2]
     return res
 
+def get_merged_cells(
+        old_cell: Dict,
+        new_cell:Dict
+) -> Dict:
+    """
+    Checks if the new cell is before or after the old cell and returns the merged cell
+
+    Parameters
+    ---------
+    old_cell
+        Dict containing start/end of row and column for a cell
+    new_cell
+        Dict containing start/end of row and column for a cell
+
+    """
+    if new_cell["bbox"][0] < old_cell["bbox"][0]:
+        old_cell["bbox"][0] = new_cell["bbox"][0]
+        old_cell["bbox"][1] = new_cell["bbox"][1]
+
+    if new_cell["bbox"][2] > old_cell["bbox"][2]:
+        old_cell["bbox"][2] = new_cell["bbox"][2]
+        old_cell["bbox"][3] = new_cell["bbox"][3]
+
+    return old_cell
 
 def get_table_structure(
         tab_cell_coords: List[List],
@@ -210,14 +234,17 @@ def get_table_structure(
     col_idxs
         List with indexes where a column starts
     """
-
     tab_struct = [[None] * len(col_idxs) for i in range(len(row_idxs))]
 
     for tab_cell_coord in tab_cell_coords:
         cell_struct_data = get_row_col(tab_cell_coord, row_idxs, col_idxs)
         row_start, col_start = cell_struct_data["row_start"], cell_struct_data["col_start"]
+        old_cell = tab_struct[row_start][col_start]
 
-        tab_struct[row_start][col_start] = cell_struct_data
+        if old_cell:
+            tab_struct[row_start][col_start] = get_merged_cells(old_cell, cell_struct_data)
+        else:
+            tab_struct[row_start][col_start] = cell_struct_data
 
     return tab_struct
 
