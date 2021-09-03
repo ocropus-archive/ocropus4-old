@@ -57,6 +57,7 @@ class GrayDocument(nn.Module):
             if self.autoinvert and a[i].mean().item() > 0.5:
                 a[i] = 1.0 - a[i]
             if self.noise > 0:
-                a[i] += self.noise * torch.randn(*a[i].shape, device=a.device)
+                d, h, w = a[i].shape
+                a[i] += self.noise * torch.randn(d, h, w, device=a.device)
             a[i] = a[i].clip(0, 1)
         return a

@@ -98,6 +98,28 @@ def collate4ocr(samples):
     return result, seqs
 
 
+class TextModel(nn.Module):
+
+    def __init__(self, model):
+        self.model = model
+
+    def forward(self, x):
+        return self.model(x)
+
+    def probs_batch(self, inputs):
+        """Compute probability outputs for the batch."""
+        self.model.eval()
+        with torch.no_grad():
+            outputs = self.model.forward(inputs.to(self.device))
+        return outputs.detach().cpu().softmax(1)
+
+    def predict_batch(self, inputs, **kw):
+        """Predict and decode a batch."""
+        probs = self.probs_batch(inputs)
+        result = [ctc_decode(p, **kw) for p in probs]
+        return result
+
+
 class TextTrainer:
     """A class encapsulating the logic for training text line recognizers."""
 
@@ -167,13 +189,6 @@ class TextTrainer:
         self.losses.append(loss)
         return loss
 
-    def probs_batch(self, inputs):
-        """Compute probability outputs for the batch. Uses `probfn`."""
-        self.model.eval()
-        with torch.no_grad():
-            outputs = self.model.forward(inputs.to(self.device))
-        return outputs.detach().cpu().softmax(1)
-
     def errors(self, loader, ntest=999999999):
         """Compute OCR errors using edit distance."""
         total = 0
@@ -202,6 +217,13 @@ class TextTrainer:
         assert tlens.size(0) == b
         assert tlens.sum() == targets.size(0)
         return self.ctc_loss(outputs.cpu(), targets.cpu(), olens.cpu(), tlens.cpu())
+
+    def probs_batch(self, inputs):
+        """Compute probability outputs for the batch."""
+        self.model.eval()
+        with torch.no_grad():
+            outputs = self.model.forward(inputs.to(self.device))
+        return outputs.detach().cpu().softmax(1)
 
     def predict_batch(self, inputs, **kw):
         """Predict and decode a batch."""
@@ -239,6 +261,7 @@ class TextRec:
                 return None
         self.last_image = image
         batch = torch.FloatTensor(image.reshape(1, 1, *image.shape))
+        self.activate(True)
         self.probs = self.model(batch.to(self.device)).softmax(1)
         if not full:
             decoded = ctc_decode(self.probs[0])
@@ -561,6 +584,16 @@ def recognize(
             plt.title(result)
             plt.ginput(1, 1.0)
             print(sample.get("__key__"), image.shape, result)
+
+
+@app.command()
+def toscript(
+    model: str
+):
+    import torch.jit
+    model = loading.load_only_model(model)
+    scripted = torch.jit.script(model)
+    print(scripted)
 
 
 @app.command()

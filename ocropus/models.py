@@ -181,6 +181,15 @@ def page_scale_210301(noutput, size=(512, 512), r=5, nf=8, r2=5, nf2=4):
     return model
 
 
+class MaxReduce(nn.Module):
+    d: int
+    def __init__(self, d: int):
+        super().__init__()
+        self.d = d
+    def forward(self, x):
+        return x.max(self.d)[0]
+
+
 @model
 def text_model_210218(noutput):
     """Text recognition model using 2D LSTM and convolutions."""
@@ -193,7 +202,8 @@ def text_model_210218(noutput):
         *combos.conv2d_block(64, 3, mp=2, repeat=2),
         *combos.conv2d_block(96, 3, repeat=2),
         flex.Lstm2(100),
-        layers.Fun("lambda x: x.max(2)[0]"),
+        # layers.Fun("lambda x: x.max(2)[0]"),
+        MaxReduce(2),
         flex.ConvTranspose1d(400, 1, stride=2),
         flex.Conv1d(100, 3),
         flex.BatchNorm1d(),
