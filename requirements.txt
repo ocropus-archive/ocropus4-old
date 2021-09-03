@@ -9,5 +9,6 @@ scipy
 tasker
 typer
 tabulate
+kornia
 -e git+git://github.com/tmbdev/torchmore.git#egg=torchmore
 -e git+git://github.com/tmbdev/webdataset.git#egg=webdataset

@@ -61,3 +61,44 @@ class GrayDocument(nn.Module):
                 a[i] += self.noise * torch.randn(d, h, w, device=a.device)
             a[i] = a[i].clip(0, 1)
         return a
+
+@public
+class Spectrum(nn.Module):
+    def __init__(self, nonlin="logplus1"):
+        nn.Module.__init__(self)
+        self.nonlin = nonlin
+
+    def forward(self, x):
+        inputs = torch.stack([x, torch.zeros_like(x)], dim=-1)
+        mag = torch.fft.fftn(torch.view_as_complex(inputs), dim=(2, 3)).abs()
+        if self.nonlin is None:
+            return mag
+        elif self.nonlin == "logplus1":
+            return (1.0 + mag).log()
+        elif self.nonlin == "sqrt":
+            return mag ** 0.5
+        else:
+            raise ValueError(f"{self.nonlin}: unknown nonlinearity")
+
+    def __repr__(self):
+        return f"Spectrum-{self.nonlin}"
+
+
+@public
+class GlobalAvgPool2d(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return F.adaptive_avg_pool2d(x, (1, 1))[:, :, 0, 0]
+
+
+@public
+class MaxReduce(nn.Module):
+    d: int
+    def __init__(self, d: int):
+        super().__init__()
+        self.d = d
+    def forward(self, x):
+        return x.max(self.d)[0]
+

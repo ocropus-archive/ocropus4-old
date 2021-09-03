@@ -17,35 +17,6 @@ from . import loading
 app = typer.Typer()
 
 
-class Spectrum(nn.Module):
-    def __init__(self, nonlin="logplus1"):
-        nn.Module.__init__(self)
-        self.nonlin = nonlin
-
-    def forward(self, x):
-        inputs = torch.stack([x, torch.zeros_like(x)], dim=-1)
-        mag = torch.fft.fftn(torch.view_as_complex(inputs), dim=(2, 3)).abs()
-        if self.nonlin is None:
-            return mag
-        elif self.nonlin == "logplus1":
-            return (1.0 + mag).log()
-        elif self.nonlin == "sqrt":
-            return mag ** 0.5
-        else:
-            raise ValueError(f"{self.nonlin}: unknown nonlinearity")
-
-    def __repr__(self):
-        return f"Spectrum-{self.nonlin}"
-
-
-class GlobalAvgPool2d(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x):
-        return F.adaptive_avg_pool2d(x, (1, 1))[:, :, 0, 0]
-
-
 @model
 def binarization_210113():
     """A small model combining convolutions and 2D LSTM for binarization."""
@@ -124,7 +95,7 @@ def page_orientation_210113(size=256):
         *block(64, r),
         *block(96, r),
         *block(128, r),
-        GlobalAvgPool2d(),
+        ocrlayers.GlobalAvgPool2d(),
         flex.Linear(64),
         nn.BatchNorm1d(64),
         nn.ReLU(),
@@ -144,7 +115,7 @@ def page_skew_210301(noutput, size=256, r=5, nf=8, r2=5, nf2=4):
         flex.Conv2d(nf, r, padding=r // 2),
         flex.BatchNorm2d(),
         nn.ReLU(),
-        Spectrum(),
+        ocrlayers.Spectrum(),
         flex.Conv2d(nf2, r2, padding=r2 // 2),
         flex.BatchNorm2d(),
         nn.ReLU(),
@@ -168,7 +139,7 @@ def page_scale_210301(noutput, size=(512, 512), r=5, nf=8, r2=5, nf2=4):
         flex.Conv2d(nf, r, padding=r // 2),
         flex.BatchNorm2d(),
         nn.ReLU(),
-        Spectrum(),
+        ocrlayers.Spectrum(),
         flex.Conv2d(nf2, r2, padding=r2 // 2),
         flex.BatchNorm2d(),
         nn.ReLU(),
@@ -181,15 +152,6 @@ def page_scale_210301(noutput, size=(512, 512), r=5, nf=8, r2=5, nf2=4):
     )
     flex.shape_inference(model, (2, 1, size[0], size[1]))
     return model
-
-
-class MaxReduce(nn.Module):
-    d: int
-    def __init__(self, d: int):
-        super().__init__()
-        self.d = d
-    def forward(self, x):
-        return x.max(self.d)[0]
 
 
 @model
@@ -205,7 +167,7 @@ def text_model_210218(noutput):
         *combos.conv2d_block(96, 3, repeat=2),
         flex.Lstm2(100),
         # layers.Fun("lambda x: x.max(2)[0]"),
-        MaxReduce(2),
+        ocrlayers.MaxReduce(2),
         flex.ConvTranspose1d(400, 1, stride=2),
         flex.Conv1d(100, 3),
         flex.BatchNorm1d(),
