@@ -16,6 +16,8 @@ from ocropus import ocrorot
 from ocropus import ocroscale
 from ocropus import ocroskew
 from ocropus import pubnet
+from ocropus import loading
+import torch.jit
 
 bucket = "pipe:curl -sL https://storage.googleapis.com/ocropus4-test"
 mbucket = "pipe:curl -sL https://storage.googleapis.com/ocropus4-models"
@@ -24,6 +26,20 @@ mbucket = "pipe:curl -sL https://storage.googleapis.com/ocropus4-models"
 def test_data():
     ds = wds.WebDataset(f"{bucket}/gsub-words-test.tar")
     next(iter(ds))
+
+
+def test_ocrorec_scriptable(tmpdir):
+    mname = "wordmodel.pth"
+    assert 0 == os.system(f"curl -sL {mbucket}/{mname} > {tmpdir}/{mname}")
+    model = loading.load_only_model(f"{tmpdir}/{mname}")
+    torch.jit.script(model)
+
+
+def test_ocroseg_scriptable(tmpdir):
+    mname = "wsegmodel.pth"
+    assert 0 == os.system(f"curl -sL {mbucket}/{mname} > {tmpdir}/{mname}")
+    model = loading.load_only_model(f"{tmpdir}/{mname}")
+    torch.jit.script(model)
 
 
 def test_ocrorec_pretrained(tmpdir):
