@@ -62,6 +62,8 @@ def test_ocrorec(tmpdir):
     slog.getbest(f"{tmpdir}/ocrorec-train.sqlite3", f"{tmpdir}/ocrorec.pth")
     ocrorec.recognize(f"{bucket}/gsub-words-test.tar",
                       model=f"{tmpdir}/ocrorec.pth", display=False, limit=3)
+    model = loading.load_only_model(f"{tmpdir}/ocrorec.pth")
+    torch.jit.script(model)
 
 
 def test_ocroseg(tmpdir):
@@ -71,6 +73,8 @@ def test_ocroseg(tmpdir):
     ocroseg.predict(f"{bucket}/gsub-wseg-test.tar",
                     model=f"{tmpdir}/ocroseg.pth")
     ocroseg.predict(f"{bucket}/gsub-test.tar", model=f"{tmpdir}/ocroseg.pth")
+    model = loading.load_only_model(f"{tmpdir}/ocroseg.pth")
+    torch.jit.script(model)
 
 
 def test_nlbin(tmpdir):
@@ -86,6 +90,8 @@ def test_ocrobin(tmpdir):
     slog.getbest(f"{tmpdir}/ocrobin-train.sqlite3", f"{tmpdir}/ocrobin.pth")
     ocrobin.binarize(f"{bucket}/gsub-test.tar", iext="jpeg",
                      output=f"{tmpdir}/binarized.tar", model=f"{tmpdir}/ocrobin.pth", limit=10)
+    model = loading.load_only_model(f"{tmpdir}/ocrobin.pth")
+    torch.jit.script(model)
 
 
 def test_ocrorot(tmpdir):
@@ -94,6 +100,8 @@ def test_ocrorot(tmpdir):
     slog.getbest(f"{tmpdir}/ocrorot-train.sqlite3", f"{tmpdir}/ocrorot.pth")
     ocrorot.correct([f"{bucket}/gsub-bin-test.tar"], nsamples=10,
                     output=f"{tmpdir}/rotated.tar", model=f"{tmpdir}/ocrorot.pth")
+    model = loading.load_only_model(f"{tmpdir}/ocrorot.pth")
+    torch.jit.script(model)
 
 
 def test_ocroscale(tmpdir):
@@ -103,6 +111,8 @@ def test_ocroscale(tmpdir):
                  f"{tmpdir}/ocroscale.pth")
     ocroscale.correct([f"{bucket}/gsub-bin-test.tar"], nsamples=10,
                       output=f"{tmpdir}/scaleated.tar", model=f"{tmpdir}/ocroscale.pth")
+    model = loading.load_only_model(f"{tmpdir}/ocroscale.pth")
+    torch.jit.script(model)
 
 
 def test_ocroskew(tmpdir):
@@ -111,6 +121,8 @@ def test_ocroskew(tmpdir):
     slog.getbest(f"{tmpdir}/ocroskew-train.sqlite3", f"{tmpdir}/ocroskew.pth")
     ocroskew.correct([f"{bucket}/gsub-bin-test.tar"], nsamples=10,
                      output=f"{tmpdir}/skewated.tar", model=f"{tmpdir}/ocroskew.pth")
+    model = loading.load_only_model(f"{tmpdir}/ocroskew.pth")
+    torch.jit.script(model)
 
 
 def test_publaynet_pretrained(tmpdir):
@@ -118,6 +130,8 @@ def test_publaynet_pretrained(tmpdir):
     assert 0 == os.system(f"curl -sL {mbucket}/{mname} > {tmpdir}/{mname}")
     pubnet.pageseg(f"{bucket}/publaynet-train-test.tar",
                    model=f"{tmpdir}/{mname}", display=-1, slice="3")
+    model = loading.load_only_model(f"{tmpdir}/{mname}")
+    torch.jit.script(model)
 
 
 def test_pubtabnet_pretrained(tmpdir):
@@ -125,6 +139,8 @@ def test_pubtabnet_pretrained(tmpdir):
     assert 0 == os.system(f"curl -sL {mbucket}/{mname} > {tmpdir}/{mname}")
     pubnet.tabseg(f"{bucket}/pubtabnet-train-test.tar",
                   model=f"{tmpdir}/{mname}", display=-1, slice="3")
+    model = loading.load_only_model(f"{tmpdir}/{mname}")
+    torch.jit.script(model)
 
 
 # TODO:
