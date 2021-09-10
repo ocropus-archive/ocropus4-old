@@ -17,8 +17,11 @@ from . import loading
 app = typer.Typer()
 
 
+ninput = 3
+
+
 @model
-def binarization_210113():
+def binarization_210910(shape=(2, ninput, 161, 391)):
     """A small model combining convolutions and 2D LSTM for binarization."""
     r = 5
     model = nn.Sequential(
@@ -32,17 +35,14 @@ def binarization_210113():
         flex.Conv2d(1, 3, padding=1),
         nn.Sigmoid(),
     )
-    flex.shape_inference(model, (2, 1, 161, 391))
+    flex.shape_inference(model, shape)
     return model
 
 
 @model
-def cbinarization_210429():
+def cbinarization_large_210910(shape=(2, ninput, 161, 391)):
     """A purely convolutional U-net based model."""
     model = nn.Sequential(
-        ocrlayers.GrayDocument(),
-        layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
-        inputstats.InputStats("cbinarization"),
         layers.ModPadded(
             32,
             combos.make_unet(
@@ -52,17 +52,14 @@ def cbinarization_210429():
         flex.Conv2d(1, 3, padding=1),
         nn.Sigmoid(),
     )
-    flex.shape_inference(model, (2, 1, 161, 391))
+    flex.shape_inference(model, shape)
     return model
 
 
 @model
-def cbinarization_210819():
+def cbinarization_210910(shape=(2, ninput, 161, 391)):
     """A purely convolutional U-net based model."""
     model = nn.Sequential(
-        ocrlayers.GrayDocument(),
-        layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
-        inputstats.InputStats("cbinarization", mode="nocheck"),
         layers.ModPadded(
             32,
             combos.make_unet(
@@ -72,12 +69,12 @@ def cbinarization_210819():
         flex.Conv2d(1, 3, padding=1),
         nn.Sigmoid(),
     )
-    flex.shape_inference(model, (2, 1, 161, 391))
+    flex.shape_inference(model, shape)
     return model
 
 
 @model
-def page_orientation_210113(size=256):
+def page_orientation_210910(shape=(2, ninput, 256, 256)):
     """A model for page orientation using a VGG-like architecture."""
 
     def block(s, r, repeat=2):
@@ -90,7 +87,6 @@ def page_orientation_210113(size=256):
     r = 3
     B, D, H, W = (1, 128), (1, 3), size, size
     model = nn.Sequential(
-        layers.CheckSizes(B, D, H, W),
         *block(32, r),
         *block(64, r),
         *block(96, r),
@@ -102,16 +98,14 @@ def page_orientation_210113(size=256):
         flex.Linear(4),
         layers.CheckSizes(B, 4),
     )
-    flex.shape_inference(model, (2, 1, size, size))
+    flex.shape_inference(model, shape)
     return model
 
 
 @model
-def page_skew_210301(noutput, size=256, r=5, nf=8, r2=5, nf2=4):
+def page_skew_210910(noutput, shape=(2, ninput, 256, 256), r=5, nf=8, r2=5, nf2=4):
     """A model for page skew using Fourier transforms."""
     model = nn.Sequential(
-        ocrlayers.GrayDocument(),
-        layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
         flex.Conv2d(nf, r, padding=r // 2),
         flex.BatchNorm2d(),
         nn.ReLU(),
@@ -126,16 +120,14 @@ def page_skew_210301(noutput, size=256, r=5, nf=8, r2=5, nf2=4):
         nn.ReLU(),
         flex.Linear(noutput),
     )
-    flex.shape_inference(model, (2, 1, size, size))
+    flex.shape_inference(model, shape)
     return model
 
 
 @model
-def page_scale_210301(noutput, size=(512, 512), r=5, nf=8, r2=5, nf2=4):
+def page_scale_210910(noutput, shape=(2, ninput, 512, 512), r=5, nf=8, r2=5, nf2=4):
     """A model for page scale using Fourier transforms."""
     model = nn.Sequential(
-        ocrlayers.GrayDocument(),
-        layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
         flex.Conv2d(nf, r, padding=r // 2),
         flex.BatchNorm2d(),
         nn.ReLU(),
@@ -150,17 +142,14 @@ def page_scale_210301(noutput, size=(512, 512), r=5, nf=8, r2=5, nf2=4):
         nn.ReLU(),
         flex.Linear(noutput),
     )
-    flex.shape_inference(model, (2, 1, size[0], size[1]))
+    flex.shape_inference(model, shape)
     return model
 
 
 @model
-def text_model_210218(noutput):
+def text_model_210910(noutput=1024, shape=(1, ninput, 48, 300)):
     """Text recognition model using 2D LSTM and convolutions."""
     model = nn.Sequential(
-        ocrlayers.GrayDocument(),
-        layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
-        inputstats.InputStats("textmodel"),
         *combos.conv2d_block(32, 3, mp=(2, 1), repeat=2),
         *combos.conv2d_block(48, 3, mp=(2, 1), repeat=2),
         *combos.conv2d_block(64, 3, mp=2, repeat=2),
@@ -177,18 +166,14 @@ def text_model_210218(noutput):
         layers.Reorder("LBD", "BDL"),
         flex.Conv1d(noutput, 1),
     )
-    flex.shape_inference(model, (1, 1, 48, 300))
+    flex.shape_inference(model, shape)
     return model
 
 
 @model
-def segmentation_model_210429(noutput=4):
+def segmentation_model_210910(noutput=4, shape=(1, ninput, 512, 512)):
     """Page segmentation using U-net and LSTM combos."""
     model = nn.Sequential(
-        ocrlayers.GrayDocument(),
-        # ocrlayers.Zoom(0.5),
-        layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
-        inputstats.InputStats("segmodel"),
         layers.ModPadded(
             8,
             combos.make_unet([32, 64, 96], sub=flex.BDHW_LSTM(100)),
@@ -197,18 +182,14 @@ def segmentation_model_210429(noutput=4):
         flex.BDHW_LSTM(32),
         flex.Conv2d(noutput, 3, padding=1),
     )
-    flex.shape_inference(model, (1, 1, 512, 512))
+    flex.shape_inference(model, shape)
     return model
 
 
 @model
-def publaynet_model_210429(noutput=4):
+def publaynet_model_210910(noutput=4, shape=(1, ninput, 512, 512)):
     """Layout model tuned for PubLayNet."""
     model = nn.Sequential(
-        ocrlayers.GrayDocument(),
-        # ocrlayers.Zoom(0.5),
-        layers.Input("BDHW", range=(0, 1), sizes=[None, 1, None, None]),
-        inputstats.InputStats("segmodel"),
         layers.ModPadded(
             16,
             combos.make_unet([40, 60, 80, 100], sub=flex.BDHW_LSTM(100)),
@@ -217,7 +198,7 @@ def publaynet_model_210429(noutput=4):
         flex.BDHW_LSTM(32),
         flex.Conv2d(noutput, 3, padding=1),
     )
-    flex.shape_inference(model, (1, 1, 512, 512))
+    flex.shape_inference(model, shape)
     return model
 
 

@@ -165,8 +165,29 @@ def estimate_thresholds(flat, bignore=0.1, escale=1.0, lo=5, hi=90, debug=0):
     return lo, hi
 
 
-def nlbin(raw, args, deskew=True):
+def nlbin_defaults(
+    threshold: float = -1,
+    zoom: float = 0.5,
+    escale: float = 1.0,
+    bignore: float = 0.1,
+    perc: float = 80,
+    dist: int = 20,
+    maxskew: float = 2,
+    gray: bool = False,
+    lo: float = 5,
+    hi: float = 90,
+    skewsteps: int = 8,
+    debug: float = 0,
+    output: str = "",
+    deskew: bool = False,
+):
+    return utils.Record(**locals())
+
+
+def nlbin(raw, args=None, deskew=True):
     """Nonlinear image binarization and deskewing."""
+    if args is None:
+        args = nlbin_defaults()
     assert raw.dtype == float
     image = normalize_raw_image(raw)
     flat = estimate_local_whitelevel(

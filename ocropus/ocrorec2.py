@@ -99,12 +99,21 @@ def collate4ocr(samples):
 
 
 class TextModel(nn.Module):
+    """A model wrapper for text recognition."""
 
     def __init__(self, model):
+        super().__init__(self)
+        self.param = torch.nn.Parameter(torch.zeros(1))
         self.model = model
+        self.sizes = torch.IntTensor([[0, 9999], [1, 3], [32, 256], [32, 4096]])
 
     def forward(self, x):
-        return self.model(x)
+        for i in range(4):
+            assert x.shape[0] >= self.sizes[i, 0], (i, x.shape, self.sizes)
+            assert x.shape[0] <= self.sizes[i, 0], (i, x.shape, self.sizes)
+        assert x.min() >= 0. x.min()
+        assert x.max() >= 0. x.max()
+        return self.model(x.to(self.param.device))
 
     def probs_batch(self, inputs):
         """Compute probability outputs for the batch."""
@@ -113,6 +122,7 @@ class TextModel(nn.Module):
             outputs = self.model.forward(inputs.to(self.device))
         return outputs.detach().cpu().softmax(1)
 
+    @torch.jit.unused
     def predict_batch(self, inputs, **kw):
         """Predict and decode a batch."""
         probs = self.probs_batch(inputs)
