@@ -19,6 +19,40 @@ app = typer.Typer()
 
 ninput = 3
 
+def make_rgb_float(inputs):
+    assert inputs.ndim == 4, inputs.shape
+    if inputs.dtype == torch.uint8:
+        inputs = inputs.float() / 255.0
+    elif inputs.dtype == torch.float16 or inputs.dtype == torch.float32:
+        assert inputs.max() <= 1.0 and inputs.min() >= 0.0
+    if inputs.shape[1] == 1:
+        inputs = inputs.repeat(1, 3, 1, 1)
+    else:
+        assert inputs.shape[1] == 3, inputs.shape
+    return inputs
+class TextModel(nn.Module):
+
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+
+    def forward(self, inputs):
+        inputs = make_rgb_float(inputs)
+        return self.model(inputs)
+
+    def probs_batch(self, inputs):
+        """Compute probability outputs for the batch."""
+        self.model.eval()
+        with torch.no_grad():
+            outputs = self.forward(inputs)
+        return outputs.detach().cpu().softmax(1)
+
+    def predict_batch(self, inputs, **kw):
+        """Predict and decode a batch."""
+        probs = self.probs_batch(inputs)
+        result = [ctc_decode(p, **kw) for p in probs]
+        return result
+
 
 @model
 def binarization_210910(shape=(2, ninput, 161, 391)):
@@ -80,7 +114,8 @@ def page_orientation_210910(shape=(2, ninput, 256, 256)):
     def block(s, r, repeat=2):
         result = []
         for i in range(repeat):
-            result += [flex.Conv2d(8, r, padding=r // 2), flex.BatchNorm2d(), nn.ReLU()]
+            result += [flex.Conv2d(8, r, padding=r // 2),
+                       flex.BatchNorm2d(), nn.ReLU()]
         result += [nn.MaxPool2d(2)]
         return result
 
@@ -149,22 +184,24 @@ def page_scale_210910(noutput, shape=(2, ninput, 512, 512), r=5, nf=8, r2=5, nf2
 @model
 def text_model_210910(noutput=1024, shape=(1, ninput, 48, 300)):
     """Text recognition model using 2D LSTM and convolutions."""
-    model = nn.Sequential(
-        *combos.conv2d_block(32, 3, mp=(2, 1), repeat=2),
-        *combos.conv2d_block(48, 3, mp=(2, 1), repeat=2),
-        *combos.conv2d_block(64, 3, mp=2, repeat=2),
-        *combos.conv2d_block(96, 3, repeat=2),
-        flex.Lstm2(100),
-        # layers.Fun("lambda x: x.max(2)[0]"),
-        ocrlayers.MaxReduce(2),
-        flex.ConvTranspose1d(400, 1, stride=2),
-        flex.Conv1d(100, 3),
-        flex.BatchNorm1d(),
-        nn.ReLU(),
-        layers.Reorder("BDL", "LBD"),
-        flex.LSTM(100, bidirectional=True),
-        layers.Reorder("LBD", "BDL"),
-        flex.Conv1d(noutput, 1),
+    model = TextModel(
+        nn.Sequential(
+            *combos.conv2d_block(32, 3, mp=(2, 1), repeat=2),
+            *combos.conv2d_block(48, 3, mp=(2, 1), repeat=2),
+            *combos.conv2d_block(64, 3, mp=2, repeat=2),
+            *combos.conv2d_block(96, 3, repeat=2),
+            flex.Lstm2(100),
+            # layers.Fun("lambda x: x.max(2)[0]"),
+            ocrlayers.MaxReduce(2),
+            flex.ConvTranspose1d(400, 1, stride=2),
+            flex.Conv1d(100, 3),
+            flex.BatchNorm1d(),
+            nn.ReLU(),
+            layers.Reorder("BDL", "LBD"),
+            flex.LSTM(100, bidirectional=True),
+            layers.Reorder("LBD", "BDL"),
+            flex.Conv1d(noutput, 1),
+        )
     )
     flex.shape_inference(model, shape)
     return model

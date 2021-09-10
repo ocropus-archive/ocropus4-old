@@ -98,28 +98,6 @@ def collate4ocr(samples):
     return result, seqs
 
 
-class TextModel(nn.Module):
-
-    def __init__(self, model):
-        self.model = model
-
-    def forward(self, x):
-        return self.model(x)
-
-    def probs_batch(self, inputs):
-        """Compute probability outputs for the batch."""
-        self.model.eval()
-        with torch.no_grad():
-            outputs = self.model.forward(inputs.to(self.device))
-        return outputs.detach().cpu().softmax(1)
-
-    def predict_batch(self, inputs, **kw):
-        """Predict and decode a batch."""
-        probs = self.probs_batch(inputs)
-        result = [ctc_decode(p, **kw) for p in probs]
-        return result
-
-
 class TextTrainer:
     """A class encapsulating the logic for training text line recognizers."""
 
@@ -133,7 +111,8 @@ class TextTrainer:
         """
         super().__init__()
         self.device = utils.device(device)
-        self.model = model.to(self.device)
+        self.model = model
+        self.model.to(self.device)
         self.losses = []
         self.last_lr = None
         self.set_lr(lr)
@@ -446,7 +425,8 @@ def save_model(logger, trainer, test_dl, ntest=999999999):
         loss = err
     else:
         loss = np.mean(trainer.losses[-100:])
-    logger.save_ocrmodel(trainer.model, step=trainer.nsamples, loss=loss)
+    model = trainer.model
+    logger.save_ocrmodel(model, step=trainer.nsamples, loss=loss)
 
 
 @app.command()
@@ -455,7 +435,7 @@ def train(
     training_bs: int = 4,
     invert: bool = False,
     normalize_intensity: bool = False,
-    model: str = "text_model_210218",
+    model: str = "text_model_210910",
     test: str = None,
     test_bs: int = 20,
     ntest: int = int(1e12),
@@ -529,7 +509,7 @@ def train(
     model.extra_.setdefault("dewarp_to", dewarp_to)
     print(model)
 
-    trainer = TextTrainer(model, device=device)
+    trainer = TextTrainer(model)
     trainer.charset = charset
     trainer.set_lr_schedule(eval(f"lambda n: {schedule}"))
 
