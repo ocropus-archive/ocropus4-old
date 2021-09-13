@@ -1,20 +1,13 @@
-typer
 braceexpand
 bs4
 editdistance
+humanhash3
 lxml
 matplotlib
 scikit-image
 scipy
-humanhash3
-tabulate
-#cryptography
-#ray[default]
-#google-api-python-client
 tasker
--e git+git://github.com/tmbdev/webdataset.git#egg=webdataset
--e git+git://github.com/NVlabs/ocrodeg.git#egg=ocrodeg
--e git+git://github.com/NVlabs/tensorcom.git#egg=tensorcom
--e git+git://github.com/tmbdev/tarproc.git#egg=tarproc
+typer
+tabulate
 -e git+git://github.com/tmbdev/torchmore.git#egg=torchmore
--e git+git://github.com/NVlabs/ocrodeg.git#egg=ocrodeg
+-e git+git://github.com/tmbdev/webdataset.git#egg=webdataset

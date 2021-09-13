@@ -18,9 +18,9 @@ echo
 type python3
 }
 
-if test -d ./venv; then
-    source ./venv/bin/activate
-fi
+#if test -d ./venv; then
+#    source ./venv/bin/activate
+#fi
 
 case $library in
 
@@ -50,8 +50,7 @@ ocroline)
     ;;
 ocrorec)
     $python3 -m ocropus.ocrorec "$@"
-    ;;
-ocrobin)   # binarization
+    ;; ocrobin)   # binarization
     $python3 -m ocropus.ocrobin "$@"
     ;;
 ocrorot)   # page rotation/orientation detection
@@ -69,25 +68,25 @@ nlbin)  # nonlinear binarization
 slog)  # examine logs
     $python3 -m ocropus.slog "$@"
     ;;
-pubnet)  # pubnet-related models
+pubnet)  # pubnet-based layout analysis and table segmentation
     $python3 -m ocropus.pubnet "$@"
     ;;
-wordrec)  # recognize pages
+wordrec)  # recognize and output all the words on a page
     $python3 -m ocropus.wordrec "$@"
     ;;
-pagerec)  # recognize pages
+pagerec)  # recognize pages with layout information
     $python3 -m ocropus.pagerec "$@"
     ;;
 models)  # list and show models
     $python3 -m ocropus.models "$@"
     ;;
-genwords)  # list and show models
+genwords)  # generate word images
     $python3 -m ocropus.genwords "$@"
     ;;
-pdfproc)  # list and show models
+pdfproc)  # render and process PDF files
     $python3 -m ocropus.pdfproc "$@"
     ;;
-misc)  # list and show models
+misc)  # miscellaneous functions
     $python3 -m ocropus.misc "$@"
     ;;
 

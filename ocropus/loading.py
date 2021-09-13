@@ -1,3 +1,13 @@
+import requests
+import hashlib
+import os.path
+import tempfile
+import shutil
+import time
+import os
+import sys
+import re
+from urllib.parse import urlparse
 import importlib
 import torch
 import io
@@ -61,9 +71,9 @@ def torch_dumps(obj):
     return buf.getbuffer()
 
 
-def torch_loads(buf):
+def torch_loads(buf, device="cpu"):
     """Load a data structure from a string using torch.load."""
-    return torch.load(io.BytesIO(buf))
+    return torch.load(io.BytesIO(buf), map_location=torch.device(device))
 
 
 #
@@ -137,21 +147,40 @@ def construct_model(name, *args, module_path=module_path, **kw):
 #
 
 
-def load_only_model(fname, *args, module_path=module_path, **kw):
+def download_cache(url, cache_dir=None):
+    """Download a file to a cache directory and return the path to the file."""
+
+    if cache_dir is None:
+        cache_dir = os.environ["HOME"] + "/.cache/ocropus"
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+    cache_path = os.path.join(cache_dir, hashlib.sha1(url.encode("utf-8")).hexdigest())
+    if os.path.exists(cache_path):
+        return cache_path
+    print(f"# downloading {url} to {cache_path}", file=sys.stderr)
+    r = requests.get(url, stream=True)
+    with open(cache_path, "wb") as f:
+        shutil.copyfileobj(r.raw, f)
+    return cache_path
+
+
+def load_only_model(fname, *args, module_path=module_path, device="cpu", **kw):
+    if re.search(r"(?i)^https?:.*\.pth$", fname):
+        return load_only_model(download_cache(fname), *args, module_path=module_path, device=device, **kw)
     if fname.endswith(".sqlite3"):
         assert os.path.exists(fname)
         logger = slog.Logger(fname)
         state = logger.load_last()
     else:
-        state = torch.load(fname)
+        state = torch.load(fname, map_location=torch.device(device))
     model = dict_to_model(state, module_path=module_path)
     return model
 
 
-def load_or_construct_model(path, *args, module_path=module_path, **kw):
+def load_or_construct_model(path, *args, module_path=module_path, device="cpu", **kw):
     _, ext = os.path.splitext(path)
     if ext in [".py", ".sqlite3", ".pth"]:
-        return load_only_model(path, *args, module_path=module_path, **kw)
+        return load_only_model(path, *args, module_path=module_path, device=device, **kw)
     else:
         return construct_model(path, *args, module_path=module_path, **kw)
 

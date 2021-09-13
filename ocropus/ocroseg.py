@@ -279,8 +279,10 @@ class SegTrainer:
         **kw,
     ):
         super().__init__()
-        self.model = model
-        self.device = None
+        self.device = utils.device(device)
+        if self.device.type == "cpu":
+            print("SegTrain using CPU")
+        self.model = model.to(self.device)
         self.every = every
         self.atsamples = []
         self.losses = []
@@ -467,19 +469,19 @@ def smooth_probabilities(probs, smooth):
 
 
 class Segmenter:
-    def __init__(self, model, scale=0.5):
+    def __init__(self, model, scale=0.5, device=None):
         self.smooth = 0.0
         self.model = model
         self.marker_threshold = 0.3
         self.region_threshold = 0.3
         self.maxdist = 100
-        self.activate()
         self.patchsize = (512, 512)
         self.overlap = (64, 64)
+        self.device = utils.device(device)
 
     def activate(self, yes=True):
         if yes:
-            self.model.cuda()
+            self.model.to(self.device)
         else:
             self.model.cpu()
 
@@ -569,6 +571,7 @@ def train(
     noutput: int = 4,
     invert: str = False,
     remap: str = "",
+    device: str = None,
 ):
     global logger
 
@@ -620,12 +623,11 @@ def train(
         test_dl = None
 
     model = loading.load_or_construct_model(model, noutput=noutput)
-    model.cuda()
     if parallel and torch.cuda.device_count() > 1:
         model = torch.nn.DataParallel(model)
     print(model)
 
-    trainer = SegTrainer(model, weightmask=weightmask, bordermask=bordermask)
+    trainer = SegTrainer(model, weightmask=weightmask, bordermask=bordermask, device=device)
     trainer.set_lr_schedule(eval(f"lambda n: {schedule}"))
 
     schedule = Schedule()
@@ -661,7 +663,6 @@ def predict(
     limit: int = 999999999,
 ):
     model = loading.load_only_model(model)
-    model.cuda()
     segmenter = Segmenter(model)
 
     pass # FIXME do something here
@@ -674,10 +675,13 @@ def segment(
     output: str = "",
     display: bool = True,
     limit: int = 999999999,
+    device: str = None,
 ):
+    device = utils.device(device)
+    if device.type == "cpu":
+        print("segment using CPU")
     model = loading.load_only_model(model)
-    model.cuda()
-    segmenter = Segmenter(model)
+    segmenter = Segmenter(model, device=device)
 
     dataset = wds.WebDataset(fname).decode("rgb")
 

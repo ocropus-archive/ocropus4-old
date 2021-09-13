@@ -117,8 +117,10 @@ def make_loader(
 
 @public
 class PageSkew:
-    def __init__(self, fname, check=True):
+    def __init__(self, fname, check=True, device=None):
+        self.device = utils.device(device)
         self.model = loading.load_only_model(fname)
+        self.model.to(self.device)
         self.bins = self.model.extra_["bins"]
         self.check = check
         self.debug = int(os.environ.get("DEBUG_PAGESKEW", 0))
@@ -127,7 +129,7 @@ class PageSkew:
         if self.check:
             assert np.mean(page) < 0.5
         try:
-            self.model.cuda()
+            self.model.to(self.device)
             self.model.eval()
             patches = skew_samples(page, alpha=(0, 0))
             result = []
@@ -136,7 +138,7 @@ class PageSkew:
                 if len(batch) == 0:
                     break
                 batch = np.array(batch)
-                inputs = torch.tensor(batch).unsqueeze(1).cuda()
+                inputs = torch.tensor(batch).unsqueeze(1).to(self.device)
                 with torch.no_grad():
                     outputs = self.model(inputs).softmax(1).cpu().detach()
                 result.append(outputs)
@@ -177,11 +179,13 @@ def train(
     nbins: int = 21,
     display: float = 0.0,
     invert: str = "Auto",
+    device: str = None,
 ):
+    device = utils.device(device)
     logger = slog.Logger(fname=log_to, prefix=prefix)
     logger.save_config(dict(args=sys.argv))
     model = loading.load_or_construct_model(model, nbins)
-    model.cuda()
+    model.to(device)
     print(model)
     urls = urls * replicate
     bins = np.linspace(-alpha, alpha, nbins)
@@ -195,7 +199,7 @@ def train(
         bins=bins,
         pipe=skew_pipe,
     )
-    criterion = nn.CrossEntropyLoss().cuda()
+    criterion = nn.CrossEntropyLoss().to(device)
     lrfun = eval(f"lambda n: {lrfun}")
     lr = lrfun(0)
     optimizer = optim.SGD(model.parameters(), lr=lr)
@@ -216,10 +220,10 @@ def train(
         if len(patches) < 2:
             print("skipping small batch", file=sys.stderr)
             continue
-        patches = patches.type(torch.float).unsqueeze(1).cuda()
+        patches = patches.type(torch.float).unsqueeze(1).to(device)
         optimizer.zero_grad()
         outputs = model(patches)
-        loss = criterion(outputs, targets.cuda())
+        loss = criterion(outputs, targets.to(device))
         loss.backward()
         optimizer.step()
         count += len(patches)

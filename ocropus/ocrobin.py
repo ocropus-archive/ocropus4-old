@@ -158,6 +158,7 @@ class BinTrainer:
         lr=1e-3,
         lr_schedule=None,
         savedir=True,
+        device=None,
     ):
         super().__init__()
         self.model = model
@@ -166,13 +167,14 @@ class BinTrainer:
         self.last_lr = -1
         self.set_lr(lr)
         self.lr_schedule = lr_schedule
-        self.criterion = nn.MSELoss().cuda()
         self.every_batch = lambda _: None
         self.maxcount = 1e21
         self.nsamples = 0
+        self.criterion = nn.MSELoss()
+        self.to(utils.device(device))
 
     def to(self, device="cpu"):
-        self.device = device
+        self.device = utils.device(device)
         self.model.to(device)
         self.criterion.to(device)
         # self.optimizer.to(device)
@@ -227,12 +229,13 @@ class BinTrainer:
 
 
 class Binarizer:
-    def __init__(self, fname=None):
+    def __init__(self, fname=None, device=None):
+        self.device = utils.device(device)
         self.model = loading.load_only_model(fname)
 
     def activate(self, yes=True):
         if yes:
-            self.model.cuda()
+            self.model.to(self.device)
         else:
             self.model.cpu()
 
@@ -240,7 +243,7 @@ class Binarizer:
         self.activate(True)
         if image.ndim == 3:
             image = np.mean(image, 2)
-        inputs = torch.tensor(image).unsqueeze(0).unsqueeze(0).cuda()
+        inputs = torch.tensor(image).unsqueeze(0).unsqueeze(0).to(self.device)
         outputs = self.model(inputs)[0, 0]
         result = np.array(outputs.detach().cpu().numpy(), dtype=float)
         return result
@@ -295,6 +298,7 @@ def train(
     fracnorm: str = "1.0,0.0",
     absnorm: str = "1.0,0.0",
     thresholds: str = "1.0,0.0",
+    device: str = None,
 ):
     fnames = fnames * replicate
     thresholds = eval(f"({thresholds})")
@@ -312,11 +316,9 @@ def train(
     )
     logger = slog.Logger(fname=log_to, prefix="bin")
     model = loading.load_or_construct_model(model)
-    model.cuda()
     print(model)
-    trainer = BinTrainer(model, lr_schedule=eval(f"lambda n: {lr}"))
+    trainer = BinTrainer(model, lr_schedule=eval(f"lambda n: {lr}"), device=device)
     trainer.count = int(getattr(model, "step_", 0))
-    trainer.to("cuda")
 
     def save():
         logger.save_ocrmodel(
@@ -350,9 +352,11 @@ def binarize(
     keep: bool = True,
     show: int = 0,
     limit: int = 99999999,
+    device: str = None,
 ):
+    device = utils.device(device)
     src = wds.WebDataset(fname).decode("rgb")
-    binarizer = Binarizer(model)
+    binarizer = Binarizer(model, device=device)
     with wds.TarWriter(output) as sink:
         for index, sample in enumerate(islice(src, limit)):
             print(f"{sample['__key__']}")

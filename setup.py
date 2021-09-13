@@ -14,22 +14,21 @@ if sys.version_info < (3, 6):
 VERSION = "0.0.0"
 
 PREREQS = """
-click
-typer
 braceexpand
 bs4
 editdistance
+humanhash3
 lxml
 matplotlib
 scikit-image
 scipy
-humanhash3
+tasker
+typer
 tabulate
-webdataset@git+git://github.com/tmbdev/webdataset.git
-tensorcom@git+git://github.com/NVlabs/tensorcom.git
 torchmore@git+git://github.com/tmbdev/torchmore.git
-ocrodeg@git+git://github.com/NVlabs/ocrodeg.git
+webdataset@git+git://github.com/tmbdev/webdataset.git
 """.split()
+
 print(PREREQS)
 
 setup(
@@ -50,7 +49,7 @@ setup(
     keywords="ocr, scene text, deep learning, text recognition",
     packages=["ocropus"],
     scripts=["ocropus4"],
-    # python_requires=">=3.6",
-    # install_requires=PREREQS,
+    python_requires=">=3.8",
+    install_requires=PREREQS,
     # long_description_content_type="text/markdown",
 )

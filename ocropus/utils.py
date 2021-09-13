@@ -3,6 +3,7 @@ import os
 import sys
 import time
 from functools import wraps
+import warnings
 import re
 
 import numpy as np
@@ -15,6 +16,17 @@ do_trace = int(os.environ.get("OCROTRACE", "0"))
 
 all_models = []
 
+
+def device(s):
+    if s is None:
+        if torch.cuda.is_available():
+            result = torch.device("cuda:0")
+        else:
+            result = torch.device("cpu")
+    else:
+        result = torch.device(s)
+    print(result, file=sys.stderr)
+    return result
 
 def unused(f):
     """Used to mark functions that are currently not used but are kept for future reference.

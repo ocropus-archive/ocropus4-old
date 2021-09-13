@@ -98,6 +98,28 @@ def collate4ocr(samples):
     return result, seqs
 
 
+class TextModel(nn.Module):
+
+    def __init__(self, model):
+        self.model = model
+
+    def forward(self, x):
+        return self.model(x)
+
+    def probs_batch(self, inputs):
+        """Compute probability outputs for the batch."""
+        self.model.eval()
+        with torch.no_grad():
+            outputs = self.model.forward(inputs.to(self.device))
+        return outputs.detach().cpu().softmax(1)
+
+    def predict_batch(self, inputs, **kw):
+        """Predict and decode a batch."""
+        probs = self.probs_batch(inputs)
+        result = [ctc_decode(p, **kw) for p in probs]
+        return result
+
+
 class TextTrainer:
     """A class encapsulating the logic for training text line recognizers."""
 
@@ -110,8 +132,8 @@ class TextTrainer:
         :param maxgrad: gradient clipping, defaults to 10.0
         """
         super().__init__()
-        self.model = model
-        self.device = None
+        self.device = utils.device(device)
+        self.model = model.to(self.device)
         self.losses = []
         self.last_lr = None
         self.set_lr(lr)
@@ -167,13 +189,6 @@ class TextTrainer:
         self.losses.append(loss)
         return loss
 
-    def probs_batch(self, inputs):
-        """Compute probability outputs for the batch. Uses `probfn`."""
-        self.model.eval()
-        with torch.no_grad():
-            outputs = self.model.forward(inputs.to(self.device))
-        return outputs.detach().cpu().softmax(1)
-
     def errors(self, loader, ntest=999999999):
         """Compute OCR errors using edit distance."""
         total = 0
@@ -203,6 +218,13 @@ class TextTrainer:
         assert tlens.sum() == targets.size(0)
         return self.ctc_loss(outputs.cpu(), targets.cpu(), olens.cpu(), tlens.cpu())
 
+    def probs_batch(self, inputs):
+        """Compute probability outputs for the batch."""
+        self.model.eval()
+        with torch.no_grad():
+            outputs = self.model.forward(inputs.to(self.device))
+        return outputs.detach().cpu().softmax(1)
+
     def predict_batch(self, inputs, **kw):
         """Predict and decode a batch."""
         probs = self.probs_batch(inputs)
@@ -213,19 +235,19 @@ class TextTrainer:
 class TextRec:
     """A line recognizer (without training logic)."""
 
-    def __init__(self, model, *, charset=Charset()):
+    def __init__(self, model, *, charset=Charset(), device=None):
         self.model = model
         self.charset = model.extra_.get("charset", charset)
         self.dewarp_to = model.extra_.get("dewarp_to", -1)
+        self.device = utils.device(device)
         if self.dewarp_to > 0:
             self.dewarper = lineest.CenterNormalizer(target_height=self.dewarp_to)
         else:
             self.dewarper = None
-        model.cuda()
 
     def activate(self, active):
         if active:
-            self.model.cuda()
+            self.model.to(self.device)
         else:
             self.model.cpu()
 
@@ -239,7 +261,8 @@ class TextRec:
                 return None
         self.last_image = image
         batch = torch.FloatTensor(image.reshape(1, 1, *image.shape))
-        self.probs = self.model(batch.cuda()).softmax(1)
+        self.activate(True)
+        self.probs = self.model(batch.to(self.device)).softmax(1)
         if not full:
             decoded = ctc_decode(self.probs[0])
             return self.charset.decode_str(decoded)
@@ -448,8 +471,10 @@ def train(
     num_workers: int = 4,
     data_parallel: str = "",
     shuffle: int = 20000,
+    device: str = None,
 ):
 
+    device = utils.device(device)
     charset = Charset(chardef=charset_file)
 
     if log_to == "":
@@ -492,7 +517,6 @@ def train(
         test_dl = None
 
     model = loading.load_or_construct_model(model, len(charset))
-    model.cuda()
     if data_parallel != "":
         data_parallel = eval(f"[{data_parallel}]")
         model_dp = torch.nn.DataParallel(model, device_ids=data_parallel)
@@ -505,7 +529,7 @@ def train(
     model.extra_.setdefault("dewarp_to", dewarp_to)
     print(model)
 
-    trainer = TextTrainer(model)
+    trainer = TextTrainer(model, device=device)
     trainer.charset = charset
     trainer.set_lr_schedule(eval(f"lambda n: {schedule}"))
 
@@ -535,9 +559,10 @@ def recognize(
     limit: int = 999999999,
     normalize: bool = True,
     display: bool = True,
+    device: str = None,
 ):
     model = loading.load_only_model(model)
-    textrec = TextRec(model)
+    textrec = TextRec(model, device=device)
     textrec.invert = invert
     textrec.normalize = normalize
     dataset = wds.WebDataset(fname)
@@ -559,6 +584,16 @@ def recognize(
             plt.title(result)
             plt.ginput(1, 1.0)
             print(sample.get("__key__"), image.shape, result)
+
+
+@app.command()
+def toscript(
+    model: str
+):
+    import torch.jit
+    model = loading.load_only_model(model)
+    scripted = torch.jit.script(model)
+    print(scripted)
 
 
 @app.command()
