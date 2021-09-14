@@ -10,7 +10,7 @@ provider:
     type: gcp
     region: us-west1
     availability_zone: us-west1-a
-    project_id: tmbmicro
+    project_id: research-191823
 
 # How Ray will authenticate with newly launched nodes.
 auth:

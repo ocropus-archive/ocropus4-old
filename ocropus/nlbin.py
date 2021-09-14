@@ -238,7 +238,7 @@ def binarize(
     maxrec: int = 999999999999,
     deskew: bool = False,
     display: int = -1,
-    fresh: bool = False
+    nokeep: bool = False
 ):
     """Binarize a shard of images."""
     args = utils.Record(**locals())
@@ -256,7 +256,7 @@ def binarize(
         image = image / 255.0
         flat = nlbin(image, args, deskew=deskew)
         assert flat.dtype == float
-        if fresh:
+        if nokeep:
             result = dict(__key__=key)
         else:
             result = dict(sample)
