@@ -4,7 +4,6 @@ from typing import List
 
 import matplotlib.pyplot as plt
 import numpy as np
-import ocrodeg
 import typer
 import webdataset as wds
 import torch
@@ -258,6 +257,7 @@ def generate(
     limit: int = 999999999,
 ):
     """Given binary image training data, generate artificial binarization data using ocrodeg."""
+    import ocrodeg
     ds = wds.WebDataset(input).decode("l").rename(__key__="__key__", image=extensions)
     sink = wds.TarWriter(output)
     for i, sample in enumerate(islice(ds, limit)):

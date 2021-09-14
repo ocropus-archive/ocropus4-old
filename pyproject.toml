@@ -3,3 +3,6 @@ ignore_decorators = ["@app.command", "@useopt", "@public", "@unused", "@model", 
 ignore_names = ["make_*", "check_*"]
 paths = ["ocropus"]
 exclude = ["ocropus/.ipynb_checkpoints/"]
+
+[tool.pytest.ini_options]
+testpaths = ["ocropus/tests"]

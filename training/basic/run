@@ -21,16 +21,16 @@ local_ocropus() {
     $OCROPUS4/ocropus4 "$@"
 }
 
-cmd_train_word() {
+cmd_train_word() { # train wordrec on words.shards.yml
     #local_ocropus ocrorec train words.shards.yml --display 20
     local_ocropus ocrorec train words.shards.yml --training-bs 16 --num-workers 12 --display 5
 }
 
-cmd_train_word2() {
+cmd_train_word2() { # train wordrec on words.shards.yml with 2 GPUs
     local_ocropus ocrorec train words.shards.yml --training-bs 6 --num-workers 12 --display 5 --data-parallel 0,1
 }
 
-cmd_train_wseg() {
+cmd_train_wseg() { # train wordseg on wseg.sharsd.yml
     local_ocropus ocroseg train wseg.shards.yml --display 5
 }
 

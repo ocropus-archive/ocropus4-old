@@ -188,7 +188,6 @@ class TextTrainer:
     def compute_loss(self, outputs, targets):
         assert len(targets) == len(outputs)
         targets, tlens = pack_for_ctc(targets)
-        layers.check_order(outputs, "BDL")
         b, d, L = outputs.size()
         olens = torch.full((b,), L, dtype=torch.long)
         outputs = outputs.log_softmax(1)

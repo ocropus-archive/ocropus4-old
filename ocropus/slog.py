@@ -203,6 +203,8 @@ class Logger:
     def log_progress(self, step, **kw):
         for key, value in kw.items():
             self._scalar(key, value, step=step)
+        if self.wandb is not None:
+            self.wandb.log(data=kw, step=step, commit=True)
 
     def save_config(self, config):
         assert isinstance(config, dict)
@@ -224,7 +226,7 @@ class Logger:
                 with open(f"{tmpdir}/model.pth", "wb") as stream:
                     torch.save(obj, stream)
                     stream.flush()
-                self.wandb.save(f"{tmpdir}/model.pth", base_path=tmpdir)
+                self.wandb.save(f"{tmpdir}/model-{step:12d}.pth", base_path=tmpdir, policy="now")
 
     # Helpers
 
