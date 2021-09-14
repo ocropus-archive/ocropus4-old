@@ -22,7 +22,7 @@ def test_linetrainer():
 
 
 def test_linetrainer():
-    model = models.text_model_210910
+    model = models.text_model_210910()
     trainer = ocrorec.TextTrainer(model)
     trainer.set_lr(1e-3)
     xs = torch.zeros((1, 1, 48, 277))

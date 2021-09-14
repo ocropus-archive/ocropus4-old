@@ -158,6 +158,7 @@ class BinTrainer:
         lr_schedule=None,
         savedir=True,
         device=None,
+        nchannels=3,
     ):
         super().__init__()
         self.model = model
@@ -171,6 +172,7 @@ class BinTrainer:
         self.nsamples = 0
         self.criterion = nn.MSELoss()
         self.to(utils.device(device))
+        self.nchannels = nchannels
 
     def to(self, device="cpu"):
         self.device = utils.device(device)
@@ -193,7 +195,10 @@ class BinTrainer:
         assert len(inputs) == len(targets)
         if self.lr_schedule:
             self.set_lr(self.lr_schedule(self.nsamples))
-        inputs = inputs.mean(1, keepdim=True)
+        if self.nchannels == 1:
+            inputs = inputs.mean(1, keepdim=True)
+        elif self.nchannels == 3 and inputs.shape[1] == 1:
+            inputs = inputs.repeat(1, 3, 1, 1)
         targets = targets.mean(1, keepdim=True)
         self.optimizer.zero_grad()
         self.model.train()
@@ -240,9 +245,8 @@ class Binarizer:
 
     def binarize(self, image, nocheck=False, unzoom=True):
         self.activate(True)
-        if image.ndim == 3:
-            image = np.mean(image, 2)
-        inputs = torch.tensor(image).unsqueeze(0).unsqueeze(0).to(self.device)
+        image = image.transpose(2, 0, 1)
+        inputs = torch.tensor(image).unsqueeze(0).to(self.device)
         outputs = self.model(inputs)[0, 0]
         result = np.array(outputs.detach().cpu().numpy(), dtype=float)
         return result
@@ -258,7 +262,8 @@ def generate(
 ):
     """Given binary image training data, generate artificial binarization data using ocrodeg."""
     import ocrodeg
-    ds = wds.WebDataset(input).decode("l").rename(__key__="__key__", image=extensions)
+    ds = wds.WebDataset(input).decode("l").rename(
+        __key__="__key__", image=extensions)
     sink = wds.TarWriter(output)
     for i, sample in enumerate(islice(ds, limit)):
         key = sample["__key__"]
@@ -273,7 +278,8 @@ def generate(
             else:
                 degraded = ocrodeg.printlike_fibrous(page, blotches=1e-6)
             degraded = normalize(degraded)
-            result = {"__key__": f"{key}/{v}", "jpg": degraded, "bin.jpg": page}
+            result = {"__key__": f"{key}/{v}",
+                      "jpg": degraded, "bin.jpg": page}
             sink.write(result)
     sink.close()
 
@@ -283,7 +289,7 @@ def train(
     fnames: List[str],
     extensions: str = "png;page.png;jpg;page.jpg;jpg;jpeg bin.png",
     num_workers: int = 4,
-    model: str = "cbinarization_210819",
+    model: str = "cbinarization_210910",
     bs: int = 32,
     lr: str = "1e-3",
     show: int = 0,
@@ -317,7 +323,8 @@ def train(
     logger = slog.Logger(fname=log_to, prefix="bin")
     model = loading.load_or_construct_model(model)
     print(model)
-    trainer = BinTrainer(model, lr_schedule=eval(f"lambda n: {lr}"), device=device)
+    trainer = BinTrainer(model, lr_schedule=eval(
+        f"lambda n: {lr}"), device=device)
     trainer.count = int(getattr(model, "step_", 0))
 
     def save():
@@ -330,7 +337,8 @@ def train(
     for inputs, targets in islice(utils.repeatedly(loader), 0, nsamples):
         trainer.train_batch(inputs, targets)
         if schedule("progress", 60, initial=True):
-            print(f"epoch {trainer.count} loss {np.mean(trainer.losses[-500:])}")
+            print(
+                f"epoch {trainer.count} loss {np.mean(trainer.losses[-500:])}")
         if schedule("save", save_interval, initial=True):
             save()
         if display > 0 and schedule("display", display, initial=True):
