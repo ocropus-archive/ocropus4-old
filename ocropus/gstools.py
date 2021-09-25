@@ -1,21 +1,5 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[1]:
-
-
-get_ipython().run_line_magic('pylab', 'inline')
-
-
-# In[2]:
-
-
 import os
 import sys
-
-
-# In[9]:
-
 
 def gslist(arg: str):
     try:
@@ -25,16 +9,6 @@ def gslist(arg: str):
         print("here", exn)
         return []
     return lines
-
-
-# In[7]:
-
-
-gslist("gs://ocropus4-models")
-
-
-# In[21]:
-
 
 def gsexists(path):
     status = os.system(f"gsutil ls '{path}' > /dev/null 2>&1")
@@ -61,16 +35,6 @@ def gswrite(dst):
 def gsmb(dst):
     assert os.system(f"gsutil mb '{dst}'") == 0
 
-
-# In[18]:
-
-
-gsexists("gs://ocropus4-models/wordmodel.pth"), gsexists("gs://ocropus4-models/wordmodel.pth.foo")
-
-
-# In[30]:
-
-
 def gsprocess(source, dest, nshards):
     sourcedir, sourcename = os.path.split(source)
     assert "%" in sourcename
@@ -94,19 +58,4 @@ def gsprocess(source, dest, nshards):
             continue
         gstouch(destdir + "/" + lockname)
         yield source % i, dest % i
-        gsrm(destdir + "/" + lockname)   
-
-
-# In[31]:
-
-
-#gsmb("gs://tmbdev-temp")
-for src, dst in gsprocess("gs://nvdata-ocropus/ia1-%06d.tar", "gs://tmbdev-temp/ia1-%06d.tar", 34):
-    print(src, dst)
-
-
-# In[ ]:
-
-
-
-
+        gsrm(destdir + "/" + lockname)
