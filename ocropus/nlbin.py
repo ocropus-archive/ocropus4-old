@@ -188,7 +188,7 @@ def nlbin(raw, args=None, deskew=True):
     """Nonlinear image binarization and deskewing."""
     if args is None:
         args = nlbin_defaults()
-    assert raw.dtype == float
+    assert raw.dtype in (float, np.float32)
     image = normalize_raw_image(raw)
     flat = estimate_local_whitelevel(
         image, args.zoom, args.perc, args.dist, debug_nlbin

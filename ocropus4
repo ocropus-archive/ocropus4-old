@@ -50,8 +50,12 @@ ocroline)
     ;;
 ocrorec)
     $python3 -m ocropus.ocrorec "$@"
-    ;; ocrobin)   # binarization
+    ;;
+ocrobin)   # binarization
     $python3 -m ocropus.ocrobin "$@"
+    ;;
+ocroimg)   # binarization
+    $python3 -m ocropus.ocroimg "$@"
     ;;
 ocrorot)   # page rotation/orientation detection
     $python3 -m ocropus.ocrorot "$@"
