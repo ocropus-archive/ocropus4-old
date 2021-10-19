@@ -17,12 +17,12 @@ import os.path
 
 from . import slog
 
-default_path = "ocropus.models:ocropus.experimental_models:ocropus.old_models"
-module_path = os.environ.get("MODEL_MODULES", default_path).split(":")
-
 #
 # Modules
 #
+
+default_path = "ocropus.models:ocropus.experimental_models:ocropus.old_models"
+module_path = os.environ.get("MODEL_MODULES", default_path).split(":")
 
 num_modules = 0
 
@@ -147,14 +147,18 @@ def construct_model(name, *args, module_path=module_path, **kw):
 #
 
 
-def download_cache(url, cache_dir=None):
+modeldir = os.environ.get("OCROMODELS", os.path.join(os.environ.get("HOME", "/tmp"), ".ocropus4/models"))
+
+
+def download_cache(url, modeldir=modeldir):
     """Download a file to a cache directory and return the path to the file."""
 
-    if cache_dir is None:
-        cache_dir = os.environ["HOME"] + "/.cache/ocropus"
-    if not os.path.exists(cache_dir):
-        os.makedirs(cache_dir)
-    cache_path = os.path.join(cache_dir, hashlib.sha1(url.encode("utf-8")).hexdigest())
+    if modeldir is None:
+        modeldir = os.environ["HOME"] + "/.cache/ocropus"
+    if not os.path.exists(modeldir):
+        os.makedirs(modeldir)
+    _, fname = os.path.split(urlparse(url).path)
+    cache_path = os.path.join(modeldir, hashlib.sha1(url.encode("utf-8")).hexdigest() + "_" + fname)
     if os.path.exists(cache_path):
         return cache_path
     print(f"# downloading {url} to {cache_path}", file=sys.stderr)
@@ -174,6 +178,18 @@ def load_only_model(fname, *args, module_path=module_path, device="cpu", **kw):
     else:
         state = torch.load(fname, map_location=torch.device(device))
     model = dict_to_model(state, module_path=module_path)
+    return model
+
+
+def load_jit_model(fname, device="cpu"):
+    import torch.jit
+    if re.search(r"(?i)^https?:.*", fname):
+        cached = download_cache(fname)
+        print("*** remote", cached)
+        model = torch.jit.load(cached)
+    else:
+        print("*** local", fname)
+        model = torch.jit.load(fname)
     return model
 
 

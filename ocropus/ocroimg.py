@@ -29,9 +29,8 @@ plt.rc("image", interpolation="nearest")
 
 app = typer.Typer()
 
-
-model = torch.jit.load("binarize224k.pt")
-
+# default_jit_model = "http://storage.googleapis.com/ocropus4-models/ruby-sun-22-binarize.pt"
+default_jit_model = "http://storage.googleapis.com/ocropus4-models/effortless-glade-12-binarize.pt"
 
 # In[29]:
 
@@ -53,23 +52,34 @@ def patchwise(image, f, r=(256, 1024), s=(177, 477)):
     counts = np.zeros(image.shape)
     for y in range(0, h, s[0]):
         for x in range(0, w, s[1]):
-            input = image[y:y+r[0], x:x+r[1]]
+            input = image[y : y + r[0], x : x + r[1]]
             output = f(input)
             if output is None:
                 continue
-            #print(result[y:y+r, x:x+r].shape, output[:r, :r].shape)
-            result[y:y+r[0], x:x+r[1]
-                   ] += output[:min(r[0], h-y), :min(r[1], w-x)]
-            counts[y:y+r[0], x:x+r[1]] += 1
+            # print(result[y:y+r, x:x+r].shape, output[:r, :r].shape)
+            result[y : y + r[0], x : x + r[1]] += output[: min(r[0], h - y), : min(r[1], w - x)]
+            counts[y : y + r[0], x : x + r[1]] += 1
     return result / np.maximum(counts, 1.0)
 
 
 @app.command()
-def binarize(fname: str, model: str = "", output: str = "", extensions="jpg;png;jpeg;page.jpg;page.jpeg", prebinarize: bool = True, deskew: bool = True, keep: bool = True, patch: str = "256,1024", step: str = "177,477", show: float = -1) -> None:
+def binarize(
+    fname: str,
+    model: str = default_jit_model,
+    output: str = "",
+    extensions="jpg;png;jpeg;page.jpg;page.jpeg",
+    mode: str = "normalize",
+    deskew: bool = True,
+    keep: bool = True,
+    patch: str = "256,1024",
+    step: str = "177,477",
+    show: float = -1,
+) -> None:
     """Binarize the images in a WebDataset."""
     assert model != "", "must specify model"
     assert output != "", "must specify output"
-    model = torch.jit.load(model)
+    model = loading.load_jit_model(model)
+    # model = torch.jit.load(model)
     r = eval(f"({patch})")
     s = eval(f"({step})")
     source = wds.WebDataset(fname).decode("l").rename(jpeg=extensions)
@@ -80,12 +90,17 @@ def binarize(fname: str, model: str = "", output: str = "", extensions="jpg;png;
         print(sample["__key__"])
         raw = sample["jpeg"]
         print(raw.dtype, raw.shape)
-        if prebinarize:
+        if mode == "normalize":
+            lo, hi = np.percentile(raw, 5), np.percentile(raw, 95)
+            hi = max(lo + 0.3, hi)
+            image = raw - lo
+            image /= hi - lo
+            image += 1.0 - np.amax(image)
+        elif mode == "nlbin":
             image = nlbin.nlbin(raw, deskew=deskew)
         else:
             image = raw
-        binarized = patchwise(
-            image, partial(map_patch, model), r=s, s=s)
+        binarized = patchwise(image, partial(map_patch, model), r=r, s=s)
         binarized = binarized.clip(0, 1)
         if show >= 0:
             plt.subplot(1, 2, 1)
