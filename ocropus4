@@ -51,6 +51,9 @@ ocroline)
 ocrorec)
     $python3 -m ocropus.ocrorec "$@"
     ;;
+ocrorec2)
+    $python3 -m ocropus.ocrorec2 "$@"
+    ;;
 ocrobin)   # binarization
     $python3 -m ocropus.ocrobin "$@"
     ;;

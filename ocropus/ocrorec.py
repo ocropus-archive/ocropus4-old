@@ -331,7 +331,7 @@ def make_loader(
     extensions="line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt",
     **kw,
 ):
-    training = wds.WebDataset(fname)
+    training = wds.WebDataset(fname, caching=True, verbose=True, shardshuffle=50)
     if mode == "train" and shuffle > 0:
         training = training.shuffle(shuffle)
     training = training.decode("l8").to_tuple(extensions)
@@ -428,9 +428,10 @@ def save_model(logger, trainer, test_dl, ntest=999999999):
     logger.save_ocrmodel(model, step=trainer.nsamples, loss=loss)
 
 
+default_training_urls = "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..22}.tar"
 @app.command()
 def train(
-    training: str,
+    training: str = default_training_urls,
     training_bs: int = 4,
     invert: bool = False,
     normalize_intensity: bool = False,

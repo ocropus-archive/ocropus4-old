@@ -1,6 +1,5 @@
 braceexpand
 bs4
-editdistance
 humanhash3
 lxml
 matplotlib
@@ -10,5 +9,7 @@ tasker
 typer
 tabulate
 kornia
+editdistance
+pytorch_lightning
 -e git+git://github.com/tmbdev/torchmore.git#egg=torchmore
--e git+git://github.com/tmbdev/webdataset.git#egg=webdataset
+-e git+git://github.com/tmbdev/webdataset.git@v2#egg=webdataset

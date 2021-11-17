@@ -25,6 +25,8 @@ from . import utils
 from . import loading
 from . import degrade
 
+import pytorch_lightning as pl
+
 _ = linemodels
 
 
@@ -98,38 +100,6 @@ def collate4ocr(samples):
     return result, seqs
 
 
-class TextModel(nn.Module):
-    """A model wrapper for text recognition."""
-
-    def __init__(self, model):
-        super().__init__(self)
-        self.param = torch.nn.Parameter(torch.zeros(1))
-        self.model = model
-        self.sizes = torch.IntTensor([[0, 9999], [1, 3], [32, 256], [32, 4096]])
-
-    def forward(self, x):
-        for i in range(4):
-            assert x.shape[0] >= self.sizes[i, 0], (i, x.shape, self.sizes)
-            assert x.shape[0] <= self.sizes[i, 0], (i, x.shape, self.sizes)
-        assert x.min() >= 0. x.min()
-        assert x.max() >= 0. x.max()
-        return self.model(x.to(self.param.device))
-
-    def probs_batch(self, inputs):
-        """Compute probability outputs for the batch."""
-        self.model.eval()
-        with torch.no_grad():
-            outputs = self.model.forward(inputs.to(self.device))
-        return outputs.detach().cpu().softmax(1)
-
-    @torch.jit.unused
-    def predict_batch(self, inputs, **kw):
-        """Predict and decode a batch."""
-        probs = self.probs_batch(inputs)
-        result = [ctc_decode(p, **kw) for p in probs]
-        return result
-
-
 class TextTrainer:
     """A class encapsulating the logic for training text line recognizers."""
 
@@ -143,7 +113,8 @@ class TextTrainer:
         """
         super().__init__()
         self.device = utils.device(device)
-        self.model = model.to(self.device)
+        self.model = model
+        self.model.to(self.device)
         self.losses = []
         self.last_lr = None
         self.set_lr(lr)
@@ -219,7 +190,6 @@ class TextTrainer:
     def compute_loss(self, outputs, targets):
         assert len(targets) == len(outputs)
         targets, tlens = pack_for_ctc(targets)
-        layers.check_order(outputs, "BDL")
         b, d, L = outputs.size()
         olens = torch.full((b,), L, dtype=torch.long)
         outputs = outputs.log_softmax(1)
@@ -363,7 +333,7 @@ def make_loader(
     extensions="line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt",
     **kw,
 ):
-    training = wds.WebDataset(fname)
+    training = wds.WebDataset(fname, caching=True, verbose=True, shardshuffle=50)
     if mode == "train" and shuffle > 0:
         training = training.shuffle(shuffle)
     training = training.decode("l8").to_tuple(extensions)
@@ -456,16 +426,18 @@ def save_model(logger, trainer, test_dl, ntest=999999999):
         loss = err
     else:
         loss = np.mean(trainer.losses[-100:])
-    logger.save_ocrmodel(trainer.model, step=trainer.nsamples, loss=loss)
+    model = trainer.model
+    logger.save_ocrmodel(model, step=trainer.nsamples, loss=loss)
 
 
+default_training_urls = "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..22}.tar"
 @app.command()
 def train(
-    training: str,
+    training: str = default_training_urls,
     training_bs: int = 4,
     invert: bool = False,
     normalize_intensity: bool = False,
-    model: str = "text_model_210218",
+    model: str = "text_model_210910",
     test: str = None,
     test_bs: int = 20,
     ntest: int = int(1e12),
@@ -539,7 +511,7 @@ def train(
     model.extra_.setdefault("dewarp_to", dewarp_to)
     print(model)
 
-    trainer = TextTrainer(model, device=device)
+    trainer = TextTrainer(model)
     trainer.charset = charset
     trainer.set_lr_schedule(eval(f"lambda n: {schedule}"))
 
