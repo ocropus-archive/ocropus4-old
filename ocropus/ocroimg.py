@@ -68,7 +68,7 @@ def binarize(
     model: str = default_jit_model,
     output: str = "",
     extensions="jpg;png;jpeg;page.jpg;page.jpeg",
-    mode: str = "normalize",
+    mode: str = "nlbin",
     deskew: bool = True,
     keep: bool = True,
     patch: str = "256,1024",
@@ -79,6 +79,8 @@ def binarize(
     assert model != "", "must specify model"
     assert output != "", "must specify output"
     model = loading.load_jit_model(model)
+    if mode == "nlbin":
+        print("# using --mode=nlbin is slow; you can try --mode==normalize or --mode=none", file=sys.stderr)
     # model = torch.jit.load(model)
     r = eval(f"({patch})")
     s = eval(f"({step})")

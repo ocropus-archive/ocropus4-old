@@ -1,18 +1,14 @@
+import re
+
 import torch
 import torch.nn.functional as F
-import re
-from torch import nn
-from torchmore import layers
-from torchmore import flex
-from torchmore import combos
-from torchmore import inputstats
 import typer
+from torch import nn
+from torchmore import combos, flex, inputstats, layers
 
-from . import ocrlayers
+from . import loading, ocrlayers, utils
 from .utils import model
-from . import utils
-from . import loading
-
+from .ocrorec import ctc_decode
 
 app = typer.Typer()
 
@@ -30,6 +26,7 @@ def make_rgb_float(inputs):
     else:
         assert inputs.shape[1] == 3, inputs.shape
     return inputs
+
 class TextModel(nn.Module):
 
     def __init__(self, model):
