@@ -431,6 +431,7 @@ def save_model(logger, trainer, test_dl, ntest=999999999):
 
 
 default_training_urls = "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..22}.tar"
+
 @app.command()
 def train(
     training: str = default_training_urls,
