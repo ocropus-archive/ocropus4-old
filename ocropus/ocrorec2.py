@@ -5,7 +5,8 @@ import re
 from itertools import islice
 from functools import partial
 import random
-
+import io
+import PIL
 import editdistance
 import matplotlib.pyplot as plt
 import numpy as np
@@ -211,6 +212,20 @@ class TextTrainer:
         result = [ctc_decode(p, **kw) for p in probs]
         return result
 
+
+def log_matplotlib_figure(tb, fig, index, key="image"):
+    """Log the given matplotlib figure to tensorboard logger tb."""
+    buf = io.BytesIO()
+    fig.savefig(buf, format="jpeg")
+    buf.seek(0)
+    image = PIL.Image.open(buf)
+    image = image.convert("RGB")
+    image = image.resize((600, 600))
+    image = np.array(image)
+    image = torch.from_numpy(image).float() / 255.0
+    image = image.permute(2, 0, 1)
+    tb.experiment.add_image(key, image, index)
+
 class TextLightning(pl.LightningModule):
     """A class encapsulating the logic for training text line recognizers."""
 
@@ -230,16 +245,41 @@ class TextLightning(pl.LightningModule):
         self.dewarp_to = None
         self.schedule = utils.Schedule()
 
-    def training_step(self, batch, _):
+    def training_step(self, batch, index):
         inputs, targets = batch
         outputs = self.model.forward(inputs)
         display = 3.0
-        if self.schedule("display", display, initial=True):
-            display_progress((inputs, targets, outputs))
+        # if self.schedule("display", display, initial=True):
+        # display_progress((inputs, targets, outputs))
         assert inputs.size(0) == outputs.size(0)
         loss = self.compute_loss(outputs, targets)
-        self.log("train/loss", loss, on_step=True)
+        self.log("train_loss", loss, on_step=True)
+        if index % 100 == 0:
+            self.log_ocr_result(index, inputs, targets, outputs)
         return loss
+
+    def log_ocr_result(self, index, inputs, targets, outputs):
+        """Log the given inputs, targets, and outputs to the logger."""
+        inputs = inputs.detach().cpu().numpy()[0]
+        outputs = outputs.detach().softmax(1).cpu().numpy()[0]
+        print(inputs.shape, outputs.shape)
+        decoded = ctc_decode(outputs)
+        decode_str = Charset().decode_str
+        t = decode_str(targets[0].cpu().numpy())
+        s = decode_str(decoded)
+        figure  = plt.figure(figsize=(10, 10))
+        # log the OCR result for the first image in the batch
+        plt.clf()
+        plt.imshow(inputs[0], cmap=plt.cm.gray)
+        plt.title(f"{t} : {s}", size=48)
+        log_matplotlib_figure(self.logger, figure, index)
+        # plot the posterior probabilities for the first image in the batch
+        plt.clf()
+        for row in outputs:
+            plt.plot(row)
+        log_matplotlib_figure(self.logger, figure, index, key="probs")
+        plt.close(figure)
+
 
     def compute_loss(self, outputs, targets):
         assert len(targets) == len(outputs)
