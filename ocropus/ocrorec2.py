@@ -262,7 +262,6 @@ class TextLightning(pl.LightningModule):
         """Log the given inputs, targets, and outputs to the logger."""
         inputs = inputs.detach().cpu().numpy()[0]
         outputs = outputs.detach().softmax(1).cpu().numpy()[0]
-        print(inputs.shape, outputs.shape)
         decoded = ctc_decode(outputs)
         decode_str = Charset().decode_str
         t = decode_str(targets[0].cpu().numpy())
@@ -482,76 +481,6 @@ def print_progress(trainer):
     )
 
 
-log_progress_every = Every(60)
-
-
-def log_progress(trainer):
-    if log_progress_every():
-        avgloss = mean(trainer.losses[-100:]) if len(trainer.losses) > 0 else 0.0
-        logger.log_progress(trainer.nsamples, train_loss=avgloss, lr=trainer.last_lr)
-
-
-def display_progress(trainer):
-    import matplotlib.pyplot as plt
-
-    if isinstance(trainer, tuple):
-        inputs, targets, outputs = trainer
-        inputs = inputs.detach().cpu()
-        outputs = outputs.detach().cpu()
-        decode_str = Charset().decode_str
-    else:
-        inputs, targets, outputs = trainer.last_batch
-        decode_str = trainer.charset.decode_str
-    inputs = inputs.numpy()[0, 0]
-    outputs = outputs.softmax(1).numpy()[0]
-    decoded = ctc_decode(outputs)
-    plt.ion()
-    plt.clf()
-    plt.subplot(221)
-    s = decode_str(targets[0].cpu().numpy())
-    plt.title(s)
-    plt.imshow(inputs)
-    plt.subplot(222)
-    plt.imshow(outputs, vmin=0, vmax=1)
-    plt.subplot(223)
-    if not isinstance(trainer, tuple):
-        losses = np.array(trainer.losses)
-        if len(losses) >= 20:
-            losses = ndi.gaussian_filter(losses, 10.0)
-        plt.ylim(np.amin(losses), np.median(losses) * 4)
-        plt.plot(losses)
-    plt.subplot(224)
-    s = decode_str(decoded)
-    plt.title(s)
-    for row in outputs:
-        plt.plot(row)
-    plt.ginput(1, 0.001)
-
-
-@junk
-def load_model(fname):
-    assert fname is not None, "must provide file name to load model from"
-    assert os.path.exists(fname), f"{fname} does not exist"
-    assert fname.endswith(".py"), f"{fname} must be a .py file"
-    src = open(fname).read()
-    mod = slog.load_module("mmod", src)
-    assert "make_model" in dir(mod), f"{fname} source does not define make_model function"
-    return mod, src
-
-
-def save_model(logger, trainer, test_dl, ntest=999999999):
-    if test_dl is not None:
-        errors, total = trainer.errors(test_dl, ntest=ntest)
-        err = float(errors) / total
-        logger.log_progress(trainer.nsamples, val_err=err)
-        print("test set:", err, errors, total)
-        loss = err
-    else:
-        loss = np.mean(trainer.losses[-100:])
-    model = trainer.model
-    logger.save_ocrmodel(model, step=trainer.nsamples, loss=loss)
-
-
 default_training_urls = "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..22}.tar"
 
 
@@ -624,48 +553,16 @@ def train(
 
     model = loading.load_or_construct_model(model, len(charset))
 
-    if False:
-        if data_parallel != "":
-            data_parallel = eval(f"[{data_parallel}]")
-            model_dp = torch.nn.DataParallel(model, device_ids=data_parallel)
-            for a in "mname_ margs_".split():
-                setattr(model_dp, a, getattr(model, a, None))
-            model = model_dp
-        if not hasattr(model, "extra_"):
-            model.extra_ = {}
-        model.extra_.setdefault("charset", charset)
-        model.extra_.setdefault("dewarp_to", dewarp_to)
-        print(model)
-        trainer = TextTrainer(model)
-        trainer.charset = charset
-        trainer.set_lr_schedule(eval(f"lambda n: {schedule}"))
-
-        schedule = utils.Schedule()
-        print("starting training")
-        for images, targets in utils.repeatedly(training_dl):
-            if trainer.nsamples >= ntrain:
-                break
-            trainer.train_batch(images, targets)
-            if schedule("progress", 60, initial=True):
-                print_progress(trainer)
-            if display > 0 and schedule("display", display, initial=True):
-                display_progress(trainer)
-            if schedule("log", 600, initial=True):
-                log_progress(trainer)
-            if schedule("save", 15 * 60, initial=True):
-                save_model(logger, trainer, test_dl)
-        save_model(logger, trainer, test_dl)
-    else:
-        lmodel = TextLightning(model)
-        callbacks = []
-        trainer = pl.Trainer(
-            default_root_dir = "_checkpoints",
-            gpus = 1,
-            max_epochs = 1000,
-            callbacks = callbacks,
-            progress_bar_refresh_rate = 1,
-        )
-        trainer.fit(lmodel, training_dl)
+    lmodel = TextLightning(model)
+    callbacks = []
+    trainer = pl.Trainer(
+        default_root_dir = "_checkpoints",
+        gpus = 1,
+        max_epochs = 1000,
+        callbacks = callbacks,
+        progress_bar_refresh_rate = 1,
+    )
+    trainer.fit(lmodel, training_dl)
 
 
 @app.command()
