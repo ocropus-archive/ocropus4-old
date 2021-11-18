@@ -1,37 +1,29 @@
+import io
 import os
 import random
-import sys
 import re
-from itertools import islice
+import sys
 from functools import partial
-import random
-import io
-import PIL
+from itertools import islice
+
 import editdistance
 import matplotlib.pyplot as plt
 import numpy as np
+import PIL
+import pytorch_lightning as pl
 import torch
 import typer
+import webdataset as wds
 from numpy import amax, arange, mean, newaxis, tile
 from scipy import ndimage as ndi
 from torch import nn, optim
 from torch.utils.data import DataLoader
-
-import webdataset as wds
 from torchmore import layers
 
-from . import lineest, linemodels, slog
-from .utils import Every, Charset, useopt, junk
-from . import utils
-from . import loading
-from . import degrade
-
-import pytorch_lightning as pl
+from . import degrade, lineest, linemodels, loading, slog, utils
+from .utils import Charset, Every, junk, useopt
 
 _ = linemodels
-
-
-logger = slog.NoLogger()
 
 
 app = typer.Typer()
@@ -101,118 +93,6 @@ def collate4ocr(samples):
     return result, seqs
 
 
-class TextTrainer:
-    """A class encapsulating the logic for training text line recognizers."""
-
-    def __init__(self, model, *, lr=1e-4, device=None, maxgrad=10.0):
-        """A class encapsulating line training logic.
-
-        :param model: the model to be trained
-        :param lr: learning rate, defaults to 1e-4
-        :param device: GPU used for training, defaults to None
-        :param maxgrad: gradient clipping, defaults to 10.0
-        """
-        super().__init__()
-        self.device = utils.device(device)
-        self.model = model
-        self.model.to(self.device)
-        self.losses = []
-        self.last_lr = None
-        self.set_lr(lr)
-        self.clip_gradient = maxgrad
-        self.nbatches = 0
-        self.nsamples = 0
-        self.ctc_loss = nn.CTCLoss(zero_infinity=True)
-        self.every_batch = []
-        self.schedule = lambda n: None
-        self.charset = None
-        self.dewarp_to = None
-        self.lr_schedule = None
-
-    def set_lr(self, lr, momentum=0.9):
-        """Set the learning rate.
-
-        Keeps track of current learning rate and only allocates a new optimizer if it changes."""
-        if lr is None:
-            return
-        if lr != self.last_lr:
-            print(f"setting learning rate to {lr:4.1e}", file=sys.stderr)
-            self.optimizer = optim.SGD(self.model.parameters(), lr=lr, momentum=momentum)
-            self.last_lr = lr
-
-    def set_lr_schedule(self, f):
-        self.lr_schedule = f
-
-    def train_batch(self, inputs, targets):
-        """All the steps necessary for training a batch.
-
-        Stores the last batch in self.last_batch.
-        Adds the loss to self.losses.
-        Clips the gradient if self.clip_gradient is not None.
-        """
-        if self.lr_schedule:
-            self.set_lr(self.lr_schedule(self.nsamples))
-        self.model.train()
-        self.set_lr(self.schedule(self.nsamples))
-        self.nbatches += 1
-        self.nsamples += len(inputs)
-        self.optimizer.zero_grad()
-        if self.device is not None:
-            inputs = inputs.to(self.device)
-        outputs = self.model.forward(inputs)
-        assert inputs.size(0) == outputs.size(0)
-        loss = self.compute_loss(outputs, targets)
-        loss.backward()
-        if self.clip_gradient is not None:
-            nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_gradient)
-        self.optimizer.step()
-        self.last_batch = (inputs.detach().cpu(), targets, outputs.detach().cpu())
-        loss = float(loss)
-        self.losses.append(loss)
-        return loss
-
-    def errors(self, loader, ntest=999999999):
-        """Compute OCR errors using edit distance."""
-        total = 0
-        errors = 0
-        for inputs, targets in loader:
-            targets, tlens = pack_for_ctc(targets)
-            predictions = self.predict_batch(inputs)
-            start = 0
-            for p, l in zip(predictions, tlens):
-                t = targets[start : start + l].tolist()
-                errors += editdistance.distance(p, t)
-                total += len(t)
-                start += l
-            if total > ntest:
-                break
-        return errors, total
-
-    def compute_loss(self, outputs, targets):
-        assert len(targets) == len(outputs)
-        targets, tlens = pack_for_ctc(targets)
-        b, d, L = outputs.size()
-        olens = torch.full((b,), L, dtype=torch.long)
-        outputs = outputs.log_softmax(1)
-        outputs = layers.reorder(outputs, "BDL", "LBD")
-        assert tlens.size(0) == b
-        assert tlens.sum() == targets.size(0)
-        return self.ctc_loss(outputs.cpu(), targets.cpu(), olens.cpu(), tlens.cpu())
-
-    def probs_batch(self, inputs):
-        """Compute probability outputs for the batch."""
-        self.model.eval()
-        with torch.no_grad():
-            outputs = self.model.forward(inputs.to(self.device))
-        return outputs.detach().cpu().softmax(1)
-
-    def predict_batch(self, inputs, **kw):
-        """Predict and decode a batch."""
-        probs = self.probs_batch(inputs)
-        result = [ctc_decode(p, **kw) for p in probs]
-        return result
-
-
 def log_matplotlib_figure(tb, fig, index, key="image"):
     """Log the given matplotlib figure to tensorboard logger tb."""
     buf = io.BytesIO()
@@ -225,6 +105,7 @@ def log_matplotlib_figure(tb, fig, index, key="image"):
     image = torch.from_numpy(image).float() / 255.0
     image = image.permute(2, 0, 1)
     tb.experiment.add_image(key, image, index)
+
 
 class TextLightning(pl.LightningModule):
     """A class encapsulating the logic for training text line recognizers."""
@@ -266,7 +147,7 @@ class TextLightning(pl.LightningModule):
         decode_str = Charset().decode_str
         t = decode_str(targets[0].cpu().numpy())
         s = decode_str(decoded)
-        figure  = plt.figure(figsize=(10, 10))
+        figure = plt.figure(figsize=(10, 10))
         # log the OCR result for the first image in the batch
         plt.clf()
         plt.imshow(inputs[0], cmap=plt.cm.gray)
@@ -278,7 +159,6 @@ class TextLightning(pl.LightningModule):
             plt.plot(row)
         log_matplotlib_figure(self.logger, figure, index, key="probs")
         plt.close(figure)
-
 
     def compute_loss(self, outputs, targets):
         assert len(targets) == len(outputs)
@@ -308,6 +188,10 @@ class TextLightning(pl.LightningModule):
                 break
         return errors, total
 
+    def configure_optimizers(self):
+        return torch.optim.SGD(self.model.parameters(), lr=self.lr)
+
+
     def probs_batch(self, inputs):
         """Compute probability outputs for the batch."""
         self.model.eval()
@@ -320,52 +204,6 @@ class TextLightning(pl.LightningModule):
         probs = self.probs_batch(inputs)
         result = [ctc_decode(p, **kw) for p in probs]
         return result
-
-    def configure_optimizers(self):
-        return torch.optim.SGD(self.model.parameters(), lr=self.lr)
-
-
-class TextRec:
-    """A line recognizer (without training logic)."""
-
-    def __init__(self, model, *, charset=Charset(), device=None):
-        self.model = model
-        self.charset = model.extra_.get("charset", charset)
-        self.dewarp_to = model.extra_.get("dewarp_to", -1)
-        self.device = utils.device(device)
-        if self.dewarp_to > 0:
-            self.dewarper = lineest.CenterNormalizer(target_height=self.dewarp_to)
-        else:
-            self.dewarper = None
-
-    def activate(self, active):
-        if active:
-            self.model.to(self.device)
-        else:
-            self.model.cpu()
-
-    def recognize(self, image, full=False):
-        if image.dtype == np.uint8:
-            image = image.astype(float) / 255.0
-        assert np.amin(image) >= 0 and np.amax(image) <= 1
-        if self.dewarper is not None:
-            image = self.dewarper.measure_and_normalize(image)
-            if image.shape[0] < 5 or image.shape[1] < 5:
-                return None
-        self.last_image = image
-        batch = torch.FloatTensor(image.reshape(1, 1, *image.shape))
-        self.activate(True)
-        self.probs = self.model(batch.to(self.device)).softmax(1)
-        if not full:
-            decoded = ctc_decode(self.probs[0])
-            return self.charset.decode_str(decoded)
-        else:
-            h, w = image.shape
-            decoded = [
-                (r / float(w), self.charset.decode_chr(c), p)
-                for r, c, p in ctc_decode(self.probs[0], full=True)
-            ]
-            return decoded
 
 
 def identity(x):
@@ -454,7 +292,9 @@ def make_loader(
     training = training.map_tuple(identity, text_normalizer)
     if text_select_re != "":
         training = training.select(partial(good_text, text_select_re))
-    training = training.map_tuple(lambda a: a.astype(float) / 255.0, charset.preptargets)
+    training = training.map_tuple(
+        lambda a: a.astype(float) / 255.0, charset.preptargets
+    )
     if augment != "":
         f = eval(f"augment_{augment}")
         training = training.map_tuple(f, identity)
@@ -470,19 +310,13 @@ def make_loader(
     if ntrain > 0:
         print(ntrain)
         training = training.with_epoch(ntrain)
-    training_dl = DataLoader(training, collate_fn=collate4ocr, batch_size=batch_size, **kw)
+    training_dl = DataLoader(
+        training, collate_fn=collate4ocr, batch_size=batch_size, **kw
+    )
     return training_dl
 
 
-def print_progress(trainer):
-    avgloss = mean(trainer.losses[-100:]) if len(trainer.losses) > 0 else 0.0
-    print(
-        f"{trainer.nsamples:3d} {trainer.nbatches:9d} {avgloss:10.4f}", file=sys.stderr, flush=True,
-    )
-
-
 default_training_urls = "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..22}.tar"
-
 
 @app.command()
 def train(
@@ -556,11 +390,11 @@ def train(
     lmodel = TextLightning(model)
     callbacks = []
     trainer = pl.Trainer(
-        default_root_dir = "_checkpoints",
-        gpus = 1,
-        max_epochs = 1000,
-        callbacks = callbacks,
-        progress_bar_refresh_rate = 1,
+        default_root_dir="_logs",
+        gpus=1,
+        max_epochs=1000,
+        callbacks=callbacks,
+        progress_bar_refresh_rate=1,
     )
     trainer.fit(lmodel, training_dl)
 
@@ -606,6 +440,7 @@ def toscript(
     model: str,
 ):
     import torch.jit
+
     model = loading.load_only_model(model)
     scripted = torch.jit.script(model)
     print(scripted)
