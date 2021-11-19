@@ -1,8 +1,8 @@
+"""Text recognition."""
+
 import io
-import os
 import random
 import re
-import sys
 from functools import partial
 from itertools import islice
 
@@ -14,14 +14,14 @@ import pytorch_lightning as pl
 import torch
 import typer
 import webdataset as wds
-from numpy import amax, arange, mean, newaxis, tile
+from numpy import amax, arange, newaxis, tile
 from scipy import ndimage as ndi
-from torch import nn, optim
+from torch import nn
 from torch.utils.data import DataLoader
 from torchmore import layers
 
 from . import degrade, lineest, linemodels, loading, slog, utils
-from .utils import Charset, Every, junk, useopt
+from .utils import Charset, useopt
 
 _ = linemodels
 
