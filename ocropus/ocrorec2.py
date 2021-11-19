@@ -42,6 +42,14 @@ def goodsize(sample):
     return good
 
 
+class TextModel(nn.Module):
+    def __init__(self):
+        super().__init__(self)
+
+    def forward(self, image):
+        pass
+
+
 plt.rc("image", cmap="gray")
 plt.rc("image", interpolation="nearest")
 
@@ -123,7 +131,6 @@ class TextLightning(pl.LightningModule):
         self.model = model
         self.ctc_loss = nn.CTCLoss(zero_infinity=True)
         self.charset = None
-        self.dewarp_to = None
         self.schedule = utils.Schedule()
 
     def training_step(self, batch, index):
@@ -190,7 +197,6 @@ class TextLightning(pl.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.SGD(self.model.parameters(), lr=self.lr)
-
 
     def probs_batch(self, inputs):
         """Compute probability outputs for the batch."""
@@ -277,7 +283,6 @@ def make_loader(
     ntrain=-1,
     mode="train",
     charset=Charset(),
-    dewarp_to=-1,
     augment="distort",
     text_normalizer="simple",
     text_select_re="[0-9A-Za-z]",
@@ -292,9 +297,7 @@ def make_loader(
     training = training.map_tuple(identity, text_normalizer)
     if text_select_re != "":
         training = training.select(partial(good_text, text_select_re))
-    training = training.map_tuple(
-        lambda a: a.astype(float) / 255.0, charset.preptargets
-    )
+    training = training.map_tuple(lambda a: a.astype(float) / 255.0, charset.preptargets)
     if augment != "":
         f = eval(f"augment_{augment}")
         training = training.map_tuple(f, identity)
@@ -302,21 +305,19 @@ def make_loader(
         training = training.map_tuple(invert_image, identity)
     if normalize_intensity:
         training = training.map_tuple(normalize_image, identity)
-    if dewarp_to > 0:
-        dewarper = lineest.CenterNormalizer(target_height=dewarp_to)
-        training = training.map_tuple(dewarper.measure_and_normalize, identity)
     training = training.map_tuple(lambda x: torch.tensor(x).unsqueeze(0), identity)
     training = training.select(goodsize)
     if ntrain > 0:
         print(ntrain)
         training = training.with_epoch(ntrain)
-    training_dl = DataLoader(
-        training, collate_fn=collate4ocr, batch_size=batch_size, **kw
-    )
+    training_dl = DataLoader(training, collate_fn=collate4ocr, batch_size=batch_size, **kw)
     return training_dl
 
 
-default_training_urls = "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..22}.tar"
+default_training_urls = (
+    "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..22}.tar"
+)
+
 
 @app.command()
 def train(
@@ -333,7 +334,6 @@ def train(
     # lr: float = 1e-3,
     # checkerr: float = 1e12,
     charset_file: str = None,
-    dewarp_to: int = -1,
     log_to: str = "",
     ntrain: int = (1 << 31),
     display: float = -1.0,
@@ -367,7 +367,6 @@ def train(
         invert=invert,
         normalize_intensity=normalize_intensity,
         ntrain=ntrain,
-        dewarp_to=dewarp_to,
         text_select_re=text_select_re,
         num_workers=4,
         shuffle=shuffle,
@@ -379,7 +378,6 @@ def train(
             batch_size=training_bs,
             invert=invert,
             normalize_intensity=normalize_intensity,
-            dewarp_to=dewarp_to,
             mode="test",
         )
     else:
