@@ -32,6 +32,10 @@ app = typer.Typer()
 min_w, min_h, max_w, max_h = 15, 15, 4000, 200
 
 
+def identity(x):
+    return x
+
+
 def goodsize(sample):
     """Determine whether the given sample has a good size."""
     image, _ = sample
@@ -136,9 +140,6 @@ class TextLightning(pl.LightningModule):
     def training_step(self, batch, index):
         inputs, targets = batch
         outputs = self.model.forward(inputs)
-        display = 3.0
-        # if self.schedule("display", display, initial=True):
-        # display_progress((inputs, targets, outputs))
         assert inputs.size(0) == outputs.size(0)
         loss = self.compute_loss(outputs, targets)
         self.log("train_loss", loss, on_step=True)
@@ -210,10 +211,6 @@ class TextLightning(pl.LightningModule):
         probs = self.probs_batch(inputs)
         result = [ctc_decode(p, **kw) for p in probs]
         return result
-
-
-def identity(x):
-    return x
 
 
 def invert_image(a):
@@ -301,10 +298,6 @@ def make_loader(
     if augment != "":
         f = eval(f"augment_{augment}")
         training = training.map_tuple(f, identity)
-    if invert:
-        training = training.map_tuple(invert_image, identity)
-    if normalize_intensity:
-        training = training.map_tuple(normalize_image, identity)
     training = training.map_tuple(lambda x: torch.tensor(x).unsqueeze(0), identity)
     training = training.select(goodsize)
     if ntrain > 0:
@@ -318,6 +311,7 @@ class TextModel(nn.Module):
     def __init__(self, model):
         super().__init__()
         self.model = model
+
     def forward(self, images):
         b, c, h, w = images.shape
         assert h > 15 and h < 4000 and w > 15 and h < 4000
@@ -351,7 +345,6 @@ def train(
     charset_file: str = None,
     log_to: str = "",
     ntrain: int = (1 << 31),
-    display: float = -1.0,
     num_workers: int = 4,
     data_parallel: str = "",
     shuffle: int = 20000,
