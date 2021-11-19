@@ -314,6 +314,21 @@ def make_loader(
     return training_dl
 
 
+class TextModel(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+    def forward(self, images):
+        b, c, h, w = images.shape
+        assert h > 15 and h < 4000 and w > 15 and h < 4000
+        for image in images:
+            image -= image.amin()
+            image /= torch.max(image.amax(), torch.tensor([0.01], device=image.device))
+            if image.mean() > 0.5:
+                image[...] = 1.0 - image[...]
+        return self.model.forward(images)
+
+
 default_training_urls = (
     "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..22}.tar"
 )
@@ -384,6 +399,7 @@ def train(
         test_dl = None
 
     model = loading.load_or_construct_model(model, len(charset))
+    model = TextModel(model)
 
     lmodel = TextLightning(model)
     callbacks = []
