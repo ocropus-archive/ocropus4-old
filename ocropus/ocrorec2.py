@@ -143,8 +143,15 @@ class TextLightning(pl.LightningModule):
         assert inputs.size(0) == outputs.size(0)
         loss = self.compute_loss(outputs, targets)
         self.log("train_loss", loss, on_step=True)
+        err = self.compute_error(outputs, targets)
+        self.log("train_err", err, on_step=True, prog_bar=True)
         if index % 100 == 0:
             self.log_ocr_result(index, inputs, targets, outputs)
+            decoded = ctc_decode(outputs.detach().cpu().softmax(1).numpy()[0])
+            decode_str = Charset().decode_str
+            t = decode_str(targets[0].cpu().numpy())
+            s = decode_str(decoded)
+            print(f"\n{t} : {s}")
         return loss
 
     def log_ocr_result(self, index, inputs, targets, outputs):
@@ -179,22 +186,13 @@ class TextLightning(pl.LightningModule):
         assert tlens.sum() == targets.size(0)
         return self.ctc_loss(outputs.cpu(), targets.cpu(), olens.cpu(), tlens.cpu())
 
-    def errors(self, loader, ntest=999999999):
-        """Compute OCR errors using edit distance."""
-        total = 0
-        errors = 0
-        for inputs, targets in loader:
-            targets, tlens = pack_for_ctc(targets)
-            predictions = self.predict_batch(inputs)
-            start = 0
-            for p, l in zip(predictions, tlens):
-                t = targets[start : start + l].tolist()
-                errors += editdistance.distance(p, t)
-                total += len(t)
-                start += l
-            if total > ntest:
-                break
-        return errors, total
+    def compute_error(self, outputs, targets):
+        probs = outputs.detach().cpu().softmax(1)
+        targets = [[int(x) for x in t] for t in targets]
+        total = sum(len(t) for t in targets)
+        predicted = [ctc_decode(p) for p in probs]
+        errs = [editdistance.distance(p, t) for p, t in zip(predicted, targets)]
+        return sum(errs) / float(total)
 
     def configure_optimizers(self):
         return torch.optim.SGD(self.model.parameters(), lr=self.lr)
@@ -211,16 +209,6 @@ class TextLightning(pl.LightningModule):
         probs = self.probs_batch(inputs)
         result = [ctc_decode(p, **kw) for p in probs]
         return result
-
-
-def invert_image(a):
-    return 1.0 - a
-
-
-def normalize_image(a):
-    a = a - a.min()
-    a = a / float(a.max())
-    return a
 
 
 @useopt
@@ -343,7 +331,6 @@ def train(
     # lr: float = 1e-3,
     # checkerr: float = 1e12,
     charset_file: str = None,
-    log_to: str = "",
     ntrain: int = (1 << 31),
     num_workers: int = 4,
     data_parallel: str = "",
@@ -353,21 +340,6 @@ def train(
 
     device = utils.device(device)
     charset = Charset(chardef=charset_file)
-
-    if log_to == "":
-        log_to = None
-    logger = slog.Logger(fname=log_to, prefix="ocrorec")
-    logger.save_config(
-        dict(
-            mdef=model,
-            training=training,
-            training_bs=training_bs,
-            invert=invert,
-            normalize_intensity=normalize_intensity,
-            schedule=schedule,
-        ),
-    )
-    logger.flush()
 
     training_dl = make_loader(
         training,
