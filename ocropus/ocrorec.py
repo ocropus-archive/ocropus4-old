@@ -274,6 +274,9 @@ def normalize_none(s):
 
 @useopt
 def normalize_simple(s):
+    s = re.sub("[\u201c\u201d]", '"', s)
+    s = re.sub("[\u2018\u2019]", "'", s)
+    s = re.sub("[\u2014]", "-", s)
     s = re.sub("\\\\[A-Za-z]+", "~", s)
     s = re.sub("\\\\[_^]+", "", s)
     s = re.sub("[{}]", "", s)

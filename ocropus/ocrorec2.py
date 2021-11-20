@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import PIL
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 import torch
 import typer
 import webdataset as wds
@@ -21,7 +22,8 @@ from torch.utils.data import DataLoader
 from torchmore import layers
 
 from . import degrade, lineest, linemodels, loading, slog, utils
-from .utils import Charset, useopt
+from .utils import useopt
+import torch.jit
 
 _ = linemodels
 
@@ -44,14 +46,6 @@ def goodsize(sample):
     if not good:
         print("rejecting", image.shape)
     return good
-
-
-class TextModel(nn.Module):
-    def __init__(self):
-        super().__init__(self)
-
-    def forward(self, image):
-        pass
 
 
 plt.rc("image", cmap="gray")
@@ -134,11 +128,12 @@ class TextLightning(pl.LightningModule):
         self.lr = lr
         self.model = model
         self.ctc_loss = nn.CTCLoss(zero_infinity=True)
-        self.charset = None
+        self.charset_size = 1024
         self.schedule = utils.Schedule()
 
     def training_step(self, batch, index):
-        inputs, targets = batch
+        inputs, text_targets = batch
+        targets = [self.model.encode_str(s) for s in text_targets]
         outputs = self.model.forward(inputs)
         assert inputs.size(0) == outputs.size(0)
         loss = self.compute_loss(outputs, targets)
@@ -148,9 +143,8 @@ class TextLightning(pl.LightningModule):
         if index % 100 == 0:
             self.log_ocr_result(index, inputs, targets, outputs)
             decoded = ctc_decode(outputs.detach().cpu().softmax(1).numpy()[0])
-            decode_str = Charset().decode_str
-            t = decode_str(targets[0].cpu().numpy())
-            s = decode_str(decoded)
+            t = self.model.decode_str(targets[0].cpu().numpy())
+            s = self.model.decode_str(decoded)
             print(f"\n{t} : {s}")
         return loss
 
@@ -159,7 +153,7 @@ class TextLightning(pl.LightningModule):
         inputs = inputs.detach().cpu().numpy()[0]
         outputs = outputs.detach().softmax(1).cpu().numpy()[0]
         decoded = ctc_decode(outputs)
-        decode_str = Charset().decode_str
+        decode_str = self.model.decode_str
         t = decode_str(targets[0].cpu().numpy())
         s = decode_str(decoded)
         figure = plt.figure(figsize=(10, 10))
@@ -226,11 +220,7 @@ def normalize_simple(s):
     return s.strip()
 
 
-def good_text(regex, sample):
-    image, txt = sample
-    return re.search(regex, txt)
-
-
+@useopt
 def augment_transform(image, p=0.5):
     if random.uniform(0, 1) < p:
         image = degrade.normalize(image)
@@ -244,6 +234,7 @@ def augment_transform(image, p=0.5):
     return image
 
 
+@useopt
 def augment_distort(image, p=0.5):
     if random.uniform(0, 1) < p:
         image = degrade.normalize(image)
@@ -259,6 +250,11 @@ def augment_distort(image, p=0.5):
     return image
 
 
+def good_text(regex, sample):
+    image, txt = sample
+    return re.search(regex, txt)
+
+
 def make_loader(
     fname,
     batch_size=5,
@@ -267,7 +263,6 @@ def make_loader(
     normalize_intensity=False,
     ntrain=-1,
     mode="train",
-    charset=Charset(),
     augment="distort",
     text_normalizer="simple",
     text_select_re="[0-9A-Za-z]",
@@ -282,7 +277,7 @@ def make_loader(
     training = training.map_tuple(identity, text_normalizer)
     if text_select_re != "":
         training = training.select(partial(good_text, text_select_re))
-    training = training.map_tuple(lambda a: a.astype(float) / 255.0, charset.preptargets)
+    training = training.map_tuple(lambda a: a.astype(float) / 255.0, None)
     if augment != "":
         f = eval(f"augment_{augment}")
         training = training.map_tuple(f, identity)
@@ -296,9 +291,25 @@ def make_loader(
 
 
 class TextModel(nn.Module):
+
+    @torch.jit.export
+    @staticmethod
+    def charset_size():
+        return 128
+
     def __init__(self, model):
         super().__init__()
         self.model = model
+
+    @torch.jit.export
+    def encode_str(self, s: str) -> torch.Tensor:
+        result = torch.tensor([ord(c) for c in s], dtype=torch.long)
+        result[result >= self.charset_size()] = 127
+        return result
+
+    @torch.jit.export
+    def decode_str(self, a: torch.Tensor) -> str:
+        return "".join([chr(int(c)) for c in a])
 
     def forward(self, images):
         b, c, h, w = images.shape
@@ -307,7 +318,7 @@ class TextModel(nn.Module):
             image -= image.amin()
             image /= torch.max(image.amax(), torch.tensor([0.01], device=image.device))
             if image.mean() > 0.5:
-                image[...] = 1.0 - image[...]
+                image[:, :, :] = 1.0 - image[:, :, :]
         return self.model.forward(images)
 
 
@@ -326,11 +337,11 @@ def train(
     test: str = None,
     test_bs: int = 20,
     ntest: int = int(1e12),
-    schedule: str = "3e-4 * (0.9**((n//200000)**.5))",
+    schedule: str = "1e-4 * (0.9**((n//200000)**.5))",
     text_select_re: str = "[A-Za-z0-9]",
     # lr: float = 1e-3,
     # checkerr: float = 1e12,
-    charset_file: str = None,
+    save_dir: str = "./_logs",
     ntrain: int = (1 << 31),
     num_workers: int = 4,
     data_parallel: str = "",
@@ -339,7 +350,6 @@ def train(
 ):
 
     device = utils.device(device)
-    charset = Charset(chardef=charset_file)
 
     training_dl = make_loader(
         training,
@@ -363,13 +373,22 @@ def train(
     else:
         test_dl = None
 
-    model = loading.load_or_construct_model(model, len(charset))
+    model = loading.load_or_construct_model(model, TextModel.charset_size())
     model = TextModel(model)
+    _ = torch.jit.script(model)
 
     lmodel = TextLightning(model)
-    callbacks = []
+    callbacks = [
+        ModelCheckpoint(
+            dirpath=save_dir,
+            monitor="train_err",
+            mode="min",
+            save_last=True,
+            save_top_k=3,
+        ),
+    ]
     trainer = pl.Trainer(
-        default_root_dir="_logs",
+        default_root_dir=save_dir,
         gpus=1,
         max_epochs=1000,
         callbacks=callbacks,
@@ -378,51 +397,6 @@ def train(
     trainer.fit(lmodel, training_dl)
 
 
-@app.command()
-def recognize(
-    fname: str,
-    extensions: str = "png;jpg;line.png;line.jpg",
-    model: str = "",
-    invert: str = "Auto",
-    limit: int = 999999999,
-    normalize: bool = True,
-    display: bool = True,
-    device: str = None,
-):
-    model = loading.load_only_model(model)
-    textrec = TextRec(model, device=device)
-    textrec.invert = invert
-    textrec.normalize = normalize
-    dataset = wds.WebDataset(fname)
-    dataset = dataset.decode("l8").rename(image=extensions)
-    plt.ion()
-    for sample in islice(dataset, limit):
-        image = sample["image"]
-        if invert:
-            image = utils.autoinvert(image, invert)
-        if normalize:
-            image = normalize_image(image)
-        if image.shape[0] < 10 or image.shape[1] < 10:
-            print(sample.get("__key__", image.shape))
-            continue
-        result = textrec.recognize(image)
-        if display:
-            plt.clf()
-            plt.imshow(textrec.last_image)
-            plt.title(result)
-            plt.ginput(1, 1.0)
-            print(sample.get("__key__"), image.shape, result)
-
-
-@app.command()
-def toscript(
-    model: str,
-):
-    import torch.jit
-
-    model = loading.load_only_model(model)
-    scripted = torch.jit.script(model)
-    print(scripted)
 
 
 @app.command()
