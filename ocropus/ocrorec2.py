@@ -137,9 +137,9 @@ class TextLightning(pl.LightningModule):
         outputs = self.model.forward(inputs)
         assert inputs.size(0) == outputs.size(0)
         loss = self.compute_loss(outputs, targets)
-        self.log("train_loss", loss, on_step=True)
+        self.log("train_loss", loss, on_step=True, on_epoch=True)
         err = self.compute_error(outputs, targets)
-        self.log("train_err", err, on_step=True, prog_bar=True)
+        self.log("train_err", err, on_step=True, on_epoch=True, prog_bar=True)
         if index % 100 == 0:
             self.log_ocr_result(index, inputs, targets, outputs)
             decoded = ctc_decode(outputs.detach().cpu().softmax(1).numpy()[0])
@@ -261,7 +261,7 @@ def make_loader(
     shuffle=5000,
     invert=False,
     normalize_intensity=False,
-    ntrain=-1,
+    nepoch=5000,
     mode="train",
     augment="distort",
     text_normalizer="simple",
@@ -283,9 +283,8 @@ def make_loader(
         training = training.map_tuple(f, identity)
     training = training.map_tuple(lambda x: torch.tensor(x).unsqueeze(0), identity)
     training = training.select(goodsize)
-    if ntrain > 0:
-        print(ntrain)
-        training = training.with_epoch(ntrain)
+    if nepoch > 0:
+        training = training.with_epoch(nepoch)
     training_dl = DataLoader(training, collate_fn=collate4ocr, batch_size=batch_size, **kw)
     return training_dl
 
@@ -341,8 +340,8 @@ def train(
     text_select_re: str = "[A-Za-z0-9]",
     # lr: float = 1e-3,
     # checkerr: float = 1e12,
-    save_dir: str = "./_logs",
-    ntrain: int = (1 << 31),
+    log_dir: str = "./_logs",
+    nepoch: int = 5000,
     num_workers: int = 4,
     data_parallel: str = "",
     shuffle: int = 20000,
@@ -356,7 +355,7 @@ def train(
         batch_size=training_bs,
         invert=invert,
         normalize_intensity=normalize_intensity,
-        ntrain=ntrain,
+        nepoch=nepoch,
         text_select_re=text_select_re,
         num_workers=4,
         shuffle=shuffle,
@@ -380,7 +379,6 @@ def train(
     lmodel = TextLightning(model)
     callbacks = [
         ModelCheckpoint(
-            dirpath=save_dir,
             monitor="train_err",
             mode="min",
             save_last=True,
@@ -388,7 +386,7 @@ def train(
         ),
     ]
     trainer = pl.Trainer(
-        default_root_dir=save_dir,
+        default_root_dir=log_dir,
         gpus=1,
         max_epochs=1000,
         callbacks=callbacks,
