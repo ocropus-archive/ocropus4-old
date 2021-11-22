@@ -130,25 +130,44 @@ class TextLightning(pl.LightningModule):
         self.ctc_loss = nn.CTCLoss(zero_infinity=True)
         self.charset_size = 1024
         self.schedule = utils.Schedule()
+        self.total = 0
+
+    def forward(self, inputs):
+        return self.model.forward(inputs)
 
     def training_step(self, batch, index):
         inputs, text_targets = batch
+        outputs = self.forward(inputs)
         targets = [self.model.encode_str(s) for s in text_targets]
-        outputs = self.model.forward(inputs)
         assert inputs.size(0) == outputs.size(0)
         loss = self.compute_loss(outputs, targets)
-        self.log("train_loss", loss, on_step=True, on_epoch=True)
-        err = self.compute_error(outputs, targets)
-        self.log("train_err", err, on_step=True, on_epoch=True, prog_bar=True)
+        self.log("train_loss", loss)
+        # err = self.compute_error(outputs, targets)
+        # self.log("train_err", err, on_step=True, on_epoch=True, prog_bar=True)
         if index % 100 == 0:
-            self.log_ocr_result(index, inputs, targets, outputs)
-            decoded = ctc_decode(outputs.detach().cpu().softmax(1).numpy()[0])
-            t = self.model.decode_str(targets[0].cpu().numpy())
-            s = self.model.decode_str(decoded)
-            print(f"\n{t} : {s}")
+            self.log_results(index, inputs, targets, outputs)
+        self.total += len(inputs)
         return loss
 
-    def log_ocr_result(self, index, inputs, targets, outputs):
+    def validation_step(self, batch, index):
+        inputs, text_targets = batch
+        outputs = self.forward(inputs)
+        targets = [self.model.encode_str(s) for s in text_targets]
+        assert inputs.size(0) == outputs.size(0)
+        loss = self.compute_loss(outputs, targets)
+        self.log("val_loss", loss)
+        err = self.compute_error(outputs, targets)
+        self.log("val_err", err)
+        return loss
+
+    def log_results(self, index, inputs, targets, outputs):
+        self.show_ocr_results(index, inputs, targets, outputs)
+        decoded = ctc_decode(outputs.detach().cpu().softmax(1).numpy()[0])
+        t = self.model.decode_str(targets[0].cpu().numpy())
+        s = self.model.decode_str(decoded)
+        print(f"\n{t} : {s}")
+
+    def show_ocr_results(self, index, inputs, targets, outputs):
         """Log the given inputs, targets, and outputs to the logger."""
         inputs = inputs.detach().cpu().numpy()[0]
         outputs = outputs.detach().softmax(1).cpu().numpy()[0]
@@ -160,13 +179,13 @@ class TextLightning(pl.LightningModule):
         # log the OCR result for the first image in the batch
         plt.clf()
         plt.imshow(inputs[0], cmap=plt.cm.gray)
-        plt.title(f"{t} : {s}", size=48)
-        log_matplotlib_figure(self.logger, figure, index)
+        plt.title(f"[{t}] : [{s}] @{index}", size=48)
+        log_matplotlib_figure(self.logger, figure, self.total)
         # plot the posterior probabilities for the first image in the batch
         plt.clf()
         for row in outputs:
             plt.plot(row)
-        log_matplotlib_figure(self.logger, figure, index, key="probs")
+        log_matplotlib_figure(self.logger, figure, self.total, key="probs")
         plt.close(figure)
 
     def compute_loss(self, outputs, targets):
@@ -259,8 +278,6 @@ def make_loader(
     fname,
     batch_size=5,
     shuffle=5000,
-    invert=False,
-    normalize_intensity=False,
     nepoch=5000,
     mode="train",
     augment="distort",
@@ -269,25 +286,41 @@ def make_loader(
     extensions="line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt",
     **kw,
 ):
-    training = wds.WebDataset(fname, caching=True, verbose=True, shardshuffle=50)
+    ds = wds.WebDataset(fname, caching=True, verbose=True, shardshuffle=50)
     if mode == "train" and shuffle > 0:
-        training = training.shuffle(shuffle)
-    training = training.decode("l8").to_tuple(extensions)
+        ds = ds.shuffle(shuffle)
+    ds = ds.decode("l8").to_tuple(extensions)
     text_normalizer = eval(f"normalize_{text_normalizer}")
-    training = training.map_tuple(identity, text_normalizer)
+    ds = ds.map_tuple(identity, text_normalizer)
     if text_select_re != "":
-        training = training.select(partial(good_text, text_select_re))
-    training = training.map_tuple(lambda a: a.astype(float) / 255.0, None)
+        ds = ds.select(partial(good_text, text_select_re))
+    ds = ds.map_tuple(lambda a: a.astype(float) / 255.0, None)
     if augment != "":
         f = eval(f"augment_{augment}")
-        training = training.map_tuple(f, identity)
-    training = training.map_tuple(lambda x: torch.tensor(x).unsqueeze(0), identity)
-    training = training.select(goodsize)
+        ds = ds.map_tuple(f, identity)
+    ds = ds.map_tuple(lambda x: torch.tensor(x).unsqueeze(0), identity)
+    ds = ds.select(goodsize)
     if nepoch > 0:
-        training = training.with_epoch(nepoch)
-    training_dl = DataLoader(training, collate_fn=collate4ocr, batch_size=batch_size, **kw)
-    return training_dl
+        ds = ds.with_epoch(nepoch)
+    dl = DataLoader(ds, collate_fn=collate4ocr, batch_size=batch_size, shuffle=False, **kw)
+    return dl
 
+
+class TextDataLoader(pl.LightningDataModule):
+    def __init__(self, train_shards: str = None, val_shards: str = None):
+        super().__init__()
+        if val_shards == "":
+            val_shards = None
+        self.train_shards = train_shards
+        self.val_shards = val_shards
+
+    def train_dataloader(self):
+        return make_loader(self.train_shards, mode="train")
+
+    def val_dataloader(self):
+        if self.val_shards is None:
+            return None
+        return make_loader(self.val_shards, mode="val", augment="")
 
 class TextModel(nn.Module):
 
@@ -310,6 +343,7 @@ class TextModel(nn.Module):
     def decode_str(self, a: torch.Tensor) -> str:
         return "".join([chr(int(c)) for c in a])
 
+    @torch.jit.export
     def forward(self, images):
         b, c, h, w = images.shape
         assert h > 15 and h < 4000 and w > 15 and h < 4000
@@ -322,13 +356,17 @@ class TextModel(nn.Module):
 
 
 default_training_urls = (
-    "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..22}.tar"
+    "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..21}.tar"
+)
+default_val_urls = (
+    "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar"
 )
 
 
 @app.command()
 def train(
-    training: str = default_training_urls,
+    train: str = default_training_urls,
+    val: str = default_val_urls,
     training_bs: int = 4,
     invert: bool = False,
     normalize_intensity: bool = False,
@@ -350,27 +388,8 @@ def train(
 
     device = utils.device(device)
 
-    training_dl = make_loader(
-        training,
-        batch_size=training_bs,
-        invert=invert,
-        normalize_intensity=normalize_intensity,
-        nepoch=nepoch,
-        text_select_re=text_select_re,
-        num_workers=4,
-        shuffle=shuffle,
-    )
-    print(next(iter(training_dl))[0].size())
-    if test is not None:
-        test_dl = make_loader(
-            test,
-            batch_size=training_bs,
-            invert=invert,
-            normalize_intensity=normalize_intensity,
-            mode="test",
-        )
-    else:
-        test_dl = None
+    data = TextDataLoader(train, val)
+    print("# checking training batch size", next(iter(data.train_dataloader()))[0].size())
 
     model = loading.load_or_construct_model(model, TextModel.charset_size())
     model = TextModel(model)
@@ -379,10 +398,9 @@ def train(
     lmodel = TextLightning(model)
     callbacks = [
         ModelCheckpoint(
-            monitor="train_err",
+            monitor="train_loss",
             mode="min",
             save_last=True,
-            save_top_k=3,
         ),
     ]
     trainer = pl.Trainer(
@@ -392,9 +410,9 @@ def train(
         callbacks=callbacks,
         progress_bar_refresh_rate=1,
     )
-    trainer.fit(lmodel, training_dl)
-
-
+    train_dl = make_loader(train, mode="train")
+    val_dl = make_loader(val, mode="val", augment="")
+    trainer.fit(lmodel, train_dl, val_dl)
 
 
 @app.command()
