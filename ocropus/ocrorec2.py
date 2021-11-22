@@ -103,20 +103,6 @@ def collate4ocr(samples):
     return result, seqs
 
 
-def log_matplotlib_figure(tb, fig, index, key="image"):
-    """Log the given matplotlib figure to tensorboard logger tb."""
-    buf = io.BytesIO()
-    fig.savefig(buf, format="jpeg")
-    buf.seek(0)
-    image = PIL.Image.open(buf)
-    image = image.convert("RGB")
-    image = image.resize((600, 600))
-    image = np.array(image)
-    image = torch.from_numpy(image).float() / 255.0
-    image = image.permute(2, 0, 1)
-    tb.experiment.add_image(key, image, index)
-
-
 @useopt
 def augment_transform(image, p=0.5):
     if random.uniform(0, 1) < p:
@@ -318,34 +304,6 @@ class TextLightning(pl.LightningModule):
         self.log("val_err", err)
         return loss
 
-    def log_results(self, index, inputs, targets, outputs):
-        self.show_ocr_results(index, inputs, targets, outputs)
-        decoded = ctc_decode(outputs.detach().cpu().softmax(1).numpy()[0])
-        t = self.model.decode_str(targets[0].cpu().numpy())
-        s = self.model.decode_str(decoded)
-        print(f"\n{t} : {s}")
-
-    def show_ocr_results(self, index, inputs, targets, outputs):
-        """Log the given inputs, targets, and outputs to the logger."""
-        inputs = inputs.detach().cpu().numpy()[0]
-        outputs = outputs.detach().softmax(1).cpu().numpy()[0]
-        decoded = ctc_decode(outputs)
-        decode_str = self.model.decode_str
-        t = decode_str(targets[0].cpu().numpy())
-        s = decode_str(decoded)
-        figure = plt.figure(figsize=(10, 10))
-        # log the OCR result for the first image in the batch
-        plt.clf()
-        plt.imshow(inputs[0], cmap=plt.cm.gray)
-        plt.title(f"[{t}] : [{s}] @{index}", size=48)
-        log_matplotlib_figure(self.logger, figure, self.total)
-        # plot the posterior probabilities for the first image in the batch
-        plt.clf()
-        for row in outputs:
-            plt.plot(row)
-        log_matplotlib_figure(self.logger, figure, self.total, key="probs")
-        plt.close(figure)
-
     def compute_loss(self, outputs, targets):
         assert len(targets) == len(outputs)
         targets, tlens = pack_for_ctc(targets)
@@ -373,6 +331,53 @@ class TextLightning(pl.LightningModule):
     def schedule(self, epoch):
         return 0.5 ** (epoch // self.lr_halflife)
 
+    def log_results(self, index, inputs, targets, outputs):
+        self.show_ocr_results(index, inputs, targets, outputs)
+        decoded = ctc_decode(outputs.detach().cpu().softmax(1).numpy()[0])
+        t = self.model.decode_str(targets[0].cpu().numpy())
+        s = self.model.decode_str(decoded)
+        print(f"\n{t} : {s}")
+
+    def show_ocr_results(self, index, inputs, targets, outputs):
+        """Log the given inputs, targets, and outputs to the logger."""
+        inputs = inputs.detach().cpu().numpy()[0]
+        outputs = outputs.detach().softmax(1).cpu().numpy()[0]
+        decoded = ctc_decode(outputs)
+        decode_str = self.model.decode_str
+        t = decode_str(targets[0].cpu().numpy())
+        s = decode_str(decoded)
+        figure = plt.figure(figsize=(10, 10))
+        # log the OCR result for the first image in the batch
+        plt.clf()
+        plt.imshow(inputs[0], cmap=plt.cm.gray)
+        plt.title(f"[{t}] : [{s}] @{index}", size=48)
+        self.log_matplotlib_figure(figure, self.total)
+        # plot the posterior probabilities for the first image in the batch
+        plt.clf()
+        for row in outputs:
+            plt.plot(row)
+        self.log_matplotlib_figure(figure, self.total, key="probs")
+        plt.close(figure)
+
+    def log_matplotlib_figure(self, fig, index, key="image"):
+        """Log the given matplotlib figure to tensorboard logger tb."""
+        buf = io.BytesIO()
+        fig.savefig(buf, format="jpeg")
+        buf.seek(0)
+        image = PIL.Image.open(buf)
+        image = image.convert("RGB")
+        image = image.resize((600, 600))
+        image = np.array(image)
+        image = torch.from_numpy(image).float() / 255.0
+        image = image.permute(2, 0, 1)
+        exp = self.logger.experiment
+        if hasattr(exp, "add_image"):
+            exp.add_image(key, image, index)
+        else:
+            import wandb
+
+            exp.log({key: [wandb.Image(image, caption=key)]})
+
     def probs_batch(self, inputs):
         """Compute probability outputs for the batch."""
         self.model.eval()
@@ -387,12 +392,14 @@ class TextLightning(pl.LightningModule):
         return result
 
 
-config = yaml.safe_load(
+default_config = yaml.safe_load(
     StringIO(
         """
 data:
     train_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..21}.tar"
     val_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar"
+wandb:
+    project: ocrorec2
 model: {}
 trainer: {}
 """
@@ -402,10 +409,12 @@ trainer: {}
 
 @app.command()
 def train(
+    config_file: str = "",
     model: str = "text_model_210910",
     log_dir: str = "./_logs",
 ):
 
+    config = default_config
     data = TextDataLoader(**config["data"])
     print("# checking training batch size", next(iter(data.train_dataloader()))[0].size())
 
@@ -420,14 +429,20 @@ def train(
             mode="min",
             save_last=True,
         ),
-        LearningRateMonitor(logging_interval='step'),
+        LearningRateMonitor(logging_interval="step"),
     ]
+    kw = {}
+    if "wandb" in config:
+        from pytorch_lightning.loggers import WandbLogger
+
+        kw["logger"] = WandbLogger(**config["wandb"])
     trainer = pl.Trainer(
         default_root_dir=log_dir,
         gpus=1,
         max_epochs=1000,
         callbacks=callbacks,
         progress_bar_refresh_rate=1,
+        **kw,
     )
     trainer.fit(lmodel, data)
 
