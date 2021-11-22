@@ -439,10 +439,8 @@ def parse_args(argv):
 
 
 def train(argv):
-    print(argv)
     config = parse_args(argv)
     yaml.dump(config, sys.stdout)
-    sys.exit(0)
     data = TextDataLoader(**config["data"])
     print("# checking training batch size", next(iter(data.train_dataloader()))[0].size())
 
