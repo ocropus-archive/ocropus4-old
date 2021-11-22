@@ -28,9 +28,9 @@ def device(s):
     print(result, file=sys.stderr)
     return result
 
+
 def unused(f):
-    """Used to mark functions that are currently not used but are kept for future reference.
-    """
+    """Used to mark functions that are currently not used but are kept for future reference."""
     return f
 
 
@@ -43,8 +43,7 @@ def useopt(f):
 
 
 def model(f):
-    """Used to mark functions that create models.
-    """
+    """Used to mark functions that create models."""
     global all_models
     all_models.append(f)
     return f
@@ -124,9 +123,9 @@ class Every(object):
 
 def fix_quotes(s):
     assert isinstance(s, str)
-    s, = re.sub("[\u201c\u201d]", '"', s),
-    s, = re.sub("[\u2018\u2019]", "'", s),
-    s, = re.sub("[\u2014]", "-", s),
+    (s,) = (re.sub("[\u201c\u201d]", '"', s),)
+    (s,) = (re.sub("[\u2018\u2019]", "'", s),)
+    (s,) = (re.sub("[\u2014]", "-", s),)
     return s
 
 
@@ -375,3 +374,23 @@ def python_to_json(obj):
 
 def lrschedule(expr):
     return eval(f"lambda n: {expr}")
+
+
+def flatten_yaml(d, result={}, prefix=""):
+    if isinstance(d, dict):
+        for k, v in d.items():
+            result[prefix + k] = flatten_yaml(v, result, prefix=k + ".")
+        return result
+    else:
+        return d
+
+
+def unflatten_yaml(d):
+    result = {}
+    for k, v in d.items():
+        target = result
+        path = k.split(".")
+        for s in path[:-1]:
+            target = setdefault(target, s, {})
+        target[k[-1]] = v
+    return result
