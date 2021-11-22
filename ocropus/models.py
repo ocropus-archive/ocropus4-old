@@ -193,6 +193,8 @@ def ctext_model_211120(noutput=1024, shape=(1, ninput, 48, 300)):
         nn.ReLU(),
         flex.Conv1d(noutput, 1),
     )
+    flex.shape_inference(model, shape)
+    return model
 
 
 @model

@@ -402,6 +402,8 @@ model:
     mname: text_model_210910
 trainer:
     log_dir: ./_logs
+    max_epochs: 1000
+    gpus: 1
 """
 
 default_config = yaml.safe_load(StringIO(default_config))
@@ -462,10 +464,11 @@ def train(argv):
         from pytorch_lightning.loggers import WandbLogger
 
         kw["logger"] = WandbLogger(**config["wandb"])
+    tconfig = config["trainer"]
     trainer = pl.Trainer(
-        default_root_dir=config["trainer"]["log_dir"],
-        gpus=1,
-        max_epochs=1000,
+        default_root_dir=tconfig["log_dir"],
+        gpus=tconfig["gpus"],
+        max_epochs=tconfig["max_epochs"],
         callbacks=callbacks,
         progress_bar_refresh_rate=1,
         **kw,
