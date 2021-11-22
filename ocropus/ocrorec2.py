@@ -267,7 +267,7 @@ class TextLightning(pl.LightningModule):
         model,
         *,
         lr=3e-4,
-        lr_halflife=100,
+        lr_halflife=1000,
     ):
         super().__init__()
         self.model = model
@@ -397,7 +397,9 @@ default_config = yaml.safe_load(
         """
 data:
     train_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..21}.tar"
+    train_bs: 12
     val_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar"
+    val_bs: 24
 wandb:
     project: ocrorec2
 model: {}
