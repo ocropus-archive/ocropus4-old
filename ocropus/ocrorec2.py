@@ -1,5 +1,6 @@
 """Text recognition."""
 
+import sys
 import io
 import random
 import re
@@ -30,9 +31,6 @@ from .utils import useopt
 import torch.jit
 
 _ = linemodels
-
-
-app = typer.Typer()
 
 
 min_w, min_h, max_w, max_h = 15, 15, 4000, 200
@@ -409,14 +407,42 @@ trainer: {}
 )
 
 
-@app.command()
-def train(
-    config_file: str = "",
-    model: str = "text_model_210910",
-    log_dir: str = "./_logs",
-):
+def update_config(config, updates):
+    if isinstance(config, dict) and isinstance(updates, dict):
+        for k, v in updates.items():
+            config[k] = update_config(config.get(k), v)
+    else:
+        config[k] = updates
 
-    config = default_config
+
+def set_config(config, key, value):
+    path = key.split(".")
+    for k in path[:-1]:
+        config = config.setdefault(k, {})
+    config[path[-1]] = value
+
+
+def parse_args(argv):
+    config = dict(default_config)
+    if len(argv) < 1:
+        return config
+    if argv[0].startswith("config="):
+        with open(argv[0], "r") as stream:
+            updates = yaml.safe_load(stream)
+        update_config(config, updates)
+        argv = argv[1:]
+    for arg in argv:
+        assert "=" in arg, arg
+        key, value = arg.split("=", 1)
+        set_config(config, key, value)
+    return config
+
+
+def train(argv):
+    print(argv)
+    config = parse_args(argv)
+    yaml.dump(config, sys.stdout)
+    sys.exit(0)
     data = TextDataLoader(**config["data"])
     print("# checking training batch size", next(iter(data.train_dataloader()))[0].size())
 
@@ -449,10 +475,6 @@ def train(
     trainer.fit(lmodel, data)
 
 
-@app.command()
-def noop():
-    pass
-
-
 if __name__ == "__main__":
-    app()
+    if sys.argv[1] == "train":
+        train(sys.argv[2:])
