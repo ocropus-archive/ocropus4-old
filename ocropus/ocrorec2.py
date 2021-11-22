@@ -5,6 +5,8 @@ import random
 import re
 from functools import partial
 from itertools import islice
+from io import StringIO
+import yaml
 
 import editdistance
 import matplotlib.pyplot as plt
@@ -12,6 +14,8 @@ import numpy as np
 import PIL
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
+from pytorch_lightning.callbacks import LearningRateMonitor
+from torch.optim.lr_scheduler import LambdaLR
 import torch
 import typer
 import webdataset as wds
@@ -113,23 +117,177 @@ def log_matplotlib_figure(tb, fig, index, key="image"):
     tb.experiment.add_image(key, image, index)
 
 
+@useopt
+def augment_transform(image, p=0.5):
+    if random.uniform(0, 1) < p:
+        image = degrade.normalize(image)
+        image = 1.0 * (image > 0.5)
+    if image.shape[0] > 80.0:
+        image = ndi.zoom(image, 80.0 / image.shape[0], order=1)
+    if random.uniform(0, 1) < p:
+        (image,) = degrade.transform_all(image, scale=(-0.3, 0))
+    if random.uniform(0, 1) < p:
+        image = degrade.noisify(image)
+    return image
+
+
+@useopt
+def augment_distort(image, p=0.5):
+    if random.uniform(0, 1) < p:
+        image = degrade.normalize(image)
+        image = 1.0 * (image > 0.5)
+    if image.shape[0] > 80.0:
+        image = ndi.zoom(image, 80.0 / image.shape[0], order=1)
+    if random.uniform(0, 1) < p:
+        (image,) = degrade.transform_all(image, scale=(-0.3, 0))
+    if random.uniform(0, 1) < p:
+        (image,) = degrade.distort_all(image)
+    if random.uniform(0, 1) < p:
+        image = degrade.noisify(image)
+    return image
+
+
+@useopt
+def normalize_none(s):
+    return s
+
+
+@useopt
+def normalize_simple(s):
+    s = re.sub("\\\\[A-Za-z]+", "~", s)
+    s = re.sub("\\\\[_^]+", "", s)
+    s = re.sub("[{}]", "", s)
+    s = re.sub(" +", " ", s)
+    s = re.sub('"', "''", s)
+    return s.strip()
+
+
+def good_text(regex, sample):
+    image, txt = sample
+    return re.search(regex, txt)
+
+
+class TextDataLoader(pl.LightningDataModule):
+    def __init__(
+        self,
+        train_shards: str = None,
+        val_shards: str = None,
+        train_bs: int = 4,
+        val_bs: int = 20,
+        text_select_re: str = "[A-Za-z0-9]",
+        nepoch: int = 5000,
+        num_workers: int = 4,
+        **kw,
+    ):
+        super().__init__()
+        assert train_shards is not None
+        if val_shards == "":
+            val_shards = None
+        self.params = locals()
+
+    def make_loader(
+        self,
+        fname,
+        batch_size=5,
+        shuffle=5000,
+        nepoch=5000,
+        mode="train",
+        augment="distort",
+        text_normalizer="simple",
+        text_select_re="[0-9A-Za-z]",
+        extensions="line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt",
+        **kw,
+    ):
+        ds = wds.WebDataset(fname, caching=True, verbose=True, shardshuffle=50)
+        if mode == "train" and shuffle > 0:
+            ds = ds.shuffle(shuffle)
+        ds = ds.decode("l8").to_tuple(extensions)
+        text_normalizer = eval(f"normalize_{text_normalizer}")
+        ds = ds.map_tuple(identity, text_normalizer)
+        if text_select_re != "":
+            ds = ds.select(partial(good_text, text_select_re))
+        ds = ds.map_tuple(lambda a: a.astype(float) / 255.0, None)
+        if augment != "":
+            f = eval(f"augment_{augment}")
+            ds = ds.map_tuple(f, identity)
+        ds = ds.map_tuple(lambda x: torch.tensor(x).unsqueeze(0), identity)
+        ds = ds.select(goodsize)
+        if nepoch > 0:
+            ds = ds.with_epoch(nepoch)
+        dl = DataLoader(
+            ds,
+            collate_fn=collate4ocr,
+            batch_size=batch_size,
+            shuffle=False,
+            **kw,
+        )
+        return dl
+
+    def train_dataloader(self):
+        return self.make_loader(
+            self.params["train_shards"],
+            batch_size=self.params["train_bs"],
+            mode="train",
+        )
+
+    def val_dataloader(self):
+        if self.params.get("val_shards") is None:
+            return None
+        return self.make_loader(
+            self.params["val_shards"],
+            batch_size=self.params["val_bs"],
+            mode="val",
+            augment="",
+        )
+
+
+class TextModel(nn.Module):
+    @torch.jit.export
+    @staticmethod
+    def charset_size():
+        return 128
+
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+
+    @torch.jit.export
+    def encode_str(self, s: str) -> torch.Tensor:
+        result = torch.tensor([ord(c) for c in s], dtype=torch.long)
+        result[result >= self.charset_size()] = 127
+        return result
+
+    @torch.jit.export
+    def decode_str(self, a: torch.Tensor) -> str:
+        return "".join([chr(int(c)) for c in a])
+
+    @torch.jit.export
+    def forward(self, images):
+        b, c, h, w = images.shape
+        assert h > 15 and h < 4000 and w > 15 and h < 4000
+        for image in images:
+            image -= image.amin()
+            image /= torch.max(image.amax(), torch.tensor([0.01], device=image.device))
+            if image.mean() > 0.5:
+                image[:, :, :] = 1.0 - image[:, :, :]
+        return self.model.forward(images)
+
+
 class TextLightning(pl.LightningModule):
     """A class encapsulating the logic for training text line recognizers."""
 
-    def __init__(self, model, *, lr=3e-4, device=None, maxgrad=10.0):
-        """A class encapsulating line training logic.
-
-        :param model: the model to be trained
-        :param lr: learning rate, defaults to 1e-4
-        :param device: GPU used for training, defaults to None
-        :param maxgrad: gradient clipping, defaults to 10.0
-        """
+    def __init__(
+        self,
+        model,
+        *,
+        lr=3e-4,
+        lr_halflife=100,
+    ):
         super().__init__()
-        self.lr = lr
         self.model = model
+        self.lr = lr
+        self.lr_halflife = lr_halflife
         self.ctc_loss = nn.CTCLoss(zero_infinity=True)
-        self.charset_size = 1024
-        self.schedule = utils.Schedule()
         self.total = 0
 
     def forward(self, inputs):
@@ -142,8 +300,8 @@ class TextLightning(pl.LightningModule):
         assert inputs.size(0) == outputs.size(0)
         loss = self.compute_loss(outputs, targets)
         self.log("train_loss", loss)
-        # err = self.compute_error(outputs, targets)
-        # self.log("train_err", err, on_step=True, on_epoch=True, prog_bar=True)
+        err = self.compute_error(outputs, targets)
+        self.log("train_err", err, prog_bar=True)
         if index % 100 == 0:
             self.log_results(index, inputs, targets, outputs)
         self.total += len(inputs)
@@ -208,7 +366,12 @@ class TextLightning(pl.LightningModule):
         return sum(errs) / float(total)
 
     def configure_optimizers(self):
-        return torch.optim.SGD(self.model.parameters(), lr=self.lr)
+        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr)
+        scheduler = LambdaLR(optimizer, self.schedule)
+        return [optimizer], [scheduler]
+
+    def schedule(self, epoch):
+        return 0.5 ** (epoch // self.lr_halflife)
 
     def probs_batch(self, inputs):
         """Compute probability outputs for the batch."""
@@ -224,171 +387,26 @@ class TextLightning(pl.LightningModule):
         return result
 
 
-@useopt
-def normalize_none(s):
-    return s
-
-
-@useopt
-def normalize_simple(s):
-    s = re.sub("\\\\[A-Za-z]+", "~", s)
-    s = re.sub("\\\\[_^]+", "", s)
-    s = re.sub("[{}]", "", s)
-    s = re.sub(" +", " ", s)
-    s = re.sub('"', "''", s)
-    return s.strip()
-
-
-@useopt
-def augment_transform(image, p=0.5):
-    if random.uniform(0, 1) < p:
-        image = degrade.normalize(image)
-        image = 1.0 * (image > 0.5)
-    if image.shape[0] > 80.0:
-        image = ndi.zoom(image, 80.0 / image.shape[0], order=1)
-    if random.uniform(0, 1) < p:
-        (image,) = degrade.transform_all(image, scale=(-0.3, 0))
-    if random.uniform(0, 1) < p:
-        image = degrade.noisify(image)
-    return image
-
-
-@useopt
-def augment_distort(image, p=0.5):
-    if random.uniform(0, 1) < p:
-        image = degrade.normalize(image)
-        image = 1.0 * (image > 0.5)
-    if image.shape[0] > 80.0:
-        image = ndi.zoom(image, 80.0 / image.shape[0], order=1)
-    if random.uniform(0, 1) < p:
-        (image,) = degrade.transform_all(image, scale=(-0.3, 0))
-    if random.uniform(0, 1) < p:
-        (image,) = degrade.distort_all(image)
-    if random.uniform(0, 1) < p:
-        image = degrade.noisify(image)
-    return image
-
-
-def good_text(regex, sample):
-    image, txt = sample
-    return re.search(regex, txt)
-
-
-def make_loader(
-    fname,
-    batch_size=5,
-    shuffle=5000,
-    nepoch=5000,
-    mode="train",
-    augment="distort",
-    text_normalizer="simple",
-    text_select_re="[0-9A-Za-z]",
-    extensions="line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt",
-    **kw,
-):
-    ds = wds.WebDataset(fname, caching=True, verbose=True, shardshuffle=50)
-    if mode == "train" and shuffle > 0:
-        ds = ds.shuffle(shuffle)
-    ds = ds.decode("l8").to_tuple(extensions)
-    text_normalizer = eval(f"normalize_{text_normalizer}")
-    ds = ds.map_tuple(identity, text_normalizer)
-    if text_select_re != "":
-        ds = ds.select(partial(good_text, text_select_re))
-    ds = ds.map_tuple(lambda a: a.astype(float) / 255.0, None)
-    if augment != "":
-        f = eval(f"augment_{augment}")
-        ds = ds.map_tuple(f, identity)
-    ds = ds.map_tuple(lambda x: torch.tensor(x).unsqueeze(0), identity)
-    ds = ds.select(goodsize)
-    if nepoch > 0:
-        ds = ds.with_epoch(nepoch)
-    dl = DataLoader(ds, collate_fn=collate4ocr, batch_size=batch_size, shuffle=False, **kw)
-    return dl
-
-
-class TextDataLoader(pl.LightningDataModule):
-    def __init__(self, train_shards: str = None, val_shards: str = None):
-        super().__init__()
-        if val_shards == "":
-            val_shards = None
-        self.train_shards = train_shards
-        self.val_shards = val_shards
-
-    def train_dataloader(self):
-        return make_loader(self.train_shards, mode="train")
-
-    def val_dataloader(self):
-        if self.val_shards is None:
-            return None
-        return make_loader(self.val_shards, mode="val", augment="")
-
-class TextModel(nn.Module):
-
-    @torch.jit.export
-    @staticmethod
-    def charset_size():
-        return 128
-
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
-
-    @torch.jit.export
-    def encode_str(self, s: str) -> torch.Tensor:
-        result = torch.tensor([ord(c) for c in s], dtype=torch.long)
-        result[result >= self.charset_size()] = 127
-        return result
-
-    @torch.jit.export
-    def decode_str(self, a: torch.Tensor) -> str:
-        return "".join([chr(int(c)) for c in a])
-
-    @torch.jit.export
-    def forward(self, images):
-        b, c, h, w = images.shape
-        assert h > 15 and h < 4000 and w > 15 and h < 4000
-        for image in images:
-            image -= image.amin()
-            image /= torch.max(image.amax(), torch.tensor([0.01], device=image.device))
-            if image.mean() > 0.5:
-                image[:, :, :] = 1.0 - image[:, :, :]
-        return self.model.forward(images)
-
-
-default_training_urls = (
-    "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..21}.tar"
-)
-default_val_urls = (
-    "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar"
+config = yaml.safe_load(
+    StringIO(
+        """
+data:
+    train_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..21}.tar"
+    val_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar"
+model: {}
+trainer: {}
+"""
+    )
 )
 
 
 @app.command()
 def train(
-    train: str = default_training_urls,
-    val: str = default_val_urls,
-    training_bs: int = 4,
-    invert: bool = False,
-    normalize_intensity: bool = False,
     model: str = "text_model_210910",
-    test: str = None,
-    test_bs: int = 20,
-    ntest: int = int(1e12),
-    schedule: str = "1e-4 * (0.9**((n//200000)**.5))",
-    text_select_re: str = "[A-Za-z0-9]",
-    # lr: float = 1e-3,
-    # checkerr: float = 1e12,
     log_dir: str = "./_logs",
-    nepoch: int = 5000,
-    num_workers: int = 4,
-    data_parallel: str = "",
-    shuffle: int = 20000,
-    device: str = None,
 ):
 
-    device = utils.device(device)
-
-    data = TextDataLoader(train, val)
+    data = TextDataLoader(**config["data"])
     print("# checking training batch size", next(iter(data.train_dataloader()))[0].size())
 
     model = loading.load_or_construct_model(model, TextModel.charset_size())
@@ -402,6 +420,7 @@ def train(
             mode="min",
             save_last=True,
         ),
+        LearningRateMonitor(logging_interval='step'),
     ]
     trainer = pl.Trainer(
         default_root_dir=log_dir,
@@ -410,9 +429,7 @@ def train(
         callbacks=callbacks,
         progress_bar_refresh_rate=1,
     )
-    train_dl = make_loader(train, mode="train")
-    val_dl = make_loader(val, mode="val", augment="")
-    trainer.fit(lmodel, train_dl, val_dl)
+    trainer.fit(lmodel, data)
 
 
 @app.command()
