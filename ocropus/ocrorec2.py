@@ -182,7 +182,7 @@ class TextDataLoader(pl.LightningDataModule):
         extensions="line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt",
         **kw,
     ):
-        ds = wds.WebDataset(fname, caching=True, verbose=True, shardshuffle=50)
+        ds = wds.WebDataset(fname, caching=True, verbose=True, shardshuffle=50, resampled=True)
         if mode == "train" and shuffle > 0:
             ds = ds.shuffle(shuffle)
         ds = ds.decode("l8").to_tuple(extensions)
@@ -248,6 +248,10 @@ class TextModel(nn.Module):
     @torch.jit.export
     def forward(self, images):
         b, c, h, w = images.shape
+        assert c == 1 or c== 3
+        if c == 1:
+            images = images.repeat(1, 3, 1, 1)
+            b, c, h, w = images.shape
         assert h > 15 and h < 4000 and w > 15 and h < 4000
         for image in images:
             image -= image.amin()
@@ -417,11 +421,21 @@ def update_config(config, updates):
         config[k] = updates
 
 
+def scalar_convert(s):
+    try:
+        return int(s)
+    except:
+        try:
+            return float(s)
+        except:
+            return s
+
+
 def set_config(config, key, value):
     path = key.split(".")
     for k in path[:-1]:
         config = config.setdefault(k, {})
-    config[path[-1]] = value
+    config[path[-1]] = scalar_convert(value)
 
 
 def parse_args(argv):
