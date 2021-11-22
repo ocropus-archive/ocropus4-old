@@ -179,6 +179,23 @@ def page_scale_210910(noutput, shape=(2, ninput, 512, 512), r=5, nf=8, r2=5, nf2
 
 
 @model
+def ctext_model_211120(noutput=1024, shape=(1, ninput, 48, 300)):
+    model = nn.Sequential(
+        layers.ModPadded(
+            32,
+            combos.make_unet(
+                [32, 64, 96, 128, 192], sub=nn.Sequential(*combos.conv2d_block(256, 3, repeat=1))
+            ),
+        ),
+        ocrlayers.MaxReduce(2),
+        flex.Conv1d(100, 11),
+        flex.BatchNorm1d(),
+        nn.ReLU(),
+        flex.Conv1d(noutput, 1),
+    )
+
+
+@model
 def text_model_210910(noutput=1024, shape=(1, ninput, 48, 300)):
     """Text recognition model using 2D LSTM and convolutions."""
     model = TextModel(

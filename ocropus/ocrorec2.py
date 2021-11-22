@@ -390,9 +390,7 @@ class TextLightning(pl.LightningModule):
         return result
 
 
-default_config = yaml.safe_load(
-    StringIO(
-        """
+default_config = """
 data:
     train_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..21}.tar"
     train_bs: 12
@@ -400,11 +398,13 @@ data:
     val_bs: 24
 wandb:
     project: ocrorec2
-model: {}
-trainer: {}
+model:
+    mname: text_model_210910
+trainer:
+    log_dir: ./_logs
 """
-    )
-)
+
+default_config = yaml.safe_load(StringIO(default_config))
 
 
 def update_config(config, updates):
@@ -444,7 +444,7 @@ def train(argv):
     data = TextDataLoader(**config["data"])
     print("# checking training batch size", next(iter(data.train_dataloader()))[0].size())
 
-    model = loading.load_or_construct_model(model, TextModel.charset_size())
+    model = loading.load_or_construct_model(config["model"]["mname"], TextModel.charset_size())
     model = TextModel(model)
     _ = torch.jit.script(model)
 
@@ -463,7 +463,7 @@ def train(argv):
 
         kw["logger"] = WandbLogger(**config["wandb"])
     trainer = pl.Trainer(
-        default_root_dir=log_dir,
+        default_root_dir=config["trainer"]["log_dir"],
         gpus=1,
         max_epochs=1000,
         callbacks=callbacks,
