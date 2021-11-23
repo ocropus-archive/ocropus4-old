@@ -270,10 +270,10 @@ class TextLightning(pl.LightningModule):
         *,
         lr=3e-4,
         lr_halflife=1000,
-        hyper_parameters={},
+        config={},
     ):
         super().__init__()
-        self.hyper_parameters = hyper_parameters
+        self.config = config
         self.model = model
         self.lr = lr
         self.lr_halflife = lr_halflife
@@ -281,7 +281,8 @@ class TextLightning(pl.LightningModule):
         self.total = 0
 
     def on_train_start(self):
-        self.logger.log_hyperparams(self.hyper_parameters)
+        print(self.config)
+        self.logger.log_hyperparams(self.config)
 
     def forward(self, inputs):
         return self.model.forward(inputs)
@@ -439,13 +440,14 @@ def scalar_convert(s):
             return s
 
 
-def flatten_yaml(d, result={}, prefix=""):
-    if isinstance(d, dict):
-        for k, v in d.items():
-            result[prefix + k] = flatten_yaml(v, result, prefix=k + ".")
-        return result
-    else:
-        return d
+def flatten_yaml(d, result=None, prefix=""):
+    result = {} if result is None else result
+    for k, v in d.items():
+        if isinstance(v, dict):
+            flatten_yaml(v, result=result, prefix=prefix + k + ".")
+        else:
+            result[prefix + k] = v
+    return result
 
 
 def set_config(config, key, value):
@@ -484,7 +486,8 @@ def train(argv):
     model = TextModel(model)
     _ = torch.jit.script(model)
 
-    lmodel = TextLightning(model)
+    flattened_config = flatten_yaml(config)
+    lmodel = TextLightning(model, config=flattened_config)
     callbacks = []
     callbacks.append(
         LearningRateMonitor(logging_interval="step"),
