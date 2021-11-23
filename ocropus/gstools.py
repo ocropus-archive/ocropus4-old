@@ -59,3 +59,28 @@ def gsprocess(source, dest, nshards):
         gstouch(destdir + "/" + lockname)
         yield source % i, dest % i
         gsrm(destdir + "/" + lockname)
+
+def gsbucket(sources, destbucket):
+    sources = gslist(sources)
+    existing = gslist(destbucket)
+    missing = []
+    for s in sources:
+        dest = os.path.join(destbucket, os.path.basename(s))
+        if dest not in existing:
+            missing.append(s)
+    print(len(missing), "shards to be processed, out of", len(sources))
+    for source in sources:
+        print(f"# checking {source}", file=sys.stderr)
+        dest = os.path.join(destbucket, os.path.basename(source))
+        lock = dest + ".lock"
+        if lock in existing:
+            print(f"# found {lock}", file=sys.stderr)
+            continue
+        if gsexists(dest+".lock"):
+            print(f"# found {lock}!", file=sys.stderr)
+            continue
+        gstouch(dest+".lock")
+        print(f"# processing {source}, {dest}", file=sys.stderr)
+        yield source, dest
+        print(f"done", file=sys.stderr)
+        gsrm(dest+".lock")
