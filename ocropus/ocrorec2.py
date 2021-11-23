@@ -405,14 +405,17 @@ data:
     train_bs: 12
     val_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar"
     val_bs: 24
-wandb:
-    project: ocrorec2
+logging:
+    wandb:
+        project: ocrorec2
+    every_n_epochs: 20
 model:
     mname: text_model_210910
 trainer:
-    log_dir: ./_logs
     max_epochs: 1000
     gpus: 1
+    progress_bar_refresh_rate: 2
+    # default_root_dir: ./_logs
 """
 
 default_config = yaml.safe_load(StringIO(default_config))
@@ -477,33 +480,37 @@ def train(argv):
     model = loading.load_or_construct_model(
         config["model"]["mname"],
         TextModel.charset_size(),
-        hyper_parameters=flatten_yaml(config),
     )
     model = TextModel(model)
     _ = torch.jit.script(model)
 
     lmodel = TextLightning(model)
-    callbacks = [
-        ModelCheckpoint(
-            monitor="train_loss",
-            mode="min",
-            save_last=True,
-        ),
+    callbacks = []
+    callbacks.append(
         LearningRateMonitor(logging_interval="step"),
-    ]
-    kw = {}
-    if "wandb" in config:
+    )
+    callbacks.append(
+        ModelCheckpoint(
+            dirpath="checkpoints",
+            every_n_epochs=config["logging"]["every_n_epochs"],
+            # monitor="train_loss",
+            # mode="min",
+            # save_last=True,
+        ),
+    )
+    tconfig = config["trainer"].copy()
+    if "wandb" in config.get("logging", {}):
         from pytorch_lightning.loggers import WandbLogger
 
-        kw["logger"] = WandbLogger(**config["wandb"])
+        tconfig["logger"] = WandbLogger(**config["logging"]["wandb"])
     tconfig = config["trainer"]
     trainer = pl.Trainer(
-        default_root_dir=tconfig["log_dir"],
-        gpus=tconfig["gpus"],
-        max_epochs=tconfig["max_epochs"],
         callbacks=callbacks,
-        progress_bar_refresh_rate=1,
-        **kw,
+        # default_root_dir=tconfig["log_dir"],
+        # gpus=tconfig["gpus"],
+        # max_epochs=tconfig["max_epochs"],
+        # progress_bar_refresh_rate=1,
+        **tconfig,
     )
     trainer.fit(lmodel, data)
 
