@@ -248,7 +248,7 @@ class TextModel(nn.Module):
     @torch.jit.export
     def forward(self, images):
         b, c, h, w = images.shape
-        assert c == 1 or c== 3
+        assert c == 1 or c == 3
         if c == 1:
             images = images.repeat(1, 3, 1, 1)
             b, c, h, w = images.shape
@@ -270,13 +270,18 @@ class TextLightning(pl.LightningModule):
         *,
         lr=3e-4,
         lr_halflife=1000,
+        hyper_parameters={},
     ):
         super().__init__()
+        self.hyper_parameters = hyper_parameters
         self.model = model
         self.lr = lr
         self.lr_halflife = lr_halflife
         self.ctc_loss = nn.CTCLoss(zero_infinity=True)
         self.total = 0
+
+    def on_train_start(self):
+        self.logger.log_hyperparams(self.hyper_parameters)
 
     def forward(self, inputs):
         return self.model.forward(inputs)
@@ -431,6 +436,15 @@ def scalar_convert(s):
             return s
 
 
+def flatten_yaml(d, result={}, prefix=""):
+    if isinstance(d, dict):
+        for k, v in d.items():
+            result[prefix + k] = flatten_yaml(v, result, prefix=k + ".")
+        return result
+    else:
+        return d
+
+
 def set_config(config, key, value):
     path = key.split(".")
     for k in path[:-1]:
@@ -460,7 +474,11 @@ def train(argv):
     data = TextDataLoader(**config["data"])
     print("# checking training batch size", next(iter(data.train_dataloader()))[0].size())
 
-    model = loading.load_or_construct_model(config["model"]["mname"], TextModel.charset_size())
+    model = loading.load_or_construct_model(
+        config["model"]["mname"],
+        TextModel.charset_size(),
+        hyper_parameters=flatten_yaml(config),
+    )
     model = TextModel(model)
     _ = torch.jit.script(model)
 
