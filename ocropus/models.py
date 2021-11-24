@@ -179,12 +179,12 @@ def page_scale_210910(noutput, shape=(2, ninput, 512, 512), r=5, nf=8, r2=5, nf2
 
 
 @model
-def ctext_model_211120(noutput=1024, shape=(1, ninput, 48, 300)):
+def ctext_model_211124(noutput=1024, shape=(1, ninput, 48, 300)):
     model = nn.Sequential(
         layers.ModPadded(
             64,
             combos.make_unet(
-                [64, 64, 96, 128, 128, 256], sub=nn.Sequential(*combos.conv2d_block(256, 3, repeat=1))
+                [96, 96, 96, 128, 192, 256], sub=nn.Sequential(*combos.conv2d_block(256, 3, repeat=1))
             ),
         ),
         ocrlayers.MaxReduce(2),
