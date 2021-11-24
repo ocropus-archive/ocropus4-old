@@ -1,6 +1,7 @@
 """Text recognition."""
 
 import sys
+import os
 import io
 import random
 import re
@@ -279,6 +280,7 @@ class TextLightning(pl.LightningModule):
         self.lr_halflife = lr_halflife
         self.ctc_loss = nn.CTCLoss(zero_infinity=True)
         self.total = 0
+        self.cpdirpath = None
 
     def on_train_start(self):
         print(self.config)
@@ -409,6 +411,7 @@ data:
 logging:
     wandb:
         project: ocrorec2
+checkpoint:
     every_n_epochs: 20
 model:
     mname: text_model_210910
@@ -416,7 +419,7 @@ trainer:
     max_epochs: 1000
     gpus: 1
     progress_bar_refresh_rate: 2
-    # default_root_dir: ./_logs
+    default_root_dir: ./_logs
 """
 
 default_config = yaml.safe_load(StringIO(default_config))
@@ -476,6 +479,7 @@ def parse_args(argv):
 def train(argv):
     config = parse_args(argv)
     yaml.dump(config, sys.stdout)
+
     data = TextDataLoader(**config["data"])
     print("# checking training batch size", next(iter(data.train_dataloader()))[0].size())
 
@@ -483,38 +487,42 @@ def train(argv):
         config["model"]["mname"],
         TextModel.charset_size(),
     )
+
     model = TextModel(model)
     _ = torch.jit.script(model)
 
     flattened_config = flatten_yaml(config)
     lmodel = TextLightning(model, config=flattened_config)
+
     callbacks = []
+
     callbacks.append(
         LearningRateMonitor(logging_interval="step"),
     )
-    callbacks.append(
-        ModelCheckpoint(
-            dirpath="checkpoints",
-            every_n_epochs=config["logging"]["every_n_epochs"],
-            # monitor="train_loss",
-            # mode="min",
-            # save_last=True,
-        ),
-    )
+
+    cpconfig = config["checkpoint"]
+    if "dirpath" in cpconfig:
+        cpconfig["dirpath"] = cpconfig["dirpath"].format(pid=os.getpid())
+        lmodel.cpdirpath = cpconfig["dirpath"]
+        print("checkpoint dirpath", cpconfig)
+    mcheckpoint = ModelCheckpoint(**cpconfig)
+    callbacks.append(mcheckpoint)
+
     tconfig = config["trainer"].copy()
-    if "wandb" in config.get("logging", {}):
+
+    if "wandb" in config["logging"]:
+        print(f"# logging to {config['logging']['wandb']}")
         from pytorch_lightning.loggers import WandbLogger
 
         tconfig["logger"] = WandbLogger(**config["logging"]["wandb"])
-    tconfig = config["trainer"]
+    else:
+        print(f"# logging locally")
+
     trainer = pl.Trainer(
         callbacks=callbacks,
-        # default_root_dir=tconfig["log_dir"],
-        # gpus=tconfig["gpus"],
-        # max_epochs=tconfig["max_epochs"],
-        # progress_bar_refresh_rate=1,
         **tconfig,
     )
+    print("mcheckpoint.dirpath", mcheckpoint.dirpath)
     trainer.fit(lmodel, data)
 
 
