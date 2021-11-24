@@ -416,7 +416,8 @@ checkpoint:
     every_n_epochs: 10
 model:
     mname: text_model_210910
-    halflife: 100
+    lr: 3e-4
+    halflife: 80
 trainer:
     max_epochs: 10000
     gpus: 1
