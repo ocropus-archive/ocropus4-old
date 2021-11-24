@@ -155,13 +155,15 @@ def good_text(regex, sample):
 class TextDataLoader(pl.LightningDataModule):
     def __init__(
         self,
-        train_shards: str = None,
-        val_shards: str = None,
+        train_shards = None,
+        val_shards = None,
         train_bs: int = 4,
         val_bs: int = 20,
         text_select_re: str = "[A-Za-z0-9]",
         nepoch: int = 5000,
         num_workers: int = 4,
+        cache_size: int = -1,
+        cache_dir: str = "./_cache",
         **kw,
     ):
         super().__init__()
@@ -169,6 +171,8 @@ class TextDataLoader(pl.LightningDataModule):
         if val_shards == "":
             val_shards = None
         self.params = locals()
+        self.cache_size = cache_size
+        self.cache_dir = cache_dir
 
     def make_loader(
         self,
@@ -181,9 +185,19 @@ class TextDataLoader(pl.LightningDataModule):
         text_normalizer="simple",
         text_select_re="[0-9A-Za-z]",
         extensions="line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt",
+        cache=True,
         **kw,
     ):
-        ds = wds.WebDataset(fname, caching=True, verbose=True, shardshuffle=50, resampled=True)
+        ds = wds.WebDataset(
+            fname,
+            cache_size=float(self.cache_size),
+            cache_dir=self.cache_dir,
+            verbose=True,
+            shardshuffle=50,
+            resampled=True,
+        )
+        print(next(iter(ds)))
+        sys.exit(0)
         if mode == "train" and shuffle > 0:
             ds = ds.shuffle(shuffle)
         ds = ds.decode("l8").to_tuple(extensions)
@@ -269,11 +283,13 @@ class TextLightning(pl.LightningModule):
         self,
         model,
         *,
+        display_freq=1000,
         lr=3e-4,
         lr_halflife=1000,
         config={},
     ):
         super().__init__()
+        self.display_freq = display_freq
         self.config = config
         self.model = model
         self.lr = lr
@@ -297,7 +313,7 @@ class TextLightning(pl.LightningModule):
         self.log("train_loss", loss)
         err = self.compute_error(outputs, targets)
         self.log("train_err", err, prog_bar=True)
-        if index % 100 == 0:
+        if index % self.display_freq == 0:
             self.log_results(index, inputs, targets, outputs)
         self.total += len(inputs)
         return loss
@@ -418,6 +434,7 @@ model:
     mname: text_model_210910
     lr: 3e-4
     halflife: 80
+    display_freq: 1000
 trainer:
     max_epochs: 10000
     gpus: 1
@@ -428,12 +445,16 @@ trainer:
 default_config = yaml.safe_load(StringIO(default_config))
 
 
-def update_config(config, updates):
+def update_config(config, updates, path=None):
+    path = path or []
     if isinstance(config, dict) and isinstance(updates, dict):
         for k, v in updates.items():
-            config[k] = update_config(config.get(k), v)
+            if isinstance(config.get(k), dict):
+                update_config(config.get(k), v, path=path+[k])
+            else:
+                config[k] = v
     else:
-        config[k] = updates
+        raise ValueError(f"updates don't conform with config at {path}")
 
 
 def scalar_convert(s):
@@ -468,7 +489,8 @@ def parse_args(argv):
     if len(argv) < 1:
         return config
     if argv[0].startswith("config="):
-        with open(argv[0], "r") as stream:
+        _, fname = argv[0].split("=", 1)
+        with open(fname, "r") as stream:
             updates = yaml.safe_load(stream)
         update_config(config, updates)
         argv = argv[1:]
@@ -479,7 +501,11 @@ def parse_args(argv):
     return config
 
 
-def train(argv):
+def cmd_defaults(argv):
+    yaml.dump(default_config, sys.stdout)
+
+
+def cmd_train(argv):
     config = parse_args(argv)
     yaml.dump(config, sys.stdout)
 
@@ -526,5 +552,4 @@ def train(argv):
 
 
 if __name__ == "__main__":
-    if sys.argv[1] == "train":
-        train(sys.argv[2:])
+    eval(f"cmd_{sys.argv[1]}")(sys.argv[2:])
