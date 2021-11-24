@@ -280,7 +280,6 @@ class TextLightning(pl.LightningModule):
         self.lr_halflife = lr_halflife
         self.ctc_loss = nn.CTCLoss(zero_infinity=True)
         self.total = 0
-        self.cpdirpath = None
 
     def on_train_start(self):
         print(self.config)
@@ -408,15 +407,17 @@ data:
     train_bs: 12
     val_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar"
     val_bs: 24
+    nepoch: 20000
 logging:
     wandb:
         project: ocrorec2
+        log_model: all
 checkpoint:
-    every_n_epochs: 20
+    every_n_epochs: 10
 model:
     mname: text_model_210910
 trainer:
-    max_epochs: 1000
+    max_epochs: 10000
     gpus: 1
     progress_bar_refresh_rate: 2
     default_root_dir: ./_logs
@@ -501,10 +502,6 @@ def train(argv):
     )
 
     cpconfig = config["checkpoint"]
-    if "dirpath" in cpconfig:
-        cpconfig["dirpath"] = cpconfig["dirpath"].format(pid=os.getpid())
-        lmodel.cpdirpath = cpconfig["dirpath"]
-        print("checkpoint dirpath", cpconfig)
     mcheckpoint = ModelCheckpoint(**cpconfig)
     callbacks.append(mcheckpoint)
 
