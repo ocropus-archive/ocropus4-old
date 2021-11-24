@@ -196,8 +196,6 @@ class TextDataLoader(pl.LightningDataModule):
             shardshuffle=50,
             resampled=True,
         )
-        print(next(iter(ds)))
-        sys.exit(0)
         if mode == "train" and shuffle > 0:
             ds = ds.shuffle(shuffle)
         ds = ds.decode("l8").to_tuple(extensions)
