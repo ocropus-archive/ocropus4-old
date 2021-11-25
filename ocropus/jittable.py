@@ -21,12 +21,17 @@ def findbbox(image):
 
 @torch.jit.export
 def quantscale(s, unit=math.sqrt(2)):
+    assert s > 0
+    assert unit > 0
     return math.exp(math.floor(math.log(s) / math.log(unit) + 0.5) * math.log(unit))
 
 
 @torch.jit.export
 def resize_word(image, factor=7.0, quant=2.0):
     c, h, w = image.shape
+    assert c in [1, 3], c
+    assert h > 16 and h < 1000
+    assert w > 16 and w < 8000
     yprof = (image > 0.8).sum(0).sum(1)
     ymean = (torch.linspace(0, h, len(yprof)) * yprof).sum() / yprof.sum()
     ystd = (torch.abs(torch.linspace(0, h, len(yprof)) - ymean) * yprof).sum() / yprof.sum()
