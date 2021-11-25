@@ -1,7 +1,7 @@
 import math
 import torch
 import torch.jit
-from torch.nn.functional import interpolate
+from torch.nn.functional import interpolate, pad
 import random
 
 
@@ -31,8 +31,8 @@ def resize_word(image, factor=7.0, quant=2.0):
     ymean = (torch.linspace(0, h, len(yprof)) * yprof).sum() / yprof.sum()
     ystd = (torch.abs(torch.linspace(0, h, len(yprof)) - ymean) * yprof).sum() / yprof.sum()
     scale = factor / ystd
-    scale = quantscale(scale, quant=quant)
-    simage = interpolate(image.unsqueeze(0), (int(scale * h), int(scale * w)), mode="bilinear")[0]
+    scale = quantscale(scale, unit=quant)
+    simage = interpolate(image.unsqueeze(0), (int(scale * h), int(scale * w)), mode="bilinear", align_corners=False)[0]
     return simage
 
 
@@ -43,7 +43,7 @@ def crop_image(image, threshold=0.8, padding=4):
     d = 5
     x0, y0, x1, y1 = max(x0 - d, 0), max(y0 - d, 0), min(x1 + d, w), min(y1 + d, h)
     simage = image[:, y0:y1, x0:x1]
-    simage = torch.pad(simage, [padding] * 4)
+    simage = pad(simage, [padding] * 4)
     return simage
 
 

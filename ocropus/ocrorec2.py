@@ -114,8 +114,12 @@ def pack_for_ctc(seqs):
     alllens = torch.tensor([len(s) for s in seqs]).long()
     return (allseqs, alllens)
 
-
 def collate4ocr(samples):
+    images, seqs = zip(*samples)
+    images = TextModel.make_batch(images)
+    return images, seqs
+
+def collate4ocr_old(samples):
     """Collate image+sequence samples into batches.
 
     This returns an image batch and a compressed sequence batch using CTCLoss conventions.
@@ -241,6 +245,7 @@ class TextDataLoader(pl.LightningDataModule):
             f = eval(f"augment_{augment}")
             ds = ds.map_tuple(f, identity)
         ds = ds.map_tuple(lambda x: torch.tensor(x).unsqueeze(0), identity)
+        ds = ds.map_tuple(TextModel.auto_resize, identity)
         ds = ds.select(goodsize)
         if params.nepoch > 0:
             ds = ds.with_epoch(params.nepoch)
@@ -308,10 +313,15 @@ class TextModel(nn.Module):
 
     @torch.jit.export
     @staticmethod
+    def auto_resize(im):
+        resized = jittable.resize_word(im)
+        cropped = jittable.crop_image(resized)
+        return cropped
+
+    @torch.jit.export
+    @staticmethod
     def make_batch(images: List[torch.Tensor]):
-        resized = [jittable.resize_word(im) for im in images]
-        cropped = [jittable.crop_image(im) for im in resized]
-        batch = jittable.stack_images(cropped)
+        batch = jittable.stack_images(images)
         return batch
 
 
@@ -460,21 +470,17 @@ data:
     val_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar"
     val_bs: 24
     nepoch: 20000
-#logging:
-#    wandb:
-#        project: ocrorec2
-#        log_model: all
+    num_workers: 8
 checkpoint:
     every_n_epochs: 10
 model:
-    mname: text_model_210910
-    lr: 3e-4
+    mname: ctext_model_211124
+    lr: 0.03
     halflife: 80
     display_freq: 1000
 trainer:
     max_epochs: 10000
     gpus: 1
-    progress_bar_refresh_rate: 2
     default_root_dir: ./_logs
 """
 
