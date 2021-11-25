@@ -373,7 +373,7 @@ class TextLightning(pl.LightningModule):
         # log the OCR result for the first image in the batch
         plt.clf()
         plt.imshow(inputs[0], cmap=plt.cm.gray)
-        plt.title(f"[{t}] : [{s}] @{index}", size=48)
+        plt.title(f"'{s}' @{index}", size=24)
         self.log_matplotlib_figure(figure, self.total)
         # plot the posterior probabilities for the first image in the batch
         plt.clf()
