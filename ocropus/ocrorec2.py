@@ -422,10 +422,10 @@ data:
     val_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar"
     val_bs: 24
     nepoch: 20000
-logging:
-    wandb:
-        project: ocrorec2
-        log_model: all
+#logging:
+#    wandb:
+#        project: ocrorec2
+#        log_model: all
 checkpoint:
     every_n_epochs: 10
 model:

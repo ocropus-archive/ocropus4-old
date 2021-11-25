@@ -6,10 +6,6 @@ data:
   val_shards: pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar
   cache_size: 400e9
   cache_dir: ./_cache
-logging:
-  wandb:
-    log_model: all
-    project: ocrorec2
 model:
   display_freq: 1000
   halflife: 80
