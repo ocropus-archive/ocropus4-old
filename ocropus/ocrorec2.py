@@ -245,8 +245,8 @@ class TextDataLoader(pl.LightningDataModule):
             f = eval(f"augment_{augment}")
             ds = ds.map_tuple(f, identity)
         ds = ds.map_tuple(lambda x: torch.tensor(x).unsqueeze(0), identity)
-        ds = ds.map_tuple(TextModel.auto_resize, identity)
         ds = ds.select(goodsize)
+        ds = ds.map_tuple(TextModel.auto_resize, identity)
         if params.nepoch > 0:
             ds = ds.with_epoch(params.nepoch)
         dl = DataLoader(

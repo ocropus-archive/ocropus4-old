@@ -1,6 +1,6 @@
 data:
   nepoch: 20000
-  train_bs: 24
+  train_bs: 12
   train_shards:
     prefix: pipe:curl -s -L http://storage.googleapis.com/
     buckets: nvdata-ocropus-words
