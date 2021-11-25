@@ -533,7 +533,7 @@ def cmd_train(argv):
 
     tconfig = config["trainer"].copy()
 
-    if "wandb" in config["logging"]:
+    if "logging" in config and "wandb" in config["logging"]:
         print(f"# logging to {config['logging']['wandb']}")
         from pytorch_lightning.loggers import WandbLogger
 
