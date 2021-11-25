@@ -6,6 +6,7 @@ import os
 import random
 import re
 import sys
+from typing import List
 from functools import partial
 from io import StringIO
 from itertools import islice
@@ -29,7 +30,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torchmore import layers
 
-from . import degrade, lineest, linemodels, loading, slog, utils
+from . import degrade, lineest, linemodels, loading, slog, utils, jittable
 from .utils import useopt
 import torch.jit
 
@@ -41,6 +42,34 @@ min_w, min_h, max_w, max_h = 15, 15, 4000, 200
 
 def identity(x):
     return x
+
+
+class Params:
+    def __init__(self, d):
+        assert isinstance(d, dict)
+        self.__the_dict__ = d
+
+    def get(self, *args):
+        return self.__the_dict__.get(*args)
+
+    def __getitem__(self, name):
+        return self.__the_dict__[name]
+
+    def __setitem__(self, name, value):
+        self.__the_dict__[name] = value
+
+    def __getattr__(self, name):
+        value = self.__the_dict__[name]
+        if isinstance(value, dict):
+            return Params(value)
+        else:
+            return value
+
+    def __setattr__(self, name, value):
+        if name[0] == "_":
+            object.__setattr__(self, name, value)
+        else:
+            self.__the_dict__[name] = value
 
 
 def goodsize(sample):
@@ -165,31 +194,33 @@ class TextDataLoader(pl.LightningDataModule):
         nepoch: int = 5000,
         num_workers: int = 4,
         cache_size: int = -1,
-        cache_dir: str = "./_cache",
-        **kw,
-    ):
-        super().__init__()
-        assert train_shards is not None
-        if val_shards == "":
-            val_shards = None
-        self.params = locals()
-        self.cache_size = cache_size
-        self.cache_dir = cache_dir
-
-    def make_loader(
-        self,
-        fname,
+        cache_dir: str = None,
         batch_size=5,
         shuffle=5000,
-        nepoch=5000,
-        mode="train",
         augment="distort",
         text_normalizer="simple",
-        text_select_re="[0-9A-Za-z]",
         extensions="line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt",
         cache=True,
         **kw,
     ):
+        super().__init__()
+        print(locals())
+        assert train_shards is not None
+        if val_shards == "":
+            val_shards = None
+        self.params = Params(locals())
+        self.cache_size = cache_size
+        self.cache_dir = cache_dir
+        self.num_workers = num_workers
+
+    def make_loader(
+        self,
+        fname,
+        batch_size,
+        mode="train",
+        augment="distort",
+    ):
+        params = self.params
         ds = wds.WebDataset(
             fname,
             cache_size=float(self.cache_size),
@@ -198,34 +229,34 @@ class TextDataLoader(pl.LightningDataModule):
             shardshuffle=50,
             resampled=True,
         )
-        if mode == "train" and shuffle > 0:
-            ds = ds.shuffle(shuffle)
-        ds = ds.decode("l8").to_tuple(extensions)
-        text_normalizer = eval(f"normalize_{text_normalizer}")
+        if mode == "train" and params.shuffle > 0:
+            ds = ds.shuffle(params.shuffle)
+        ds = ds.decode("l8").to_tuple(params.extensions)
+        text_normalizer = eval(f"normalize_{params.text_normalizer}")
         ds = ds.map_tuple(identity, text_normalizer)
-        if text_select_re != "":
-            ds = ds.select(partial(good_text, text_select_re))
+        if params.text_select_re != "":
+            ds = ds.select(partial(good_text, params.text_select_re))
         ds = ds.map_tuple(lambda a: a.astype(float) / 255.0, None)
         if augment != "":
             f = eval(f"augment_{augment}")
             ds = ds.map_tuple(f, identity)
         ds = ds.map_tuple(lambda x: torch.tensor(x).unsqueeze(0), identity)
         ds = ds.select(goodsize)
-        if nepoch > 0:
-            ds = ds.with_epoch(nepoch)
+        if params.nepoch > 0:
+            ds = ds.with_epoch(params.nepoch)
         dl = DataLoader(
             ds,
             collate_fn=collate4ocr,
             batch_size=batch_size,
             shuffle=False,
-            **kw,
+            num_workers=params.num_workers,
         )
         return dl
 
     def train_dataloader(self):
         return self.make_loader(
             self.params["train_shards"],
-            batch_size=self.params["train_bs"],
+            self.params["train_bs"],
             mode="train",
         )
 
@@ -234,7 +265,7 @@ class TextDataLoader(pl.LightningDataModule):
             return None
         return self.make_loader(
             self.params["val_shards"],
-            batch_size=self.params["val_bs"],
+            self.params["val_bs"],
             mode="val",
             augment="",
         )
@@ -274,6 +305,14 @@ class TextModel(nn.Module):
             if image.mean() > 0.5:
                 image[:, :, :] = 1.0 - image[:, :, :]
         return self.model.forward(images)
+
+    @torch.jit.export
+    @staticmethod
+    def make_batch(images: List[torch.Tensor]):
+        resized = [jittable.resize_word(im) for im in images]
+        cropped = [jittable.crop_image(im) for im in resized]
+        batch = jittable.stack_images(cropped)
+        return batch
 
 
 class TextLightning(pl.LightningModule):
