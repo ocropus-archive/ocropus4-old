@@ -1,13 +1,15 @@
 """Text recognition."""
 
-import sys
-import os
 import io
+import json
+import os
 import random
 import re
+import sys
 from functools import partial
-from itertools import islice
 from io import StringIO
+from itertools import islice
+
 import yaml
 
 import editdistance
@@ -155,8 +157,8 @@ def good_text(regex, sample):
 class TextDataLoader(pl.LightningDataModule):
     def __init__(
         self,
-        train_shards = None,
-        val_shards = None,
+        train_shards=None,
+        val_shards=None,
         train_bs: int = 4,
         val_bs: int = 20,
         text_select_re: str = "[A-Za-z0-9]",
@@ -284,20 +286,17 @@ class TextLightning(pl.LightningModule):
         display_freq=1000,
         lr=3e-4,
         lr_halflife=1000,
-        config={},
+        config="{}",
     ):
         super().__init__()
         self.display_freq = display_freq
-        self.config = config
         self.model = model
         self.lr = lr
         self.lr_halflife = lr_halflife
         self.ctc_loss = nn.CTCLoss(zero_infinity=True)
         self.total = 0
-
-    def on_train_start(self):
-        print(self.config)
-        self.logger.log_hyperparams(self.config)
+        self.hparams.config = json.dumps(config)
+        self.save_hyperparameters()
 
     def forward(self, inputs):
         return self.model.forward(inputs)
@@ -448,7 +447,7 @@ def update_config(config, updates, path=None):
     if isinstance(config, dict) and isinstance(updates, dict):
         for k, v in updates.items():
             if isinstance(config.get(k), dict):
-                update_config(config.get(k), v, path=path+[k])
+                update_config(config.get(k), v, path=path + [k])
             else:
                 config[k] = v
     else:
@@ -518,8 +517,7 @@ def cmd_train(argv):
     model = TextModel(model)
     _ = torch.jit.script(model)
 
-    flattened_config = flatten_yaml(config)
-    lmodel = TextLightning(model, config=flattened_config)
+    lmodel = TextLightning(model, config=json.dumps(config))
 
     callbacks = []
 
