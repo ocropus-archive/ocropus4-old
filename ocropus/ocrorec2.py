@@ -78,8 +78,14 @@ def goodsize(sample):
     h, w = image.shape[-2:]
     good = h > min_h and h < max_h and w > min_w and w < max_w
     if not good:
-        print("rejecting", image.shape)
-    return good
+        print("bad sized image", image.shape)
+        return False
+    if image.ndim == 3:
+        image = image.mean(0)
+    if (image > 0.5).sum() < 10.0:
+        print("nearly empty image", image.sum())
+        return False
+    return True
 
 
 plt.rc("image", cmap="gray")
@@ -247,6 +253,7 @@ class TextDataLoader(pl.LightningDataModule):
         ds = ds.map_tuple(lambda x: torch.tensor(x).unsqueeze(0), identity)
         ds = ds.select(goodsize)
         ds = ds.map_tuple(TextModel.auto_resize, identity)
+        ds = ds.select(goodsize)
         if params.nepoch > 0:
             ds = ds.with_epoch(params.nepoch)
         dl = DataLoader(
@@ -314,6 +321,12 @@ class TextModel(nn.Module):
     @torch.jit.export
     @staticmethod
     def auto_resize(im):
+        if im.ndim == 2:
+            im = im.unsqueeze(0).repeat(3, 1, 1)
+        if im.dtype == torch.uint8:
+            im = im.type(torch.float32) / 255.0
+        if im.dtype == torch.float64:
+            im = im.type(torch.float32)
         resized = jittable.resize_word(im)
         cropped = jittable.crop_image(resized)
         return cropped
