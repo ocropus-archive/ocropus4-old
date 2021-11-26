@@ -250,7 +250,8 @@ class TextDataLoader(pl.LightningDataModule):
         if augment != "":
             f = eval(f"augment_{augment}")
             ds = ds.map_tuple(f, identity)
-        ds = ds.map_tuple(lambda x: torch.tensor(x).unsqueeze(0), identity)
+        ds = ds.map_tuple(lambda x: torch.tensor(x), identity)
+        ds = ds.map_tuple(TextModel.standardize, identity)
         ds = ds.select(goodsize)
         ds = ds.map_tuple(TextModel.auto_resize, identity)
         ds = ds.select(goodsize)
@@ -320,13 +321,12 @@ class TextModel(nn.Module):
 
     @torch.jit.export
     @staticmethod
+    def standardize(im):
+        return jittable.standardize_image(im)
+
+    @torch.jit.export
+    @staticmethod
     def auto_resize(im):
-        if im.ndim == 2:
-            im = im.unsqueeze(0).repeat(3, 1, 1)
-        if im.dtype == torch.uint8:
-            im = im.type(torch.float32) / 255.0
-        if im.dtype == torch.float64:
-            im = im.type(torch.float32)
         resized = jittable.resize_word(im)
         cropped = jittable.crop_image(resized)
         return cropped

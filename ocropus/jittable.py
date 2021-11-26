@@ -27,6 +27,19 @@ def quantscale(s, unit=math.sqrt(2)):
 
 
 @torch.jit.export
+def standardize_image(im):
+    if im.ndim == 2:
+        im = im.unsqueeze(0).repeat(3, 1, 1)
+    if im.dtype == torch.uint8:
+        im = im.type(torch.float32) / 255.0
+    if im.dtype == torch.float64:
+        im = im.type(torch.float32)
+    im -= im.amin()
+    im /= max(float(im.amax()), 0.01)
+    return im
+
+
+@torch.jit.export
 def resize_word(image, factor=7.0, quant=2.0, threshold=0.8):
     assert image.dtype == torch.float, image.dtype
     assert float(image.amax()) <= 1.01, image.amax()
