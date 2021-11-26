@@ -10,12 +10,13 @@ data:
       - shards: ia1-{000000..000033}.tar
         choose: 10
       - shards: gsub-{000000..000167}.tar
-        resample: 10
+        choose: 2
       - shards: cdipsub-{000000..000092}.tar
-        choose: 10
+        choose: 2
   val_bs: 12
   val_shards: pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar
   num_workers: 8
+  augment: distort
 model:
   display_freq: 1000
   halflife: 10
@@ -24,7 +25,7 @@ model:
 checkpoint:
   every_n_epochs: 5
 trainer:
-  gpus: 0
+  gpus: 1
   default_root_dir: ./_logs
   max_epochs: 10000
   progress_bar_refresh_rate: 2
