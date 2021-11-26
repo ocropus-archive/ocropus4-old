@@ -1,6 +1,6 @@
 data:
   nepoch: 20000
-  train_bs: 12
+  train_bs: 8
   train_shards:
     prefix: pipe:curl -s -L http://storage.googleapis.com/
     buckets: nvdata-ocropus-words
@@ -13,18 +13,18 @@ data:
         resample: 10
       - shards: cdipsub-{000000..000092}.tar
         choose: 10
-  val_bs: 24
+  val_bs: 12
   val_shards: pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar
-  num_workers: 8
+  num_workers: 4
 model:
   display_freq: 1000
-  halflife: 80
+  halflife: 10
   lr: 0.03
   mname: ctext_model_211124
 checkpoint:
-  every_n_epochs: 10
+  every_n_epochs: 5
 trainer:
+  gpus: 0
   default_root_dir: ./_logs
-  gpus: 1
   max_epochs: 10000
   progress_bar_refresh_rate: 2

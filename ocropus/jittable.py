@@ -14,9 +14,12 @@ def findbbox1(line):
 
 @torch.jit.export
 def findbbox(image):
-    y0, y1 = findbbox1(image.sum(0).sum(1))
-    x0, x1 = findbbox1(image.sum(0).sum(0))
-    return x0, y0, x1, y1
+    try:
+        y0, y1 = findbbox1(image.sum(0).sum(1))
+        x0, x1 = findbbox1(image.sum(0).sum(0))
+        return x0, y0, x1, y1
+    except IndexError:
+        return -1, -1, -1, -1
 
 
 @torch.jit.export
@@ -74,6 +77,8 @@ def crop_image(image, threshold=0.8, padding=4):
     if h <= 1 or w <= 1:
         return image
     x0, y0, x1, y1 = findbbox(image > 0.8)
+    if x0 < 0:
+        return torch.zeros((3, 1, 1))
     d = 5
     x0, y0, x1, y1 = max(x0 - d, 0), max(y0 - d, 0), min(x1 + d, w), min(y1 + d, h)
     simage = image[:, y0:y1, x0:x1]

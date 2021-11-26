@@ -71,6 +71,12 @@ class Params:
         else:
             self.__the_dict__[name] = value
 
+    def __getstate__(self):
+        return self.__the_dict__
+
+    def __setstate__(self, state):
+        self.__the_dict__ = state
+
 
 def goodsize(sample):
     """Determine whether the given sample has a good size."""
@@ -143,8 +149,39 @@ def collate4ocr_old(samples):
     return result, seqs
 
 
+def as_npimage(a):
+    assert a.ndim == 3
+    if isinstance(a, torch.Tensor):
+        assert int(a.shape[0]) in [1, 3]
+        a = a.detach().cpu().permute(1, 2, 0).numpy()
+    assert isinstance(a, np.ndarray)
+    assert a.shape[2] in [1, 3]
+    if a.dtype == np.uint8:
+        a = a.astype(np.float32) / 255.0
+    return a
+
+
+def as_torchimage(a):
+    if isinstance(a, np.ndarray):
+        if a.ndim == 2:
+            a = np.stack((a,)*3, axis=-1)
+        assert int(a.shape[2]) in [1, 3]
+        a = torch.tensor(a.transpose(2, 0, 1))
+    assert a.ndim == 3
+    assert isinstance(a, torch.Tensor)
+    assert a.shape[0] in [1, 3]
+    if a.dtype == np.uint8:
+        a = a.astype(np.float32) / 255.0
+    return a
+
+@useopt
+def augment_none(image):
+    return as_torchimage(image)
+
+
 @useopt
 def augment_transform(image, p=0.5):
+    image = as_npimage(image)
     if random.uniform(0, 1) < p:
         image = degrade.normalize(image)
         image = 1.0 * (image > 0.5)
@@ -154,11 +191,14 @@ def augment_transform(image, p=0.5):
         (image,) = degrade.transform_all(image, scale=(-0.3, 0))
     if random.uniform(0, 1) < p:
         image = degrade.noisify(image)
+    image = as_torchimage(image)
     return image
 
 
 @useopt
 def augment_distort(image, p=0.5):
+    image = as_npimage(image)
+    image = image.mean(axis=2)
     if random.uniform(0, 1) < p:
         image = degrade.normalize(image)
         image = 1.0 * (image > 0.5)
@@ -170,6 +210,7 @@ def augment_distort(image, p=0.5):
         (image,) = degrade.distort_all(image)
     if random.uniform(0, 1) < p:
         image = degrade.noisify(image)
+    image = as_torchimage(image)
     return image
 
 
@@ -241,16 +282,14 @@ class TextDataLoader(pl.LightningDataModule):
         )
         if mode == "train" and params.shuffle > 0:
             ds = ds.shuffle(params.shuffle)
-        ds = ds.decode("l8").to_tuple(params.extensions)
+        ds = ds.decode("torchrgb8").to_tuple(params.extensions)
         text_normalizer = eval(f"normalize_{params.text_normalizer}")
         ds = ds.map_tuple(identity, text_normalizer)
         if params.text_select_re != "":
             ds = ds.select(partial(good_text, params.text_select_re))
-        ds = ds.map_tuple(lambda a: a.astype(float) / 255.0, None)
         if augment != "":
             f = eval(f"augment_{augment}")
             ds = ds.map_tuple(f, identity)
-        ds = ds.map_tuple(lambda x: torch.tensor(x), identity)
         ds = ds.map_tuple(TextModel.standardize, identity)
         ds = ds.select(goodsize)
         ds = ds.map_tuple(TextModel.auto_resize, identity)
