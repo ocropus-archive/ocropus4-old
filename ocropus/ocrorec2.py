@@ -126,10 +126,12 @@ def pack_for_ctc(seqs):
     alllens = torch.tensor([len(s) for s in seqs]).long()
     return (allseqs, alllens)
 
+
 def collate4ocr(samples):
     images, seqs = zip(*samples)
     images = TextModel.make_batch(images)
     return images, seqs
+
 
 def collate4ocr_old(samples):
     """Collate image+sequence samples into batches.
@@ -164,7 +166,7 @@ def as_npimage(a):
 def as_torchimage(a):
     if isinstance(a, np.ndarray):
         if a.ndim == 2:
-            a = np.stack((a,)*3, axis=-1)
+            a = np.stack((a,) * 3, axis=-1)
         assert int(a.shape[2]) in [1, 3]
         a = torch.tensor(a.transpose(2, 0, 1))
     assert a.ndim == 3
@@ -173,6 +175,7 @@ def as_torchimage(a):
     if a.dtype == np.uint8:
         a = a.astype(np.float32) / 255.0
     return a
+
 
 @useopt
 def augment_none(image):
@@ -214,13 +217,22 @@ def augment_distort(image, p=0.5):
     return image
 
 
+def fixquotes(s):
+    s = re.sub("[\u201c\u201d]", '"', s)
+    s = re.sub("[\u2018\u2019]", "'", s)
+    s = re.sub("[\u2014]", "-", s)
+    return s
+
+
 @useopt
 def normalize_none(s):
+    s = fixquotes(s)
     return s
 
 
 @useopt
 def normalize_simple(s):
+    s = fixquotes(s)
     s = re.sub("\\\\[A-Za-z]+", "~", s)
     s = re.sub("\\\\[_^]+", "", s)
     s = re.sub("[{}]", "", s)
