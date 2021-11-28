@@ -532,7 +532,7 @@ class TextLightning(pl.LightningModule):
 default_config = """
 data:
     train_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..21}.tar"
-    train_bs: 12
+    train_bs: 8
     val_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar"
     val_bs: 24
     nepoch: 20000
