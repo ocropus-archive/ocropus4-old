@@ -78,7 +78,7 @@ class Params:
         self.__the_dict__ = state
 
 
-def goodsize(sample):
+def goodsize(sample, max_w=max_w, max_h=max_h):
     """Determine whether the given sample has a good size."""
     image, _ = sample
     h, w = image.shape[-2:]
@@ -264,6 +264,8 @@ class TextDataLoader(pl.LightningDataModule):
         text_normalizer="simple",
         extensions="line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt",
         cache=True,
+        max_w=600,
+        max_h=200,
         **kw,
     ):
         super().__init__()
@@ -305,7 +307,7 @@ class TextDataLoader(pl.LightningDataModule):
         ds = ds.map_tuple(TextModel.standardize, identity)
         ds = ds.select(goodsize)
         ds = ds.map_tuple(TextModel.auto_resize, identity)
-        ds = ds.select(goodsize)
+        ds = ds.select(partial(goodsize, max_w=params.max_w, max_h=params.max_h))
         if params.nepoch > 0:
             ds = ds.with_epoch(params.nepoch)
         dl = DataLoader(
