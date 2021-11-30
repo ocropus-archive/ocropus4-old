@@ -29,7 +29,7 @@ def quantscale(s: float, unit: float = math.sqrt(2)):
 
 
 @torch.jit.export
-def standardize_image(im: torch.Tensor, lo: float=0.05, hi: float=0.95) -> torch.Tensor:
+def standardize_image(im: torch.Tensor, lo: float = 0.05, hi: float = 0.95) -> torch.Tensor:
     if im.ndim == 2:
         im = im.unsqueeze(0).repeat(3, 1, 1)
     if im.dtype == torch.uint8:
@@ -47,7 +47,7 @@ def standardize_image(im: torch.Tensor, lo: float=0.05, hi: float=0.95) -> torch
 @torch.jit.export
 def resize_word(
     image: torch.Tensor, factor: float = 7.0, quant: float = 2.0, threshold: float = 0.8
-):
+) -> torch.Tensor:
     assert image.dtype == torch.float, image.dtype
     assert float(image.amax()) <= 1.01, image.amax()
     if image.amax() < 0.01:
@@ -62,9 +62,7 @@ def resize_word(
     if yprof.sum() < 1.0:
         return torch.zeros((3, 1, 1))
     ymean = (torch.linspace(0, h, len(yprof)) * yprof).sum() / yprof.sum()
-    ystd = (
-        torch.abs(torch.linspace(0, h, len(yprof)) - ymean) * yprof
-    ).sum() / yprof.sum()
+    ystd = (torch.abs(torch.linspace(0, h, len(yprof)) - ymean) * yprof).sum() / yprof.sum()
     if ystd < 1.0:
         return torch.zeros((3, 1, 1))
     scale = factor / ystd
@@ -81,7 +79,7 @@ def resize_word(
 
 
 @torch.jit.export
-def crop_image(image: torch.Tensor, threshold: float = 0.8, padding: int = 4):
+def crop_image(image: torch.Tensor, threshold: float = 0.8, padding: int = 4) -> torch.Tensor:
     c, h, w = image.shape
     if h <= 1 or w <= 1:
         return image
@@ -96,7 +94,7 @@ def crop_image(image: torch.Tensor, threshold: float = 0.8, padding: int = 4):
 
 
 @torch.jit.export
-def stack_images(images: List[torch.Tensor]):
+def stack_images(images: List[torch.Tensor]) -> torch.Tensor:
     for im in images:
         assert im.ndim == 3, im.ndim
         assert im.shape[0] in [1, 3]
