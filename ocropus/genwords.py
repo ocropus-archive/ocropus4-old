@@ -21,10 +21,13 @@ def add_margin(pil_img, top, right, bottom, left, color):
 def generate_text(words):
     case = random.randint(0, 3)
     if case <= 0:
-        return random.choice(words)
+        prefix = random.choice([""] * 10 + ["-", ":", "/", ",", ".", "$", "%", "@", "&", "*", "^", "~", "`", "!", "?"])
+        w = random.choice(words)
+        suffix = random.choice([""] * 5 + ["-", ":", "/", ",", ".", "$", "%", "@", "&", "*", "^", "~", "`", "!", "?"])
+        return prefix + w + suffix
     elif case <= 1:
         w1 = random.choice(words)
-        sep = random.choice([" "] * 5 + ["-", ":", "/", ",", ".", "$"])
+        sep = random.choice([" "] * 5 + ["-", ":", "/", ",", ".", "$", "%", "@", "&", "*", "^", "~", "`", "!", "?"])
         w2 = random.choice(words)
         return w1 + sep + w2
     elif case <= 2:
@@ -46,7 +49,7 @@ def generate_text(words):
             return "%08d" % int(value)
     elif case <= 3:
         l = random.randint(3, 10)
-        s = "".join([chr(random.randint(32, 126)) for _ in range(l)])
+        s = "".join([chr(random.randint(33, 126)) for _ in range(l)])
         return s
 
 
