@@ -359,34 +359,31 @@ class TextModel(nn.Module):
 
     @torch.jit.export
     def forward(self, images):
-        b, c, h, w = images.shape
-        assert c == 1 or c == 3
-        if c == 1:
+        b, c, h, w = images.shape        
+        assert c == torch.tensor(1) or c == torch.tensor(3)
+        if c == torch.tensor(1):
             images = images.repeat(1, 3, 1, 1)
             b, c, h, w = images.shape
         assert h > 15 and h < 4000 and w > 15 and h < 4000
         for image in images:
-            image -= image.amin()
+            image -= image.min() # was: amin()
             image /= torch.max(image.amax(), torch.tensor([0.01], device=image.device))
             if image.mean() > 0.5:
                 image[:, :, :] = 1.0 - image[:, :, :]
         return self.model.forward(images)
 
     @torch.jit.export
-    @staticmethod
-    def standardize(im):
+    def standardize(self, im: torch.Tensor) -> torch.Tensor:
         return jittable.standardize_image(im)
 
     @torch.jit.export
-    @staticmethod
-    def auto_resize(im):
+    def auto_resize(self, im: torch.Tensor) -> torch.Tensor:
         resized = jittable.resize_word(im)
         cropped = jittable.crop_image(resized)
         return cropped
 
     @torch.jit.export
-    @staticmethod
-    def make_batch(images: List[torch.Tensor]):
+    def make_batch(self, images: List[torch.Tensor]) -> torch.Tensor:
         batch = jittable.stack_images(images)
         return batch
 
@@ -613,10 +610,30 @@ def cmd_defaults(argv):
     yaml.dump(default_config, sys.stdout)
 
 
-def cmd_dump(argv):
-    print(f"loading {argv[0]}")
-    ckpt = torch.load(open(argv[0], "rb"))
-    breakpoint()
+def cmd_dumpjit(argv):
+    assert len(argv) == 2, argv
+    src, dest = argv
+    print(f"loading {src}")
+    ckpt = torch.load(open(src, "rb"))
+    model = ckpt["hyper_parameters"]["model"]
+    model.cpu()
+    script = torch.jit.script(model)
+    print(f"dumping {dest}")
+    assert not os.path.exists(dest)
+    torch.jit.save(script, dest)
+
+
+def cmd_dumponnx(argv):
+    assert len(argv) == 2, argv
+    src, dest = argv
+    print(f"loading {src}")
+    ckpt = torch.load(open(src, "rb"))
+    model = ckpt["hyper_parameters"]["model"]
+    model.cpu()
+    script = torch.jit.script(model)
+    print(f"dumping {dest}")
+    assert not os.path.exists(dest)
+    torch.onnx.export(script, (torch.rand(1, 3, 48, 200),), dest, opset_version=11)
 
 
 def cmd_train(argv):
@@ -624,7 +641,9 @@ def cmd_train(argv):
     yaml.dump(config, sys.stdout)
 
     data = TextDataLoader(**config["data"])
-    print("# checking training batch size", next(iter(data.train_dataloader()))[0].size())
+    print(
+        "# checking training batch size", next(iter(data.train_dataloader()))[0].size()
+    )
 
     model = loading.load_or_construct_model(
         config["model"]["mname"],
@@ -632,7 +651,11 @@ def cmd_train(argv):
     )
 
     model = TextModel(model)
-    _ = torch.jit.script(model)
+
+    # make sure the model is actually convertible to JIT and ONNX
+    script = torch.jit.script(model)
+    torch.onnx.export(script, (torch.rand(1, 3, 48, 200),), "/dev/null", opset_version=11)
+    print("# model is JIT-able and convertible to ONNX")
 
     lmodel = TextLightning(model, config=json.dumps(config))
 
