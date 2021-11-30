@@ -613,6 +613,12 @@ def cmd_defaults(argv):
     yaml.dump(default_config, sys.stdout)
 
 
+def cmd_dump(argv):
+    print(f"loading {argv[0]}")
+    ckpt = torch.load(open(argv[0], "rb"))
+    breakpoint()
+
+
 def cmd_train(argv):
     config = parse_args(argv)
     yaml.dump(config, sys.stdout)
