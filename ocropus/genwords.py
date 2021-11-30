@@ -24,11 +24,11 @@ def generate_text(words):
         return random.choice(words)
     elif case <= 1:
         w1 = random.choice(words)
-        sep = random.choice([" "]*5 + ["-", ":", "/", ",", ".", "$"])
+        sep = random.choice([" "] * 5 + ["-", ":", "/", ",", ".", "$"])
         w2 = random.choice(words)
         return w1 + sep + w2
     elif case <= 2:
-        value = 10**random.uniform(0.0, 5.0) * np.sign(random.uniform(-1.0, 1.0))
+        value = 10 ** random.uniform(0.0, 5.0) * np.sign(random.uniform(-1.0, 1.0))
         case = random.randint(0, 6)
         if case == 0:
             return str(value)
@@ -76,7 +76,7 @@ def generate(
         image = Image.new("RGB", (ih, iw), color="black")
         draw = ImageDraw.Draw(image)
         font = ImageFont.truetype(fontname, size)
-        draw.text((20, ih//2), word, font=font)
+        draw.text((20, ih // 2), word, font=font)
         bbox = image.getbbox()
         image = image.crop(bbox)
         m = [random.randint(3, 30) for _ in range(4)]
@@ -89,7 +89,7 @@ def generate(
             "jpg": image,
         }
         sink.write(sample)
-        if i%100==0:
+        if i % 100 == 0:
             print(i, end=" ", flush=True, file=sys.stderr)
     sink.close()
 

@@ -1,4 +1,5 @@
 import sys
+import re
 import os.path
 import matplotlib.pyplot as plt
 import torch
@@ -14,7 +15,9 @@ model.eval()
 model.cuda()
 
 assert os.path.exists(sys.argv[1]), sys.argv[1]
-ds = wds.WebDataset(sys.argv[1]).decode("torchrgb")
+def goodtext(sample):
+    return re.search(r"[a-zA-Z0-9_\-\.]{3,}", sample["txt"])
+ds = wds.WebDataset(sys.argv[1]).decode("torchrgb").select(goodtext)
 src = iter(ds)
 
 plt.ion()
