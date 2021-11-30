@@ -1,3 +1,5 @@
+import os
+import os.path
 import sys
 import typer
 from PIL import ImageFont, ImageDraw, Image
@@ -5,6 +7,7 @@ import random
 import io
 import webdataset as wds
 import numpy as np
+import re
 
 app = typer.Typer()
 
@@ -20,16 +23,23 @@ def add_margin(pil_img, top, right, bottom, left, color):
 
 def generate_text(words):
     case = random.randint(0, 3)
+    specials = "-:/,.$%@&*^`~!?()[]{}_"
+    specials = [c for c in specials]
     if case <= 0:
-        prefix = random.choice([""] * 10 + ["-", ":", "/", ",", ".", "$", "%", "@", "&", "*", "^", "~", "`", "!", "?"])
+        prefix = random.choice([""] * 10 + specials)
         w = random.choice(words)
-        suffix = random.choice([""] * 5 + ["-", ":", "/", ",", ".", "$", "%", "@", "&", "*", "^", "~", "`", "!", "?"])
-        return prefix + w + suffix
+        sp = random.choice([""] * 3 + [" "])
+        suffix = random.choice([""] * 5 + specials)
+        return prefix + w + sp + suffix
     elif case <= 1:
         w1 = random.choice(words)
-        sep = random.choice([" "] * 5 + ["-", ":", "/", ",", ".", "$", "%", "@", "&", "*", "^", "~", "`", "!", "?"])
+        sp1 = random.choice([""] * 3 + [" "])
+        sep = random.choice([" "] * 5 + specials)
+        sp2 = random.choice([""] * 3 + [" "])
         w2 = random.choice(words)
-        return w1 + sep + w2
+        result = w1 + sp1 + sep + sp2 + w2
+        result = re.sub(" +", " ", result)
+        return result
     elif case <= 2:
         value = 10 ** random.uniform(0.0, 5.0) * np.sign(random.uniform(-1.0, 1.0))
         case = random.randint(0, 6)
@@ -59,13 +69,17 @@ def generate(
     fontlist: str = "",
     wordlist: str = "/usr/share/dict/words",
     sizes: str = "10, 80",
-    shardsize: int = 1000,
-    nwords: int = 200000,
+    shardsize: int = 10000,
+    nwords: int = 1000000,
 ):
     words = [s.strip() for s in open(wordlist).readlines()]
     print(f"got {len(words)} words")
     if fontlist != "":
         fonts = [s.strip() for s in open(fontlist).readlines()]
+        fonts = [s for s in fonts if s[0] != "#"]
+        for f in fonts:
+            assert os.path.exists(f)
+        print(f"got {len(fonts)} fonts")
     else:
         fonts = ["/usr/share/fonts/truetype/msttcorefonts/arial.ttf"]
     print(f"got {len(fonts)} fonts")
@@ -76,12 +90,21 @@ def generate(
         word = generate_text(words)
         fontname = random.choice(fonts)
         size = int(np.exp(random.uniform(np.log(sizes[0]), np.log(sizes[1]))))
-        image = Image.new("RGB", (ih, iw), color="black")
-        draw = ImageDraw.Draw(image)
-        font = ImageFont.truetype(fontname, size)
-        draw.text((20, ih // 2), word, font=font)
-        bbox = image.getbbox()
-        image = image.crop(bbox)
+        try:
+            image = Image.new("RGB", (ih, iw), color="black")
+            draw = ImageDraw.Draw(image)
+            font = ImageFont.truetype(fontname, size)
+            draw.text((20, ih // 2), word, font=font)
+            bbox = image.getbbox()
+            image = image.crop(bbox)
+        except Exception as exn:
+            print("error during image generation:", repr(exn)[:200])
+            print("parameters:", (iw, ih), fontname, size)
+            continue
+        if image.width < 40 or image.height < 10:
+            continue
+        if image.width > 400 or image.height > 100:
+            continue
         m = [random.randint(3, 30) for _ in range(4)]
         image = add_margin(image, m[0], m[1], m[2], m[3], "black")
         image = np.array(image)
