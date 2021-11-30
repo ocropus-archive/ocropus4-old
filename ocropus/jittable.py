@@ -29,15 +29,18 @@ def quantscale(s: float, unit: float = math.sqrt(2)):
 
 
 @torch.jit.export
-def standardize_image(im: torch.Tensor):
+def standardize_image(im: torch.Tensor, lo: float=0.05, hi: float=0.95) -> torch.Tensor:
     if im.ndim == 2:
         im = im.unsqueeze(0).repeat(3, 1, 1)
     if im.dtype == torch.uint8:
         im = im.type(torch.float32) / 255.0
     if im.dtype == torch.float64:
         im = im.type(torch.float32)
-    im -= im.amin()
-    im /= max(float(im.amax()), 0.01)
+    im -= torch.quantile(im, lo)
+    im /= max(float(torch.quantile(im, hi)), 0.01)
+    im = im.clamp(0, 1)
+    if torch.quantile(im, 0.5) > 0.5:
+        im = 1 - im
     return im
 
 
