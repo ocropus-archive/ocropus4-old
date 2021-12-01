@@ -539,7 +539,7 @@ checkpoint:
 model:
     mname: ctext_model_211124
     lr: 0.03
-    halflife: 2
+    lr_halflife: 2
     display_freq: 1000
 trainer:
     max_epochs: 10000

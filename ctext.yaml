@@ -19,7 +19,7 @@ data:
   augment: distort
 model:
   display_freq: 1000
-  halflife: 10
+  lr_halflife: 10
   lr: 0.03
   mname: ctext_model_211124
 checkpoint:
