@@ -398,6 +398,7 @@ class TextLightning(pl.LightningModule):
         lr=3e-4,
         lr_halflife=1000,
         config="{}",
+        mname=None,
     ):
         super().__init__()
         self.display_freq = display_freq
@@ -649,14 +650,14 @@ def cmd_train(argv):
         TextModel.charset_size(),
     )
 
-    model = TextModel(model)
+    model = TextModel(model, **config.get("basemodel", {}))
 
     # make sure the model is actually convertible to JIT and ONNX
     script = torch.jit.script(model)
     #torch.onnx.export(script, (torch.rand(1, 3, 48, 200),), "/dev/null", opset_version=11)
     print("# model is JIT-able")
 
-    lmodel = TextLightning(model, config=json.dumps(config))
+    lmodel = TextLightning(model, config=json.dumps(config), **config.get("model", {}))
 
     callbacks = []
 
