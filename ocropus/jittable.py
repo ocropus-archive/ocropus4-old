@@ -55,8 +55,8 @@ def resize_word(
     image = image / image.amax()
     c, h, w = image.shape
     assert c in [1, 3], c
-    assert h > 16 and h < 1000
-    assert w > 16 and w < 8000
+    if h < 16 or h > 1000 or w < 16 or w > 8000:
+        return torch.zeros((3, 1, 1))
     assert not torch.isnan(image).any()
     yprof = (image > threshold).sum(0).sum(1)
     if yprof.sum() < 1.0:
@@ -91,6 +91,13 @@ def crop_image(image: torch.Tensor, threshold: float = 0.8, padding: int = 4) ->
     simage = image[:, y0:y1, x0:x1]
     simage = pad(simage, [padding] * 4)
     return simage
+
+
+@torch.jit.export
+def auto_resize(im: torch.Tensor) -> torch.Tensor:
+    resized = resize_word(im)
+    cropped = crop_image(resized)
+    return cropped
 
 
 @torch.jit.export

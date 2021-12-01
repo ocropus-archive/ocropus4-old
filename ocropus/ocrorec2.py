@@ -129,7 +129,7 @@ def pack_for_ctc(seqs):
 
 def collate4ocr(samples):
     images, seqs = zip(*samples)
-    images = TextModel.make_batch(images)
+    images = jittable.stack_images(images)
     return images, seqs
 
 
@@ -264,7 +264,7 @@ class TextDataLoader(pl.LightningDataModule):
         text_normalizer="simple",
         extensions="line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt",
         cache=True,
-        max_w=600,
+        max_w=1000,
         max_h=200,
         **kw,
     ):
@@ -304,9 +304,9 @@ class TextDataLoader(pl.LightningDataModule):
         if augment != "":
             f = eval(f"augment_{augment}")
             ds = ds.map_tuple(f, identity)
-        ds = ds.map_tuple(TextModel.standardize, identity)
+        ds = ds.map_tuple(jittable.standardize_image, identity)
         ds = ds.select(goodsize)
-        ds = ds.map_tuple(TextModel.auto_resize, identity)
+        ds = ds.map_tuple(jittable.auto_resize, identity)
         ds = ds.select(partial(goodsize, max_w=params.max_w, max_h=params.max_h))
         if params.nepoch > 0:
             ds = ds.with_epoch(params.nepoch)
@@ -378,14 +378,13 @@ class TextModel(nn.Module):
 
     @torch.jit.export
     def auto_resize(self, im: torch.Tensor) -> torch.Tensor:
-        resized = jittable.resize_word(im)
-        cropped = jittable.crop_image(resized)
-        return cropped
+        return jittable.auto_resize(im)
 
     @torch.jit.export
     def make_batch(self, images: List[torch.Tensor]) -> torch.Tensor:
         batch = jittable.stack_images(images)
         return batch
+
 
 
 class TextLightning(pl.LightningModule):
@@ -539,7 +538,7 @@ checkpoint:
 model:
     mname: ctext_model_211124
     lr: 0.03
-    halflife: 80
+    halflife: 2
     display_freq: 1000
 trainer:
     max_epochs: 10000
@@ -654,8 +653,8 @@ def cmd_train(argv):
 
     # make sure the model is actually convertible to JIT and ONNX
     script = torch.jit.script(model)
-    torch.onnx.export(script, (torch.rand(1, 3, 48, 200),), "/dev/null", opset_version=11)
-    print("# model is JIT-able and convertible to ONNX")
+    #torch.onnx.export(script, (torch.rand(1, 3, 48, 200),), "/dev/null", opset_version=11)
+    print("# model is JIT-able")
 
     lmodel = TextLightning(model, config=json.dumps(config))
 
