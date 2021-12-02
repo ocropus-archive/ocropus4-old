@@ -6,7 +6,7 @@ import os
 import random
 import re
 import sys
-from typing import List
+from typing import List, Optional
 from functools import partial
 from io import StringIO
 from itertools import islice
@@ -33,6 +33,7 @@ from torchmore import layers
 
 from . import degrade, lineest, linemodels, loading, slog, utils, jittable
 from .utils import useopt
+from . import confparse
 import torch.jit
 
 _ = linemodels
@@ -46,40 +47,6 @@ min_w, min_h, max_w, max_h = 15, 15, 4000, 200
 
 def identity(x):
     return x
-
-
-class Params:
-    def __init__(self, d):
-        assert isinstance(d, dict)
-        self.__the_dict__ = d
-
-    def get(self, *args):
-        return self.__the_dict__.get(*args)
-
-    def __getitem__(self, name):
-        return self.__the_dict__[name]
-
-    def __setitem__(self, name, value):
-        self.__the_dict__[name] = value
-
-    def __getattr__(self, name):
-        value = self.__the_dict__[name]
-        if isinstance(value, dict):
-            return Params(value)
-        else:
-            return value
-
-    def __setattr__(self, name, value):
-        if name[0] == "_":
-            object.__setattr__(self, name, value)
-        else:
-            self.__the_dict__[name] = value
-
-    def __getstate__(self):
-        return self.__the_dict__
-
-    def __setstate__(self, state):
-        self.__the_dict__ = state
 
 
 def goodsize(sample, max_w=max_w, max_h=max_h):
@@ -284,7 +251,7 @@ class TextDataLoader(pl.LightningDataModule):
         assert train_shards is not None
         if val_shards == "":
             val_shards = None
-        self.params = Params(locals())
+        self.params = confparse.Params(locals())
         self.cache_size = cache_size
         self.cache_dir = cache_dir
         self.num_workers = num_workers
@@ -560,64 +527,6 @@ trainer:
 default_config = yaml.safe_load(StringIO(default_config))
 
 
-def update_config(config, updates, path=None):
-    path = path or []
-    if isinstance(config, dict) and isinstance(updates, dict):
-        for k, v in updates.items():
-            if isinstance(config.get(k), dict):
-                update_config(config.get(k), v, path=path + [k])
-            else:
-                config[k] = v
-    else:
-        raise ValueError(f"updates don't conform with config at {path}")
-
-
-def scalar_convert(s):
-    try:
-        return int(s)
-    except:
-        try:
-            return float(s)
-        except:
-            return s
-
-
-def flatten_yaml(d, result=None, prefix=""):
-    result = {} if result is None else result
-    for k, v in d.items():
-        if isinstance(v, dict):
-            flatten_yaml(v, result=result, prefix=prefix + k + ".")
-        else:
-            result[prefix + k] = v
-    return result
-
-
-def set_config(config, key, value):
-    path = key.split(".")
-    for k in path[:-1]:
-        config = config.setdefault(k, {})
-    config[path[-1]] = scalar_convert(value)
-
-
-def parse_args(argv):
-    config = dict(default_config)
-    if len(argv) < 1:
-        return config
-    for arg in argv:
-        if "=" not in arg and (arg.endswith(".yaml") or arg.endswith(".yml")):
-            arg = "config=" + arg
-        if arg.startswith("config="):
-            _, fname = arg.split("=", 1)
-            with open(fname, "r") as stream:
-                updates = yaml.safe_load(stream)
-            update_config(config, updates)
-            continue
-        assert "=" in arg, arg
-        key, value = arg.split("=", 1)
-        set_config(config, key, value)
-    return config
-
-
 @app.command()
 def defaults():
     yaml.dump(default_config, sys.stdout)
@@ -636,8 +545,9 @@ def dumpjit(src: str, dst: str):
 
 
 @app.command()
-def train(argv: List[str]):
-    config = parse_args(argv)
+def train(argv: Optional[List[str]]=typer.Argument(None)):
+    argv = argv or []
+    config = confparse.parse_args(argv, default_config)
     yaml.dump(config, sys.stdout)
 
     data = TextDataLoader(**config["data"])
