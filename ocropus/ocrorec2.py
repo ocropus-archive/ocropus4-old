@@ -38,9 +38,38 @@ from . import confparse
 import torch.jit
 
 _ = linemodels
-
-
 app = typer.Typer()
+
+
+default_config = """
+data:
+    train_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..21}.tar"
+    train_bs: 8
+    val_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar"
+    val_bs: 24
+    nepoch: 20000
+    num_workers: 8
+    augment: distort
+    normalize: simple
+checkpoint:
+    every_n_epochs: 10
+lightning:
+    mname: ctext_model_211124
+    lr: 0.03
+    lr_halflife: 2
+    display_freq: 1000
+    textmodel:
+        charset_size: 128
+    basemodel:
+        noutput: 128
+trainer:
+    max_epochs: 10000
+    gpus: 1
+    default_root_dir: ./_logs
+logging: {}
+"""
+
+default_config = yaml.safe_load(StringIO(default_config))
 
 
 min_w, min_h, max_w, max_h = 15, 15, 4000, 200
@@ -65,10 +94,6 @@ def goodsize(sample: Dict[Any, Any], max_w: int = max_w, max_h: int = max_h) -> 
         print("nearly empty image", image.sum())
         return False
     return True
-
-
-plt.rc("image", cmap="gray")
-plt.rc("image", interpolation="nearest")
 
 
 def ctc_decode(
@@ -132,46 +157,9 @@ def collate4ocr(
     return images, seqs
 
 
-def as_npimage(a: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
-    """Convert a tensor to a numpy image .
-
-    Args:
-        a (Union[torch.Tensor, np.ndarray]): some image
-
-    Returns:
-        np.ndarray: rank 3 floating point image
-    """
-    assert a.ndim == 3
-    if isinstance(a, torch.Tensor):
-        assert int(a.shape[0]) in [1, 3]
-        a = a.detach().cpu().permute(1, 2, 0).numpy()
-    assert isinstance(a, np.ndarray)
-    assert a.shape[2] in [1, 3]
-    if a.dtype == np.uint8:
-        a = a.astype(np.float32) / 255.0
-    return a
-
-
-def as_torchimage(a: Union[torch.Tensor, np.ndarray]) -> torch.Tensor:
-    """Convert a numpy array into a torch . Image .
-
-    Args:
-        a (Union[torch.Tensor, np.ndarray]): some image in numpy or torch format
-
-    Returns:
-        torch.Tensor: floating point tensor representing an image
-    """
-    if isinstance(a, np.ndarray):
-        if a.ndim == 2:
-            a = np.stack((a,) * 3, axis=-1)
-        assert int(a.shape[2]) in [1, 3]
-        a = torch.tensor(a.transpose(2, 0, 1))
-    assert a.ndim == 3
-    assert isinstance(a, torch.Tensor)
-    assert a.shape[0] in [1, 3]
-    if a.dtype == np.uint8:
-        a = a.astype(np.float32) / 255.0
-    return a
+###
+### Augmentations
+###
 
 
 @useopt
@@ -184,7 +172,7 @@ def augment_none(image: torch.Tensor) -> torch.Tensor:
     Returns:
         torch.Tensor: unaugmented output
     """
-    return as_torchimage(image)
+    return utils.as_torchimage(image)
 
 
 @useopt
@@ -200,7 +188,7 @@ def augment_transform(image: torch.Tensor, p: float = 0.5) -> torch.Tensor:
     Returns:
         torch.Tensor: augmented image
     """
-    image = as_npimage(image)
+    image = utils.as_npimage(image)
     if random.uniform(0, 1) < p:
         image = degrade.normalize(image)
         image = 1.0 * (image > 0.5)
@@ -210,7 +198,7 @@ def augment_transform(image: torch.Tensor, p: float = 0.5) -> torch.Tensor:
         (image,) = degrade.transform_all(image, scale=(-0.3, 0))
     if random.uniform(0, 1) < p:
         image = degrade.noisify(image)
-    image = as_torchimage(image)
+    image = utils.as_torchimage(image)
     return image
 
 
@@ -227,7 +215,7 @@ def augment_distort(image: torch.Tensor, p: float = 0.5) -> torch.Tensor:
     Returns:
         [type]: augmented image
     """
-    image = as_npimage(image)
+    image = utils.as_npimage(image)
     image = image.mean(axis=2)
     if random.uniform(0, 1) < p:
         image = degrade.normalize(image)
@@ -240,8 +228,13 @@ def augment_distort(image: torch.Tensor, p: float = 0.5) -> torch.Tensor:
         (image,) = degrade.distort_all(image)
     if random.uniform(0, 1) < p:
         image = degrade.noisify(image)
-    image = as_torchimage(image)
+    image = utils.as_torchimage(image)
     return image
+
+
+###
+### Text-Related
+###
 
 
 def fixquotes(s: str) -> str:
@@ -302,6 +295,11 @@ def good_text(regex: str, sample: str) -> bool:
     """Check if a string matches a regular expression."""
     image, txt = sample
     return re.search(regex, txt)
+
+
+###
+### Data Loading
+###
 
 
 class TextDataLoader(pl.LightningDataModule):
@@ -435,11 +433,18 @@ class TextDataLoader(pl.LightningDataModule):
         )
 
 
+###
+### Text Recognition Models
+###
+
+
 class TextModel(nn.Module):
     """Word-level text model."""
 
-    def __init__(self, model):
+    def __init__(self, model, charset_size=128, unknown_char=26):
         super().__init__()
+        self.charset_size = charset_size
+        self.unknown_char = unknown_char
         self.model = model
 
     @torch.jit.export
@@ -479,18 +484,13 @@ class TextModel(nn.Module):
     def encode_str(self, s: str) -> torch.Tensor:
         """Encode a string as a tensor."""
         result = torch.tensor([ord(c) for c in s], dtype=torch.long)
-        result[result >= self.charset_size()] = 127
+        result[result >= self.charset_size] = self.unknown_char
         return result
 
     @torch.jit.export
     def decode_str(self, a: torch.Tensor) -> str:
         """Decode a tensor as a string."""
         return "".join([chr(int(c)) for c in a])
-
-    @torch.jit.export
-    @staticmethod
-    def charset_size():
-        return 128
 
 
 class TextLightning(pl.LightningModule):
@@ -519,7 +519,7 @@ class TextLightning(pl.LightningModule):
         self.ctc_loss = nn.CTCLoss(zero_infinity=True)
         self.total = 0
         self.hparams.config = json.dumps(config)
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore="display_freq".split())
         if mname is not None:
             basemodel = loading.load_or_construct_model(mname, **basemodel)
             self.model = TextModel(basemodel, **textmodel)
@@ -537,7 +537,7 @@ class TextLightning(pl.LightningModule):
         """Perform the forward step. This just calls the forward method of the model."""
         return self.model.forward(inputs)
 
-    def training_step(self, batch:torch.Tensor, index:int) -> torch.Tensor:
+    def training_step(self, batch: torch.Tensor, index: int) -> torch.Tensor:
         """Perform a training step."""
         inputs, text_targets = batch
         outputs = self.forward(inputs)
@@ -552,7 +552,7 @@ class TextLightning(pl.LightningModule):
         self.total += len(inputs)
         return loss
 
-    def validation_step(self, batch: torch.Tensor, index:int) -> torch.Tensor:
+    def validation_step(self, batch: torch.Tensor, index: int) -> torch.Tensor:
         """Perform a validation step."""
         inputs, text_targets = batch
         outputs = self.forward(inputs)
@@ -564,7 +564,9 @@ class TextLightning(pl.LightningModule):
         self.log("val_err", err)
         return loss
 
-    def compute_loss(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> torch.Tensor:
+    def compute_loss(
+        self, outputs: torch.Tensor, targets: List[torch.Tensor]
+    ) -> torch.Tensor:
         assert len(targets) == len(outputs)
         targets, tlens = pack_for_ctc(targets)
         b, d, L = outputs.size()
@@ -575,7 +577,9 @@ class TextLightning(pl.LightningModule):
         assert tlens.sum() == targets.size(0)
         return self.ctc_loss(outputs.cpu(), targets.cpu(), olens.cpu(), tlens.cpu())
 
-    def compute_error(self, outputs:torch.Tensor, targets: List[torch.Tensor]) -> float:
+    def compute_error(
+        self, outputs: torch.Tensor, targets: List[torch.Tensor]
+    ) -> float:
         probs = outputs.detach().cpu().softmax(1)
         targets = [[int(x) for x in t] for t in targets]
         total = sum(len(t) for t in targets)
@@ -588,17 +592,29 @@ class TextLightning(pl.LightningModule):
         scheduler = LambdaLR(optimizer, self.schedule)
         return [optimizer], [scheduler]
 
-    def schedule(self, epoch:int):
+    def schedule(self, epoch: int):
         return 0.5 ** (epoch // self.lr_halflife)
 
-    def log_results(self, index:int, inputs:torch.Tensor, targets:torch.Tensor, outputs:torch.Tensor) -> None:
+    def log_results(
+        self,
+        index: int,
+        inputs: torch.Tensor,
+        targets: torch.Tensor,
+        outputs: torch.Tensor,
+    ) -> None:
         self.show_ocr_results(index, inputs, targets, outputs)
         decoded = ctc_decode(outputs.detach().cpu().softmax(1).numpy()[0])
         t = self.model.decode_str(targets[0].cpu().numpy())
         s = self.model.decode_str(decoded)
         print(f"\n{t} : {s}")
 
-    def show_ocr_results(self, index:int, inputs:torch.Tensor, targets:torch.Tensor, outputs:torch.Tensor) -> None:
+    def show_ocr_results(
+        self,
+        index: int,
+        inputs: torch.Tensor,
+        targets: torch.Tensor,
+        outputs: torch.Tensor,
+    ) -> None:
         """Log the given inputs, targets, and outputs to the logger."""
         inputs = inputs.detach().cpu().numpy()[0]
         outputs = outputs.detach().softmax(1).cpu().numpy()[0]
@@ -610,7 +626,7 @@ class TextLightning(pl.LightningModule):
         fig = plt.figure(figsize=(20, 10))
         gs = gridspec.GridSpec(1, 2)
         ax = fig.add_subplot(gs[0, 0])
-        ax.imshow(inputs[0], cmap=plt.cm.gray)
+        ax.imshow(inputs[0], cmap=plt.cm.gray, interpolation="nearest")
         ax.set_title(f"'{s}' @{self.total}", size=24)
         ax = fig.add_subplot(gs[0, 1])
         for row in outputs:
@@ -637,46 +653,28 @@ class TextLightning(pl.LightningModule):
 
             exp.log({key: [wandb.Image(image, caption=key)]})
 
-    def probs_batch(self, inputs:torch.Tensor) -> torch.Tensor:
+    def probs_batch(self, inputs: torch.Tensor) -> torch.Tensor:
         """Compute probability outputs for the batch."""
         self.model.eval()
         with torch.no_grad():
             outputs = self.model.forward(inputs.to(self.device))
         return outputs.detach().cpu().softmax(1)
 
-    def predict_batch(self, inputs:torch.Tensor, **kw) -> List[str]:
+    def predict_batch(self, inputs: torch.Tensor, **kw) -> List[str]:
         """Predict and decode a batch."""
         probs = self.probs_batch(inputs)
         result = [ctc_decode(p, **kw) for p in probs]
         return result
 
 
-default_config = """
-data:
-    train_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..21}.tar"
-    train_bs: 8
-    val_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar"
-    val_bs: 24
-    nepoch: 20000
-    num_workers: 8
-checkpoint:
-    every_n_epochs: 10
-lightning:
-    mname: ctext_model_211124
-    lr: 0.03
-    lr_halflife: 2
-    display_freq: 1000
-trainer:
-    max_epochs: 10000
-    gpus: 1
-    default_root_dir: ./_logs
-"""
-
-default_config = yaml.safe_load(StringIO(default_config))
+###
+##3 Top-Level Commands
+###
 
 
 @app.command()
 def defaults():
+    """Print the default config."""
     yaml.dump(default_config, sys.stdout)
 
 
@@ -698,12 +696,16 @@ def train(argv: Optional[List[str]] = typer.Argument(None)):
     config = confparse.parse_args(argv, default_config)
     yaml.dump(config, sys.stdout)
 
-    data = TextDataLoader(**config["data"])
+    dataconfig = config["data"]
+    data = TextDataLoader(**dataconfig)
     print(
         "# checking training batch size", next(iter(data.train_dataloader()))[0].size()
     )
 
     lmodel = TextLightning(**config["lightning"])
+    lmodel.hparams.train_bs = dataconfig["train_bs"]
+    lmodel.hparams.augment = dataconfig["augment"]
+    lmodel.hparams.normalize = dataconfig["normalize"]
 
     callbacks = []
 

@@ -5,6 +5,7 @@ import time
 from functools import wraps
 import warnings
 import re
+from typing import Union, Tuple, List, Dict, Callable, Any
 
 import numpy as np
 import torch
@@ -15,6 +16,48 @@ debug = int(os.environ.get("UTILS_DEBUG", "0"))
 do_trace = int(os.environ.get("OCROTRACE", "0"))
 
 all_models = []
+
+
+def as_npimage(a: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
+    """Convert a tensor to a numpy image .
+
+    Args:
+        a (Union[torch.Tensor, np.ndarray]): some image
+
+    Returns:
+        np.ndarray: rank 3 floating point image
+    """
+    assert a.ndim == 3
+    if isinstance(a, torch.Tensor):
+        assert int(a.shape[0]) in [1, 3]
+        a = a.detach().cpu().permute(1, 2, 0).numpy()
+    assert isinstance(a, np.ndarray)
+    assert a.shape[2] in [1, 3]
+    if a.dtype == np.uint8:
+        a = a.astype(np.float32) / 255.0
+    return a
+
+
+def as_torchimage(a: Union[torch.Tensor, np.ndarray]) -> torch.Tensor:
+    """Convert a numpy array into a torch . Image .
+
+    Args:
+        a (Union[torch.Tensor, np.ndarray]): some image in numpy or torch format
+
+    Returns:
+        torch.Tensor: floating point tensor representing an image
+    """
+    if isinstance(a, np.ndarray):
+        if a.ndim == 2:
+            a = np.stack((a,) * 3, axis=-1)
+        assert int(a.shape[2]) in [1, 3]
+        a = torch.tensor(a.transpose(2, 0, 1))
+    assert a.ndim == 3
+    assert isinstance(a, torch.Tensor)
+    assert a.shape[0] in [1, 3]
+    if a.dtype == np.uint8:
+        a = a.astype(np.float32) / 255.0
+    return a
 
 
 def device(s):
