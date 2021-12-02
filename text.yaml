@@ -24,6 +24,8 @@ lightning:
   lr_halflife: 1
   lr: 1.0e-4
   mname: text_model_210910
+  textmodel: {}
+  basemodel: {}
 checkpoint:
   every_n_epochs: 1
 trainer:
