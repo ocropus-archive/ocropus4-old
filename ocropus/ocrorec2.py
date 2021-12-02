@@ -13,6 +13,7 @@ from itertools import islice
 
 import yaml
 
+import typer
 import editdistance
 import matplotlib.pyplot as plt
 import numpy as np
@@ -35,6 +36,9 @@ from .utils import useopt
 import torch.jit
 
 _ = linemodels
+
+
+app = typer.Typer()
 
 
 min_w, min_h, max_w, max_h = 15, 15, 4000, 200
@@ -99,9 +103,16 @@ plt.rc("image", interpolation="nearest")
 
 
 def ctc_decode(probs, sigma=1.0, threshold=0.7, full=False):
-    """A simple decoder for CTC-trained OCR recognizers.
+    """convert probabilities to CTC - encoded version
 
-    :probs: d x l sequence classification output
+    Args:
+        probs ([type]): [description]
+        sigma (float, optional): [description]. Defaults to 1.0.
+        threshold (float, optional): [description]. Defaults to 0.7.
+        full (bool, optional): [description]. Defaults to False.
+
+    Returns:
+        [type]: [description]
     """
     if not isinstance(probs, np.ndarray):
         probs = probs.detach().cpu().numpy()
@@ -359,14 +370,14 @@ class TextModel(nn.Module):
 
     @torch.jit.export
     def forward(self, images):
-        b, c, h, w = images.shape        
+        b, c, h, w = images.shape
         assert c == torch.tensor(1) or c == torch.tensor(3)
         if c == torch.tensor(1):
             images = images.repeat(1, 3, 1, 1)
             b, c, h, w = images.shape
         assert h > 15 and h < 4000 and w > 15 and h < 4000
         for image in images:
-            image -= image.min() # was: amin()
+            image -= image.min()  # was: amin()
             image /= torch.max(image.amax(), torch.tensor([0.01], device=image.device))
             if image.mean() > 0.5:
                 image[:, :, :] = 1.0 - image[:, :, :]
@@ -384,7 +395,6 @@ class TextModel(nn.Module):
     def make_batch(self, images: List[torch.Tensor]) -> torch.Tensor:
         batch = jittable.stack_images(images)
         return batch
-
 
 
 class TextLightning(pl.LightningModule):
@@ -536,7 +546,7 @@ data:
     num_workers: 8
 checkpoint:
     every_n_epochs: 10
-model:
+lightning:
     mname: ctext_model_211124
     lr: 0.03
     lr_halflife: 2
@@ -593,26 +603,28 @@ def parse_args(argv):
     config = dict(default_config)
     if len(argv) < 1:
         return config
-    if argv[0].startswith("config="):
-        _, fname = argv[0].split("=", 1)
-        with open(fname, "r") as stream:
-            updates = yaml.safe_load(stream)
-        update_config(config, updates)
-        argv = argv[1:]
     for arg in argv:
+        if "=" not in arg and (arg.endswith(".yaml") or arg.endswith(".yml")):
+            arg = "config=" + arg
+        if arg.startswith("config="):
+            _, fname = arg.split("=", 1)
+            with open(fname, "r") as stream:
+                updates = yaml.safe_load(stream)
+            update_config(config, updates)
+            continue
         assert "=" in arg, arg
         key, value = arg.split("=", 1)
         set_config(config, key, value)
     return config
 
 
-def cmd_defaults(argv):
+@app.command()
+def defaults():
     yaml.dump(default_config, sys.stdout)
 
 
-def cmd_dumpjit(argv):
-    assert len(argv) == 2, argv
-    src, dest = argv
+@app.command()
+def dumpjit(src: str, dst: str):
     print(f"loading {src}")
     ckpt = torch.load(open(src, "rb"))
     model = ckpt["hyper_parameters"]["model"]
@@ -623,20 +635,8 @@ def cmd_dumpjit(argv):
     torch.jit.save(script, dest)
 
 
-def cmd_dumponnx(argv):
-    assert len(argv) == 2, argv
-    src, dest = argv
-    print(f"loading {src}")
-    ckpt = torch.load(open(src, "rb"))
-    model = ckpt["hyper_parameters"]["model"]
-    model.cpu()
-    script = torch.jit.script(model)
-    print(f"dumping {dest}")
-    assert not os.path.exists(dest)
-    torch.onnx.export(script, (torch.rand(1, 3, 48, 200),), dest, opset_version=11)
-
-
-def cmd_train(argv):
+@app.command()
+def train(argv: List[str]):
     config = parse_args(argv)
     yaml.dump(config, sys.stdout)
 
@@ -645,8 +645,9 @@ def cmd_train(argv):
         "# checking training batch size", next(iter(data.train_dataloader()))[0].size()
     )
 
+    lightning = config.get("lightning", {})
     model = loading.load_or_construct_model(
-        config["model"]["mname"],
+        lightning["mname"],
         TextModel.charset_size(),
     )
 
@@ -654,10 +655,10 @@ def cmd_train(argv):
 
     # make sure the model is actually convertible to JIT and ONNX
     script = torch.jit.script(model)
-    #torch.onnx.export(script, (torch.rand(1, 3, 48, 200),), "/dev/null", opset_version=11)
+    # torch.onnx.export(script, (torch.rand(1, 3, 48, 200),), "/dev/null", opset_version=11)
     print("# model is JIT-able")
 
-    lmodel = TextLightning(model, config=json.dumps(config), **config.get("model", {}))
+    lmodel = TextLightning(model, config=json.dumps(config), **lightning)
 
     callbacks = []
 
@@ -688,4 +689,4 @@ def cmd_train(argv):
 
 
 if __name__ == "__main__":
-    eval(f"cmd_{sys.argv[1]}")(sys.argv[2:])
+    app()

@@ -19,7 +19,7 @@ data:
   val_shards: pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar
   num_workers: 4
   augment: distort
-model:
+lightning:
   display_freq: 1000
   lr_halflife: 1
   lr: 1.0e-4
