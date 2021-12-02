@@ -16,6 +16,7 @@ import yaml
 import typer
 import editdistance
 import matplotlib.pyplot as plt
+from matplotlib import gridspec
 import numpy as np
 import PIL
 import pytorch_lightning as pl
@@ -605,27 +606,26 @@ class TextLightning(pl.LightningModule):
         decode_str = self.model.decode_str
         t = decode_str(targets[0].cpu().numpy())
         s = decode_str(decoded)
-        figure = plt.figure(figsize=(10, 10))
         # log the OCR result for the first image in the batch
-        plt.clf()
-        plt.imshow(inputs[0], cmap=plt.cm.gray)
-        plt.title(f"'{s}' @{index}", size=24)
-        self.log_matplotlib_figure(figure, self.total)
-        # plot the posterior probabilities for the first image in the batch
-        plt.clf()
+        fig = plt.figure(figsize=(20, 10))
+        gs = gridspec.GridSpec(1, 2)
+        ax = fig.add_subplot(gs[0, 0])
+        ax.imshow(inputs[0], cmap=plt.cm.gray)
+        ax.set_title(f"'{s}' @{self.total}", size=24)
+        ax = fig.add_subplot(gs[0, 1])
         for row in outputs:
-            plt.plot(row)
-        self.log_matplotlib_figure(figure, self.total, key="probs")
-        plt.close(figure)
+            ax.plot(row)
+        self.log_matplotlib_figure(fig, self.total, key="output", size=(1200, 600))
+        plt.close(fig)
 
-    def log_matplotlib_figure(self, fig, index, key="image"):
+    def log_matplotlib_figure(self, fig, index, key="image", size=(600, 600)):
         """Log the given matplotlib figure to tensorboard logger tb."""
         buf = io.BytesIO()
         fig.savefig(buf, format="jpeg")
         buf.seek(0)
         image = PIL.Image.open(buf)
         image = image.convert("RGB")
-        image = image.resize((600, 600))
+        image = image.resize(size)
         image = np.array(image)
         image = torch.from_numpy(image).float() / 255.0
         image = image.permute(2, 0, 1)
