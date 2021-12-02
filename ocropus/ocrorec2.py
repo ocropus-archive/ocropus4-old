@@ -508,6 +508,8 @@ class TextLightning(pl.LightningModule):
         lr: float = 3e-4,
         lr_halflife: int = 1000,
         config: Dict[Any, Any] = {},
+        textmodel: Dict[Any, Any] = {},
+        basemodel: Dict[Any, Any] = {},
     ):
         super().__init__()
         self.display_freq = display_freq
@@ -518,8 +520,8 @@ class TextLightning(pl.LightningModule):
         self.hparams.config = json.dumps(config)
         self.save_hyperparameters()
         if mname is not None:
-            basemodel = loading.load_or_construct_model(mname, **config.get("basemodel", {}))
-            self.model = TextModel(basemodel, **config.get("textmodel", {}))
+            basemodel = loading.load_or_construct_model(mname, **basemodel)
+            self.model = TextModel(basemodel, **textmodel)
             # make sure the model is JIT-able
             self.get_jit_model()
             print("model created and is JIT-able")
