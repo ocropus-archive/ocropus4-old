@@ -43,6 +43,9 @@ extract-text)
 ocroseg)  # page segmentation
     $python3 -m ocropus.ocroseg "$@"
     ;;
+ocroseg2)  # page segmentation
+    $python3 -m ocropus.ocroseg2 "$@"
+    ;;
 ocrotext)  # line/word recognition
     ;&
 ocroline)

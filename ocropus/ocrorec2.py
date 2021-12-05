@@ -270,6 +270,26 @@ def normalize_none(s: str) -> str:
 def normalize_simple(s: str) -> str:
     """Simple text normalization.
 
+    - replaces unicode quotes with ascii ones
+    - replaces multiple whitespace with singe space
+    - strips space at beginning and end of string
+
+    Args:
+        s (str): [description]
+
+    Returns:
+        str: [description]
+    """
+    s = fixquotes(s)
+    s = re.sub(" +", " ", s)
+    s = re.sub('"', "''", s)
+    return s.strip()
+
+
+@useopt
+def normalize_tex(s: str) -> str:
+    """Simple text normalization.
+
     - replaces tex commands (\alpha, \beta, etc) with "~"
     - eliminates "{", "}", "_" and "^" from input (TeX sequences)
     - replaces unicode quotes with ascii ones
