@@ -12,17 +12,24 @@ class Params:
         return self.__the_dict__.get(*args)
 
     def __getitem__(self, name):
+        if name not in self.__the_dict__:
+            raise KeyError(name)
         return self.__the_dict__[name]
 
     def __setitem__(self, name, value):
         self.__the_dict__[name] = value
 
     def __getattr__(self, name):
+        if name not in self.__the_dict__:
+            raise AttributeError(name)
         value = self.__the_dict__[name]
         if isinstance(value, dict):
             return Params(value)
         else:
             return value
+
+    def dict(self):
+        return self.__the_dict__
 
     def __setattr__(self, name, value):
         if name[0] == "_":
