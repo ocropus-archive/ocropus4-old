@@ -1,0 +1,35 @@
+data:
+    train_shards: 
+      prefix: pipe:curl -s -L http://storage.googleapis.com/
+      buckets: nvdata-ocropus-wseg-sub
+      datasets:
+        - shards: uw3-wseg-{000000..000116}.tar
+          choose: 10
+        - shards: bin-gsub-{000000..000167}.tar
+          choose: 10
+        - shards: bin-ia1-{000000..000033}.tar
+          choose: 10
+        - shards: cdipsub-{000000..000092}.tar
+          choose: 5
+        - shards: gsub-{000000..000167}.tar
+          choose: 10
+        - shards: ia1-{000000..000033}.tar
+          choose: 5
+    train_bs: 2
+    val_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-wseg-sub/uw3-wseg-{000117..000117}.tar"
+    val_bs: 2
+    augmentation: default
+checkpoint:
+    every_n_epochs: 1
+lightning:
+    mname: segmentation_model_210429
+    lr: 0.01
+    lr_halflife: 5
+    display_freq: 100
+    basemodel: {}
+    segmodel: {}
+trainer:
+    max_epochs: 10000
+    gpus: 1
+    default_root_dir: ./_logs
+logging: {}
