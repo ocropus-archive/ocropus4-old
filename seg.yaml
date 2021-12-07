@@ -19,6 +19,7 @@ data:
     val_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-wseg-sub/uw3-wseg-{000117..000117}.tar"
     val_bs: 2
     augmentation: default
+    num_workers: 8
 checkpoint:
     every_n_epochs: 1
 lightning:
