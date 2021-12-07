@@ -35,13 +35,13 @@ import json
 
 from .utils import Schedule, repeatedly
 from . import utils
-from . import loading
 from . import patches
 from . import slices as sl
 from .utils import useopt, junk
 from . import degrade
 from . import confparse
 from . import jittable
+from . import segmodels
 
 
 app = typer.Typer()
@@ -58,7 +58,7 @@ data:
 checkpoint:
     every_n_epochs: 1
 lightning:
-    mname: segmentation_model_210429
+    mname: segmentation_model_210910
     lr: 0.01
     lr_halflife: 5
     display_freq: 100
@@ -174,24 +174,6 @@ class SegDataLoader(pl.LightningDataModule):
         return self.make_loader(self.params["val_shards"], self.params.val_bs, "val")
 
 
-class SegModel(nn.Module):
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
-
-    @torch.jit.export
-    def forward(self, x):
-        assert x.min() >= 0.0 and x.max() <= 1.0
-        if torch.mean(x) < 0.5:
-            x = 1 - x
-        x = self.standardize(x)
-        return self.model(x)
-
-    @torch.jit.export
-    def standardize(self, x):
-        return jittable.standardize_image(x)
-
-
 class SegLightning(pl.LightningModule):
     def __init__(
         self,
@@ -210,13 +192,9 @@ class SegLightning(pl.LightningModule):
         self.params = confparse.Params(locals())
         self.save_hyperparameters()
         self.hparams.config = json.dumps(self.params.__dict__)
-        basemodel.setdefault("module_path", "ocropus.segmodels")
-        if mname is not None:
-            basemodel = loading.construct_model(mname, **basemodel)
-            self.model = SegModel(basemodel, **segmodel)
-            # make sure the model is JIT-able
-            self.get_jit_model()
-            print("model created and is JIT-able")
+        self.model = segmodels.SegModel(mname, **segmodel)
+        self.get_jit_model()
+        print("model created and is JIT-able")
 
     def get_jit_model(self):
         script = torch.jit.script(self.model)
@@ -483,7 +461,6 @@ def train(argv: Optional[List[str]] = typer.Argument(None)) -> None:
     argv = argv or []
     config = confparse.parse_args(argv, default_config)
     yaml.dump(config, sys.stdout)
-    print("***", config["dumpjit"])
 
     dataconfig = config["data"]
     data = SegDataLoader(**dataconfig)
