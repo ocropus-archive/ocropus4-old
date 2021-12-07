@@ -4,9 +4,9 @@ import yaml
 class Params:
     """Wrapper for dictionaries that allows attribute-style access."""
 
-    def __init__(self, d):
+    def __init__(self, d, exclude=["__class__", "self"]):
         assert isinstance(d, dict)
-        self.__the_dict__ = d
+        self.__the_dict__ = {k: v for k, v in d.items() if k not in exclude}
 
     def get(self, *args):
         return self.__the_dict__.get(*args)

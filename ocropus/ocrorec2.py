@@ -414,15 +414,13 @@ class TextDataLoader(pl.LightningDataModule):
         ds = ds.select(goodsize)
         ds = ds.map_tuple(jittable.auto_resize, identity)
         ds = ds.select(partial(goodsize, max_w=params.max_w, max_h=params.max_h))
-        if params.nepoch > 0:
-            ds = ds.with_epoch(params.nepoch)
-        dl = DataLoader(
+        dl = wds.WebLoader(
             ds,
             collate_fn=collate4ocr,
             batch_size=batch_size,
             shuffle=False,
             num_workers=params.num_workers,
-        )
+        ).slice(self.params.nepoch // batch_size)
         return dl
 
     def train_dataloader(self) -> DataLoader:
@@ -751,6 +749,14 @@ def train(argv: Optional[List[str]] = typer.Argument(None)):
         callbacks=callbacks,
         **tconfig,
     )
+
+    if config.get("dumpjit"):
+        assert "resume_from_checkpoint" in config["trainer"], "must resume from checkpoint to dump JIT script"
+        script = smodel.get_jit_model()
+        torch.jit.save(script, config["dumpjit"])
+        print(f"# saved model to {config['dumpjit']}")
+        sys.exit(0)
+
     print("mcheckpoint.dirpath", mcheckpoint.dirpath)
     trainer.fit(lmodel, data)
 
