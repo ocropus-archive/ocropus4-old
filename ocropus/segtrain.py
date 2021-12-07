@@ -1,13 +1,7 @@
-import io
-import json
-import os
-import sys
+import io, json, os, sys
 from io import StringIO
 from itertools import islice
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import PIL
@@ -18,9 +12,7 @@ import typer
 import webdataset as wds
 import yaml
 from matplotlib import gridspec
-from numpy import amin
-from numpy import mean
-from numpy import median
+from numpy import amin, mean, median
 from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from scipy import ndimage as ndi
@@ -28,17 +20,9 @@ from torch import nn
 from torch.optim.lr_scheduler import LambdaLR
 from torchmore import layers
 
-from . import confparse
-from . import degrade
-from . import jittable
-from . import patches
-from . import segmodels
-from . import slices as sl
-from . import utils
-from .utils import Schedule
-from .utils import junk
-from .utils import repeatedly
-from .utils import useopt
+from . import (confparse, degrade, jittable, patches, segmodels, slices as sl,
+               utils)
+from .utils import Schedule, junk, repeatedly, useopt
 
 app = typer.Typer()
 

@@ -1,5 +1,5 @@
-from torchmore import flex, layers, combos
 from torch import nn
+from torchmore import combos, flex, layers
 
 
 class ModPad(nn.Module):

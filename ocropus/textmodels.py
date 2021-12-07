@@ -1,13 +1,9 @@
 
 import torch
 from torch import nn
-from torchmore import combos
-from torchmore import flex
-from torchmore import inputstats
-from torchmore import layers
+from torchmore import combos, flex, inputstats, layers
 
-from . import ocrlayers
-from . import utils
+from . import ocrlayers, utils
 from .utils import model
 
 ninput = 3

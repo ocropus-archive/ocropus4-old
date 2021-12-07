@@ -1,5 +1,6 @@
 from invoke import task
 
+
 @task
 def test1(c, arg1, opt="q"):
     """test1 is a test command.

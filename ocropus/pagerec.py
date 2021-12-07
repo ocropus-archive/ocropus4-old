@@ -1,7 +1,4 @@
-import functools
-import os
-import sys
-import traceback
+import functools, os, sys, traceback
 from collections import Counter
 
 import matplotlib.pyplot as plt
@@ -11,12 +8,8 @@ import webdataset as wds
 from lxml import etree
 from lxml.builder import E
 
-from . import loading
-from . import ocrorec
-from . import ocroseg
-from . import wordrec
-from .utils import BBox
-from .utils import public
+from . import loading, ocrorec, ocroseg, wordrec
+from .utils import BBox, public
 
 Charset = ocrorec.Charset
 

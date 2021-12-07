@@ -8,8 +8,7 @@ from .utils import safe_randint
 
 def mrot(a):
     """Make a rotation matrix."""
-    from math import cos
-    from math import sin
+    from math import cos, sin
 
     return np.array([[cos(a), -sin(a)], [sin(a), cos(a)]])
 

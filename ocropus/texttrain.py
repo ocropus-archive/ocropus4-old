@@ -1,20 +1,10 @@
 """Text recognition."""
 
-import io
-import json
-import os
-import random
-import re
-import sys
+import io, json, os, random, re, sys
 from functools import partial
 from io import StringIO
 from itertools import islice
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Tuple
-from typing import Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import editdistance
 import matplotlib.pyplot as plt
@@ -27,10 +17,7 @@ import typer
 import webdataset as wds
 import yaml
 from matplotlib import gridspec
-from numpy import amax
-from numpy import arange
-from numpy import newaxis
-from numpy import tile
+from numpy import amax, arange, newaxis, tile
 from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from scipy import ndimage as ndi
@@ -39,13 +26,7 @@ from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 from torchmore import layers
 
-from . import confparse
-from . import degrade
-from . import jittable
-from . import linemodels
-from . import textmodels
-from . import utils
-from .utils import useopt
+from . import confparse, degrade, jittable, linemodels, textmodels, utils
 
 _ = linemodels
 app = typer.Typer()
@@ -172,7 +153,7 @@ def collate4ocr(
 ###
 
 
-@useopt
+@utils.useopt
 def augment_none(image: torch.Tensor) -> torch.Tensor:
     """Perform no augmentation.
 
@@ -185,7 +166,7 @@ def augment_none(image: torch.Tensor) -> torch.Tensor:
     return utils.as_torchimage(image)
 
 
-@useopt
+@utils.useopt
 def augment_transform(image: torch.Tensor, p: float = 0.5) -> torch.Tensor:
     """Augment image using geometric transformations and noise.
 
@@ -212,7 +193,7 @@ def augment_transform(image: torch.Tensor, p: float = 0.5) -> torch.Tensor:
     return image
 
 
-@useopt
+@utils.useopt
 def augment_distort(image: torch.Tensor, p: float = 0.5) -> torch.Tensor:
     """Augment image using distortions and noise.
 
@@ -262,7 +243,7 @@ def fixquotes(s: str) -> str:
     return s
 
 
-@useopt
+@utils.useopt
 def normalize_none(s: str) -> str:
     """String normalization that only fixes quotes.
 
@@ -276,7 +257,7 @@ def normalize_none(s: str) -> str:
     return s
 
 
-@useopt
+@utils.useopt
 def normalize_simple(s: str) -> str:
     """Simple text normalization.
 
@@ -296,7 +277,7 @@ def normalize_simple(s: str) -> str:
     return s.strip()
 
 
-@useopt
+@utils.useopt
 def normalize_tex(s: str) -> str:
     """Simple text normalization.
 

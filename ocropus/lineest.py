@@ -2,8 +2,7 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.ndimage import filters
-from scipy.ndimage import interpolation
+from scipy.ndimage import filters, interpolation
 
 from .utils import public
 

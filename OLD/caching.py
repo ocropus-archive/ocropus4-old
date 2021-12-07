@@ -1,10 +1,6 @@
-import os
-import os.path
-import sys
-import io
+import io, os, os.path, re, sys, urllib.parse
+
 import webdataset.gopen as gopen
-import urllib.parse
-import re
 
 cachedir = os.path.join(os.environ.get("HOME", "/tmp"), ".datacache")
 

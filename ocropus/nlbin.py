@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
-import argparse
-import sys
+import argparse, sys
 from itertools import islice
 
 import matplotlib.pyplot as plt
@@ -10,9 +9,7 @@ import PIL
 import typer
 import webdataset as wds
 from scipy import stats
-from scipy.ndimage import filters
-from scipy.ndimage import interpolation
-from scipy.ndimage import morphology
+from scipy.ndimage import filters, interpolation, morphology
 from webdataset.iterators import getfirst
 
 from . import utils

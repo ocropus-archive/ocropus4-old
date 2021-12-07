@@ -1,5 +1,5 @@
 from torch import nn
-from torchmore import flex, layers, combos
+from torchmore import combos, flex, layers
 
 
 def make_model(noutput=4):

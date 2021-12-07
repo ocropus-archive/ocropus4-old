@@ -8,10 +8,7 @@ import torch
 import typer
 import webdataset as wds
 
-from . import loading
-from . import nlbin
-from . import slog
-from . import utils
+from . import loading, nlbin, slog, utils
 
 app = typer.Typer()
 

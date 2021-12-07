@@ -1,9 +1,4 @@
-import os
-import os.path
-import re
-import sys
-import time
-import urllib.parse
+import os, os.path, re, sys, time, urllib.parse
 
 import webdataset.gopen as gopen_mod
 

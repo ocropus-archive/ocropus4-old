@@ -1,29 +1,19 @@
+import glob, logging, os, pickle, re, sys, time
 from importlib import reload
-
-import os
-import sys
-import re
-import glob
-import time
-import pickle
-import scipy.ndimage as ndi
 from itertools import islice
-import IPython
-import logging
-
-import torch
-from torch import nn, optim
-from torch.nn import functional as F
-from torchmore import layers, flex
-import torchtrainers as tt
-from torch.utils.data import DataLoader
-
-from webdataset import WebDataset
 
 import helpers
-from helpers import method, ctc_decode, asnp
-
+import IPython
 import matplotlib.pyplot as plt
+import scipy.ndimage as ndi
+import torch
+import torchtrainers as tt
+from helpers import asnp, ctc_decode, method
+from torch import nn, optim
+from torch.nn import functional as F
+from torch.utils.data import DataLoader
+from torchmore import flex, layers
+from webdataset import WebDataset
 
 plt.rc("image", cmap="gray")
 plt.rc("image", interpolation="nearest")

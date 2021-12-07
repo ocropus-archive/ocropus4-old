@@ -1,7 +1,5 @@
 from torch import nn
-from torchmore import combos
-from torchmore import flex
-from torchmore import layers
+from torchmore import combos, flex, layers
 
 from .utils import useopt
 

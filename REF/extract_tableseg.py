@@ -1,19 +1,14 @@
-import io
-import os
-import re
-import sys
+import io, os, re, sys
 
 import numpy as np
+import scipy.ndimage as ndi
+import typer
 import webdataset as wds
 from lxml import etree
 from matplotlib import pylab
-import scipy.ndimage as ndi
 
-from . import utils
+from . import patches, utils
 from .utils import unused
-from . import patches
-
-import typer
 
 debug = int(os.environ.get("EXTRACT_SEG_DEBUG", "0"))
 

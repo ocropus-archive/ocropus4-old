@@ -1,6 +1,4 @@
-import io
-import re
-import sys
+import io, re, sys
 
 import numpy as np
 import scipy.ndimage as ndi
@@ -9,8 +7,7 @@ import webdataset as wds
 from lxml import etree
 from matplotlib import pylab
 
-from . import patches
-from . import utils
+from . import patches, utils
 from .utils import useopt
 
 # FIXME move this into the function, make it a command line argument
