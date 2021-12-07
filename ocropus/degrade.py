@@ -1,7 +1,5 @@
 import random as pyr
 import warnings
-from random import randint
-import math
 import random
 
 import numpy as np

@@ -4,7 +4,6 @@ import sys
 import typer
 from PIL import ImageFont, ImageDraw, Image
 import random
-import io
 import webdataset as wds
 import numpy as np
 import re

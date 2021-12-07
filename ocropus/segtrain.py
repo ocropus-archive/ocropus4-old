@@ -1,25 +1,15 @@
 import os
 import sys
-import time
-import math
-from typing import List, Tuple, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
-import random
 import typer
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from numpy import amin, median, mean
 from scipy import ndimage as ndi
-from torch import nn, optim
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
+from torch import nn
 import webdataset as wds
 from torchmore import layers
-import traceback
-import skimage
-import skimage.filters
-from functools import partial
 from itertools import islice
 import pytorch_lightning as pl
 import yaml
@@ -529,7 +519,7 @@ def predict(
     limit: int = 999999999,
 ):
     model = loading.load_only_model(model)
-    segmenter = Segmenter(model)
+    Segmenter(model)
 
     pass  # FIXME do something here
 
@@ -555,7 +545,7 @@ def segment(
     for sample in islice(dataset, 0, limit):
         image = wds.getfirst(sample, extensions)
         image = np.mean(image, 2)
-        result = segmenter.segment(image)
+        segmenter.segment(image)
 
         pass  # FIXME do something here
 

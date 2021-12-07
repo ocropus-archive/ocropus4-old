@@ -581,7 +581,7 @@ class TextLightning(pl.LightningModule):
         outputs = outputs.detach().softmax(1).cpu().numpy()[0]
         decoded = ctc_decode(outputs)
         decode_str = self.model.decode_str
-        t = decode_str(targets[0].cpu().numpy())
+        decode_str(targets[0].cpu().numpy())
         s = decode_str(decoded)
         # log the OCR result for the first image in the batch
         fig = plt.figure(figsize=(20, 10))

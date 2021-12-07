@@ -1,7 +1,5 @@
-import re
 
 import torch
-import torch.nn.functional as F
 import typer
 from torch import nn
 from torchmore import combos, flex, inputstats, layers

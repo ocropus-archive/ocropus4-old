@@ -1,10 +1,7 @@
-import re
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torchmore import combos, flex, inputstats, layers
-from typing import List, Tuple
 
 from . import ocrlayers, utils
 from .utils import model

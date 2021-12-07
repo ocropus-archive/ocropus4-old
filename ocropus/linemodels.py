@@ -1,4 +1,3 @@
-import sys
 from torchmore import flex, layers, combos
 from torch import nn
 from .utils import useopt

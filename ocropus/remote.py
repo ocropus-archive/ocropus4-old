@@ -1,7 +1,6 @@
 import os
 import os.path
 import sys
-import io
 import webdataset.gopen as gopen_mod
 import urllib.parse
 import re

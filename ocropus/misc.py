@@ -2,15 +2,12 @@
 
 import sys
 
-import argparse
 
 import PIL
 import numpy as np
 import typer
 import matplotlib.pyplot as plt
 from itertools import islice
-from scipy.ndimage import filters, interpolation, morphology
-from scipy import stats
 import webdataset as wds
 from webdataset.iterators import getfirst
 from . import utils

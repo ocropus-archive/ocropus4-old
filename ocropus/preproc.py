@@ -1,18 +1,12 @@
 from functools import partial
-import random as pyrand
 import sys
-from typing import List
 
 import matplotlib.pyplot as plt
 import numpy as np
 import typer
 import webdataset as wds
 import torch
-from torch import nn, optim
-from torch.utils import data
 from itertools import islice
-import scipy.ndimage as ndi
-from math import exp, log, cos, sin
 
 from . import slog
 from . import loading

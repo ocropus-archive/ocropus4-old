@@ -61,10 +61,10 @@ def scalar_convert(s):
     """Convert a scalar to an int/float if possible."""
     try:
         return int(s)
-    except:
+    except ValueError:
         try:
             return float(s)
-        except:
+        except ValueError:
             return s
 
 
