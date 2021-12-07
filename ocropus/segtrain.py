@@ -62,8 +62,8 @@ lightning:
     lr: 0.01
     lr_halflife: 5
     display_freq: 100
-    basemodel: {}
-    segmodel: {}
+    segmodel:
+        config: {}
 trainer:
     max_epochs: 10000
     gpus: 1
@@ -186,7 +186,6 @@ class SegLightning(pl.LightningModule):
         lr_halflife=10,
         display_freq=100,
         segmodel: Dict[Any, Any] = {},
-        basemodel: Dict[Any, Any] = {},
     ):
         super().__init__()
         self.params = confparse.Params(locals())
