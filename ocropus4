@@ -26,66 +26,8 @@ case $library in
 
 # data extraction
 
-extract-seg)  # extract segmentation for training segmenters
-    $python3 -m ocropus.extract_seg "$@"
-    ;;
-extract-rec)  # extract images for training recognizers
-    ;&
-extract-lines)
-    $python3 -m ocropus.extract_text "$@"
-    ;;
-extract-text)
-    $python3 -m ocropus.extract_text "$@"
-    ;;
-
-# inference
-
-ocroseg)  # page segmentation
-    $python3 -m ocropus.ocroseg "$@"
-    ;;
-ocroseg2)  # page segmentation
-    $python3 -m ocropus.ocroseg2 "$@"
-    ;;
-ocrotext)  # line/word recognition
-    ;&
-ocroline)
-    $python3 -m ocropus.ocrorec "$@"
-    ;;
-ocrorec)
-    $python3 -m ocropus.ocrorec "$@"
-    ;;
-ocrorec2)
-    $python3 -m ocropus.ocrorec2 "$@"
-    ;;
-ocrobin)   # binarization
-    $python3 -m ocropus.ocrobin "$@"
-    ;;
-ocroimg)   # binarization
-    $python3 -m ocropus.ocroimg "$@"
-    ;;
-ocrorot)   # page rotation/orientation detection
-    $python3 -m ocropus.ocrorot "$@"
-    ;;
-ocroskew)   # skew estimation
-    $python3 -m ocropus.ocroskew "$@"
-    ;;
-ocroscale)   # scale estimation
-    $python3 -m ocropus.ocroscale "$@"
-    ;;
-nlbin)  # nonlinear binarization
-    $python3 -m ocropus.nlbin "$@"
-    ;;
-slog)  # examine logs
-    $python3 -m ocropus.slog "$@"
-    ;;
-pubnet)  # pubnet-based layout analysis and table segmentation
-    $python3 -m ocropus.pubnet "$@"
-    ;;
-wordrec)  # recognize and output all the words on a page
-    $python3 -m ocropus.wordrec "$@"
-    ;;
-pagerec)  # recognize pages with layout information
-    $python3 -m ocropus.pagerec "$@"
+texttrain)  # recognize pages with layout information
+    $python3 -m ocropus.texttrain "$@"
     ;;
 models)  # list and show models
     $python3 -m ocropus.models "$@"

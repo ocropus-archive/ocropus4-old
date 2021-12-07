@@ -7,16 +7,8 @@
 import os
 import pytest
 import webdataset as wds
-from ocropus import ocrorec
-from ocropus import ocroseg
-from ocropus import slog
-from ocropus import nlbin
-from ocropus import ocrobin
-from ocropus import ocrorot
-from ocropus import ocroscale
-from ocropus import ocroskew
-from ocropus import pubnet
-from ocropus import loading
+from ocropus import texttrain
+from ocropus import segtrain
 import torch.jit
 
 bucket = "pipe:curl -sL https://storage.googleapis.com/ocropus4-test"
@@ -28,122 +20,6 @@ def test_data():
     next(iter(ds))
 
 
-def test_ocrorec_scriptable(tmpdir):
-    mname = "wordmodel.pth"
-    assert 0 == os.system(f"curl -sL {mbucket}/{mname} > {tmpdir}/{mname}")
-    model = loading.load_only_model(f"{tmpdir}/{mname}")
-    torch.jit.script(model)
+def test_texttrain(tmpdir):
+    texttrain.train([])
 
-
-def test_ocroseg_scriptable(tmpdir):
-    mname = "wsegmodel.pth"
-    assert 0 == os.system(f"curl -sL {mbucket}/{mname} > {tmpdir}/{mname}")
-    model = loading.load_only_model(f"{tmpdir}/{mname}")
-    torch.jit.script(model)
-
-
-def test_ocrorec_pretrained(tmpdir):
-    mname = "wordmodel.pth"
-    assert 0 == os.system(f"curl -sL {mbucket}/{mname} > {tmpdir}/{mname}")
-    ocrorec.recognize(f"{bucket}/gsub-words-test.tar",
-                      model=f"{tmpdir}/{mname}", display=False, limit=3)
-
-
-def test_ocroseg_pretrained(tmpdir):
-    mname = "wsegmodel.pth"
-    assert 0 == os.system(f"curl -sL {mbucket}/{mname} > {tmpdir}/{mname}")
-    ocroseg.segment(f"{bucket}/gsub-test.tar",
-                    model=f"{tmpdir}/{mname}", display=False, limit=3)
-
-
-def test_ocrorec(tmpdir):
-    ocrorec.train(f"{bucket}/gsub-words-test.tar",
-                  log_to=f"{tmpdir}/ocrorec-train.sqlite3", ntrain=100)
-    slog.getbest(f"{tmpdir}/ocrorec-train.sqlite3", f"{tmpdir}/ocrorec.pth")
-    ocrorec.recognize(f"{bucket}/gsub-words-test.tar",
-                      model=f"{tmpdir}/ocrorec.pth", display=False, limit=3)
-    model = loading.load_only_model(f"{tmpdir}/ocrorec.pth")
-    torch.jit.script(model)
-
-
-def test_ocroseg(tmpdir):
-    ocroseg.train(f"{bucket}/gsub-wseg-test.tar",
-                  log_to=f"{tmpdir}/ocroseg-train.sqlite3", ntrain=100)
-    slog.getbest(f"{tmpdir}/ocroseg-train.sqlite3", f"{tmpdir}/ocroseg.pth")
-    ocroseg.predict(f"{bucket}/gsub-wseg-test.tar",
-                    model=f"{tmpdir}/ocroseg.pth")
-    ocroseg.predict(f"{bucket}/gsub-test.tar", model=f"{tmpdir}/ocroseg.pth")
-    model = loading.load_only_model(f"{tmpdir}/ocroseg.pth")
-    torch.jit.script(model)
-
-
-def test_nlbin(tmpdir):
-    nlbin.binarize(f"{bucket}/gsub-test.tar",
-                   output=f"{tmpdir}/binarized.tar", maxrec=3)
-    nlbin.binarize(f"{bucket}/gsub-test.tar",
-                   output=f"{tmpdir}/binarized.tar", deskew=True, maxrec=3)
-
-
-def test_ocrobin(tmpdir):
-    ocrobin.train([f"{bucket}/gsub-bin-test.tar"], nsamples=10,
-                  log_to=f"{tmpdir}/ocrobin-train.sqlite3")
-    slog.getbest(f"{tmpdir}/ocrobin-train.sqlite3", f"{tmpdir}/ocrobin.pth")
-    ocrobin.binarize(f"{bucket}/gsub-test.tar", iext="jpeg",
-                     output=f"{tmpdir}/binarized.tar", model=f"{tmpdir}/ocrobin.pth", limit=10)
-    model = loading.load_only_model(f"{tmpdir}/ocrobin.pth")
-    torch.jit.script(model)
-
-
-def test_ocrorot(tmpdir):
-    ocrorot.train([f"{bucket}/gsub-bin-test.tar"], nsamples=10,
-                  log_to=f"{tmpdir}/ocrorot-train.sqlite3")
-    slog.getbest(f"{tmpdir}/ocrorot-train.sqlite3", f"{tmpdir}/ocrorot.pth")
-    ocrorot.correct([f"{bucket}/gsub-bin-test.tar"], nsamples=10,
-                    output=f"{tmpdir}/rotated.tar", model=f"{tmpdir}/ocrorot.pth")
-    model = loading.load_only_model(f"{tmpdir}/ocrorot.pth")
-    torch.jit.script(model)
-
-
-def test_ocroscale(tmpdir):
-    ocroscale.train([f"{bucket}/gsub-bin-test.tar"], nsamples=10,
-                    log_to=f"{tmpdir}/ocroscale-train.sqlite3")
-    slog.getbest(f"{tmpdir}/ocroscale-train.sqlite3",
-                 f"{tmpdir}/ocroscale.pth")
-    ocroscale.correct([f"{bucket}/gsub-bin-test.tar"], nsamples=10,
-                      output=f"{tmpdir}/scaleated.tar", model=f"{tmpdir}/ocroscale.pth")
-    model = loading.load_only_model(f"{tmpdir}/ocroscale.pth")
-    torch.jit.script(model)
-
-
-def test_ocroskew(tmpdir):
-    ocroskew.train([f"{bucket}/gsub-bin-test.tar"], nsamples=10,
-                   log_to=f"{tmpdir}/ocroskew-train.sqlite3")
-    slog.getbest(f"{tmpdir}/ocroskew-train.sqlite3", f"{tmpdir}/ocroskew.pth")
-    ocroskew.correct([f"{bucket}/gsub-bin-test.tar"], nsamples=10,
-                     output=f"{tmpdir}/skewated.tar", model=f"{tmpdir}/ocroskew.pth")
-    model = loading.load_only_model(f"{tmpdir}/ocroskew.pth")
-    torch.jit.script(model)
-
-
-def test_publaynet_pretrained(tmpdir):
-    mname = "publaynet-model.pth"
-    assert 0 == os.system(f"curl -sL {mbucket}/{mname} > {tmpdir}/{mname}")
-    pubnet.pageseg(f"{bucket}/publaynet-train-test.tar",
-                   model=f"{tmpdir}/{mname}", display=-1, slice="3")
-    model = loading.load_only_model(f"{tmpdir}/{mname}")
-    torch.jit.script(model)
-
-
-def test_pubtabnet_pretrained(tmpdir):
-    mname = "pubtabnet-model.pth"
-    assert 0 == os.system(f"curl -sL {mbucket}/{mname} > {tmpdir}/{mname}")
-    pubnet.tabseg(f"{bucket}/pubtabnet-train-test.tar",
-                  model=f"{tmpdir}/{mname}", display=-1, slice="3")
-    model = loading.load_only_model(f"{tmpdir}/{mname}")
-    torch.jit.script(model)
-
-
-# TODO:
-# - hocr2... command tests
-# - pubnet training data generation as commands
-# - test cases for pagerec etc.

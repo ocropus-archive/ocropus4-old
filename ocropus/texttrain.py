@@ -32,9 +32,10 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torchmore import layers
 
-from . import degrade, lineest, linemodels, loading, slog, utils, jittable
+from . import degrade, linemodels, utils, jittable
 from .utils import useopt
 from . import confparse
+from . import textmodels
 import torch.jit
 
 _ = linemodels
@@ -59,9 +60,9 @@ lightning:
     lr_halflife: 2
     display_freq: 1000
     textmodel:
-        charset_size: 128
-    basemodel:
-        noutput: 128
+        charset: ascii
+        config:
+            noutput: 128
 trainer:
     max_epochs: 10000
     gpus: 1
@@ -456,61 +457,6 @@ class TextDataLoader(pl.LightningDataModule):
 ###
 
 
-class TextModel(nn.Module):
-    """Word-level text model."""
-
-    def __init__(self, model, charset_size=128, unknown_char=26):
-        super().__init__()
-        self.charset_size = charset_size
-        self.unknown_char = unknown_char
-        self.model = model
-
-    @torch.jit.export
-    def forward(self, images):
-        b, c, h, w = images.shape
-        assert c == torch.tensor(1) or c == torch.tensor(3)
-        if c == torch.tensor(1):
-            images = images.repeat(1, 3, 1, 1)
-            b, c, h, w = images.shape
-        assert h > 15 and h < 4000 and w > 15 and h < 4000
-        for image in images:
-            image -= image.min()  # was: amin()
-            image /= torch.max(image.amax(), torch.tensor([0.01], device=image.device))
-            if image.mean() > 0.5:
-                image[:, :, :] = 1.0 - image[:, :, :]
-        return self.model.forward(images)
-
-    # the following methods are here so that they can be exported to torchscript
-
-    @torch.jit.export
-    def standardize(self, im: torch.Tensor) -> torch.Tensor:
-        """Standardize the intensity levels in an image."""
-        return jittable.standardize_image(im)
-
-    @torch.jit.export
-    def auto_resize(self, im: torch.Tensor) -> torch.Tensor:
-        """Auto-resize an image to a standard size."""
-        return jittable.auto_resize(im)
-
-    @torch.jit.export
-    def make_batch(self, images: List[torch.Tensor]) -> torch.Tensor:
-        """Make a batch of images by resizing them and centering their contents."""
-        batch = jittable.stack_images(images)
-        return batch
-
-    @torch.jit.export
-    def encode_str(self, s: str) -> torch.Tensor:
-        """Encode a string as a tensor."""
-        result = torch.tensor([ord(c) for c in s], dtype=torch.long)
-        result[result >= self.charset_size] = self.unknown_char
-        return result
-
-    @torch.jit.export
-    def decode_str(self, a: torch.Tensor) -> str:
-        """Decode a tensor as a string."""
-        return "".join([chr(int(c)) for c in a])
-
-
 class TextLightning(pl.LightningModule):
     """A class encapsulating the logic for training text line recognizers.
 
@@ -538,12 +484,9 @@ class TextLightning(pl.LightningModule):
         self.total = 0
         self.hparams.config = json.dumps(config)
         self.save_hyperparameters(ignore="display_freq".split())
-        if mname is not None:
-            basemodel = loading.load_or_construct_model(mname, **basemodel)
-            self.model = TextModel(basemodel, **textmodel)
-            # make sure the model is JIT-able
-            self.get_jit_model()
-            print("model created and is JIT-able")
+        self.model = textmodels.TextModel(mname, **textmodel)
+        self.get_jit_model()
+        print("model created and is JIT-able")
 
     def get_jit_model(self):
         """Get the JIT-able version of the model."""

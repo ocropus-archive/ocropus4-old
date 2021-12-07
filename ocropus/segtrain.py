@@ -34,7 +34,6 @@ import PIL.Image
 import json
 
 from .utils import Schedule, repeatedly
-from . import slog
 from . import utils
 from . import loading
 from . import patches
@@ -211,6 +210,7 @@ class SegLightning(pl.LightningModule):
         self.params = confparse.Params(locals())
         self.save_hyperparameters()
         self.hparams.config = json.dumps(self.params.__dict__)
+        basemodel.setdefault("module_path", "ocropus.segmodels")
         if mname is not None:
             basemodel = loading.construct_model(mname, **basemodel)
             self.model = SegModel(basemodel, **segmodel)

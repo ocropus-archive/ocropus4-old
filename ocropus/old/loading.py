@@ -15,8 +15,6 @@ import tempfile
 import warnings
 import os.path
 
-from . import slog
-
 #
 # Modules
 #
