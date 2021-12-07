@@ -1,14 +1,15 @@
 import numpy as np
-from scipy import ndimage as ndi
-
 import torch
 import torch.functional as F
+from scipy import ndimage as ndi
+
 from .utils import safe_randint
 
 
 def mrot(a):
     """Make a rotation matrix."""
-    from math import sin, cos
+    from math import cos
+    from math import sin
 
     return np.array([[cos(a), -sin(a)], [sin(a), cos(a)]])
 

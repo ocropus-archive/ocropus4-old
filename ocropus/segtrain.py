@@ -1,38 +1,44 @@
+import io
+import json
 import os
 import sys
-from typing import Any, Dict, List, Optional
-
-import typer
-import numpy as np
-import torch
-from numpy import amin, median, mean
-from scipy import ndimage as ndi
-from torch import nn
-import webdataset as wds
-from torchmore import layers
-from itertools import islice
-import pytorch_lightning as pl
-import yaml
 from io import StringIO
-from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.callbacks import LearningRateMonitor
-from torch.optim.lr_scheduler import LambdaLR
-from matplotlib import gridspec
-import io
+from itertools import islice
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+
+import numpy as np
 import PIL
 import PIL.Image
-import json
+import pytorch_lightning as pl
+import torch
+import typer
+import webdataset as wds
+import yaml
+from matplotlib import gridspec
+from numpy import amin
+from numpy import mean
+from numpy import median
+from pytorch_lightning.callbacks import LearningRateMonitor
+from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
+from scipy import ndimage as ndi
+from torch import nn
+from torch.optim.lr_scheduler import LambdaLR
+from torchmore import layers
 
-from .utils import Schedule, repeatedly
-from . import utils
-from . import patches
-from . import slices as sl
-from .utils import useopt, junk
-from . import degrade
 from . import confparse
+from . import degrade
 from . import jittable
+from . import patches
 from . import segmodels
-
+from . import slices as sl
+from . import utils
+from .utils import Schedule
+from .utils import junk
+from .utils import repeatedly
+from .utils import useopt
 
 app = typer.Typer()
 

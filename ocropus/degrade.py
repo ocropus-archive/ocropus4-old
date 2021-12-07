@@ -1,6 +1,6 @@
+import random
 import random as pyr
 import warnings
-import random
 
 import numpy as np
 import pylab

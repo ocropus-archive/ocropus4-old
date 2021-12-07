@@ -1,12 +1,12 @@
-import sys
 import io
 import re
+import sys
 
+import numpy as np
 import typer
+import webdataset as wds
 from lxml import html
 from matplotlib import pylab
-import webdataset as wds
-import numpy as np
 
 from . import utils
 

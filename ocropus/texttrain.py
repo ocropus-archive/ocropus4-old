@@ -6,37 +6,46 @@ import os
 import random
 import re
 import sys
-from typing import List, Optional, Dict, Any, Tuple, Union
 from functools import partial
 from io import StringIO
 from itertools import islice
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import Union
 
-import yaml
-
-import typer
 import editdistance
 import matplotlib.pyplot as plt
-from matplotlib import gridspec
 import numpy as np
 import PIL
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.callbacks import LearningRateMonitor
-from torch.optim.lr_scheduler import LambdaLR
 import torch
+import torch.jit
 import typer
 import webdataset as wds
-from numpy import amax, arange, newaxis, tile
+import yaml
+from matplotlib import gridspec
+from numpy import amax
+from numpy import arange
+from numpy import newaxis
+from numpy import tile
+from pytorch_lightning.callbacks import LearningRateMonitor
+from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from scipy import ndimage as ndi
 from torch import nn
+from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 from torchmore import layers
 
-from . import degrade, linemodels, utils, jittable
-from .utils import useopt
 from . import confparse
+from . import degrade
+from . import jittable
+from . import linemodels
 from . import textmodels
-import torch.jit
+from . import utils
+from .utils import useopt
 
 _ = linemodels
 app = typer.Typer()

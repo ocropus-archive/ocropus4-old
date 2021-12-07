@@ -1,6 +1,7 @@
 import os
 import signal
 import sys
+from itertools import islice
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,17 +11,16 @@ import torch
 import torch.nn.functional as F
 import typer
 import webdataset as wds
-from scipy import ndimage as ndi
-from itertools import islice
-
-from . import loading, ocroseg
-from . import slices as sl
-from . import ocroseg
-from .utils import useopt, junk
-from . import utils
 from matplotlib.patches import Rectangle
-from . import slog
+from scipy import ndimage as ndi
 
+from . import loading
+from . import ocroseg
+from . import slices as sl
+from . import slog
+from . import utils
+from .utils import junk
+from .utils import useopt
 
 logger = slog.NoLogger()
 

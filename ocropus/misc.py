@@ -1,17 +1,16 @@
 #!/usr/bin/env python
 
 import sys
-
-
-import PIL
-import numpy as np
-import typer
-import matplotlib.pyplot as plt
 from itertools import islice
+
+import matplotlib.pyplot as plt
+import numpy as np
+import PIL
+import typer
 import webdataset as wds
 from webdataset.iterators import getfirst
-from . import utils
 
+from . import utils
 
 app = typer.Typer()
 

@@ -1,12 +1,15 @@
 import os
 import os.path
-import sys
-import typer
-from PIL import ImageFont, ImageDraw, Image
 import random
-import webdataset as wds
-import numpy as np
 import re
+import sys
+
+import numpy as np
+import typer
+import webdataset as wds
+from PIL import Image
+from PIL import ImageDraw
+from PIL import ImageFont
 
 app = typer.Typer()
 

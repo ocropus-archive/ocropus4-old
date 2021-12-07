@@ -1,22 +1,22 @@
+import functools
+import os
+import sys
+import traceback
+from collections import Counter
+
+import matplotlib.pyplot as plt
 import numpy as np
 import typer
-import sys
-import os
-import matplotlib.pyplot as plt
-from collections import Counter
-import functools
 import webdataset as wds
-import traceback
+from lxml import etree
+from lxml.builder import E
 
+from . import loading
 from . import ocrorec
 from . import ocroseg
 from . import wordrec
-from . import loading
-from .utils import public
-from lxml import etree
-from lxml.builder import E
 from .utils import BBox
-
+from .utils import public
 
 Charset = ocrorec.Charset
 

@@ -1,18 +1,17 @@
-from functools import partial
 import sys
+from functools import partial
+from itertools import islice
 
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 import typer
 import webdataset as wds
-import torch
-from itertools import islice
 
-from . import slog
 from . import loading
-from . import utils
 from . import nlbin
-
+from . import slog
+from . import utils
 
 app = typer.Typer()
 

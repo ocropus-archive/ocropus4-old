@@ -1,10 +1,11 @@
 import os
 import os.path
-import sys
-import webdataset.gopen as gopen_mod
-import urllib.parse
 import re
+import sys
 import time
+import urllib.parse
+
+import webdataset.gopen as gopen_mod
 
 cachedir = os.environ.get("OCROCACHE", os.path.join(os.environ.get("HOME", "/tmp"), ".ocropus4/cache"))
 modeldir = os.environ.get("OCROMODELS", os.path.join(os.environ.get("HOME", "/tmp"), ".ocropus4/models"))
