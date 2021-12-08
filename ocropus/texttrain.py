@@ -18,7 +18,6 @@ import PIL
 import pytorch_lightning as pl
 import torch
 import torch.jit
-import typer
 import webdataset as wds
 import yaml
 from matplotlib import gridspec
@@ -34,7 +33,6 @@ from torchmore import layers
 from . import confparse, degrade, jittable, linemodels, textmodels, utils
 
 _ = linemodels
-app = typer.Typer()
 
 
 default_config = """
@@ -628,26 +626,7 @@ class TextLightning(pl.LightningModule):
 ###
 
 
-@app.command()
-def defaults():
-    """Print the default config."""
-    yaml.dump(default_config, sys.stdout)
-
-
-@app.command()
-def dumpjit(src: str, dst: str):
-    print(f"loading {src}")
-    ckpt = torch.load(open(src, "rb"))
-    model = ckpt["hyper_parameters"]["model"]
-    model.cpu()
-    script = torch.jit.script(model)
-    print(f"dumping {dest}")
-    assert not os.path.exists(dest)
-    torch.jit.save(script, dest)
-
-
-@app.command()
-def train(argv: Optional[List[str]] = typer.Argument(None)):
+def train(argv: List[str]):
     argv = argv or []
     config = confparse.parse_args(argv, default_config)
     yaml.dump(config, sys.stdout)
@@ -702,4 +681,4 @@ def train(argv: Optional[List[str]] = typer.Argument(None)):
 
 
 if __name__ == "__main__":
-    app()
+    train(sys.argv[1:])
