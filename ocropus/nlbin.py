@@ -1,20 +1,19 @@
 #!/usr/bin/env python
 
-import sys
-
 import argparse
-
-import PIL
-import numpy as np
-import typer
-import matplotlib.pyplot as plt
+import sys
 from itertools import islice
-from scipy.ndimage import filters, interpolation, morphology
-from scipy import stats
-import webdataset as wds
-from webdataset.iterators import getfirst
-from . import utils
 
+import matplotlib.pyplot as plt
+import numpy as np
+import PIL
+import typer
+import webdataset as wds
+from scipy import stats
+from scipy.ndimage import filters, interpolation, morphology
+from webdataset.iterators import getfirst
+
+from . import utils
 
 app = typer.Typer()
 
@@ -121,7 +120,7 @@ def estimate_local_whitelevel(image, zoom=0.5, perc=80, dist=20, debug=0):
 
 
 def estimate_skew_and_fix(flat, bignore=0.1, maxskew=2, skewsteps=8):
-    """ estimate skew angle and rotate"""
+    """estimate skew angle and rotate"""
     d0, d1 = flat.shape
     o0, o1 = int(bignore * d0), int(bignore * d1)  # border ignore
     flat = np.amax(flat) - flat
@@ -194,7 +193,9 @@ def nlbin(raw, args=None, deskew=True):
         image, args.zoom, args.perc, args.dist, debug_nlbin
     )
     if deskew:
-        flat, angle = estimate_skew_and_fix(flat, args.bignore, args.maxskew, args.skewsteps)
+        flat, angle = estimate_skew_and_fix(
+            flat, args.bignore, args.maxskew, args.skewsteps
+        )
     lo, hi = estimate_thresholds(
         flat, args.bignore, args.escale, args.lo, args.hi, debug_nlbin
     )
@@ -259,7 +260,7 @@ def binarize(
     maxrec: int = 999999999999,
     deskew: bool = False,
     display: int = -1,
-    nokeep: bool = False
+    nokeep: bool = False,
 ):
     """Binarize a shard of images."""
     args = utils.Record(**locals())

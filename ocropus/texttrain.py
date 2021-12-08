@@ -2,44 +2,36 @@
 
 import io
 import json
-import os
 import random
 import re
 import sys
-from typing import List, Optional, Dict, Any, Tuple, Union
 from functools import partial
 from io import StringIO
 from itertools import islice
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-import yaml
-
-import typer
 import editdistance
 import matplotlib.pyplot as plt
-from matplotlib import gridspec
 import numpy as np
 import PIL
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.callbacks import LearningRateMonitor
-from torch.optim.lr_scheduler import LambdaLR
 import torch
-import typer
+import torch.jit
 import webdataset as wds
+import yaml
+from matplotlib import gridspec
 from numpy import amax, arange, newaxis, tile
+from pytorch_lightning.callbacks import LearningRateMonitor
+from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from scipy import ndimage as ndi
 from torch import nn
+from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 from torchmore import layers
 
-from . import degrade, linemodels, utils, jittable
-from .utils import useopt
-from . import confparse
-from . import textmodels
-import torch.jit
+from . import confparse, degrade, jittable, linemodels, textmodels, utils
 
 _ = linemodels
-app = typer.Typer()
 
 
 default_config = """
@@ -163,7 +155,7 @@ def collate4ocr(
 ###
 
 
-@useopt
+@utils.useopt
 def augment_none(image: torch.Tensor) -> torch.Tensor:
     """Perform no augmentation.
 
@@ -176,7 +168,7 @@ def augment_none(image: torch.Tensor) -> torch.Tensor:
     return utils.as_torchimage(image)
 
 
-@useopt
+@utils.useopt
 def augment_transform(image: torch.Tensor, p: float = 0.5) -> torch.Tensor:
     """Augment image using geometric transformations and noise.
 
@@ -203,7 +195,7 @@ def augment_transform(image: torch.Tensor, p: float = 0.5) -> torch.Tensor:
     return image
 
 
-@useopt
+@utils.useopt
 def augment_distort(image: torch.Tensor, p: float = 0.5) -> torch.Tensor:
     """Augment image using distortions and noise.
 
@@ -253,7 +245,7 @@ def fixquotes(s: str) -> str:
     return s
 
 
-@useopt
+@utils.useopt
 def normalize_none(s: str) -> str:
     """String normalization that only fixes quotes.
 
@@ -267,7 +259,7 @@ def normalize_none(s: str) -> str:
     return s
 
 
-@useopt
+@utils.useopt
 def normalize_simple(s: str) -> str:
     """Simple text normalization.
 
@@ -287,7 +279,7 @@ def normalize_simple(s: str) -> str:
     return s.strip()
 
 
-@useopt
+@utils.useopt
 def normalize_tex(s: str) -> str:
     """Simple text normalization.
 
@@ -581,7 +573,7 @@ class TextLightning(pl.LightningModule):
         outputs = outputs.detach().softmax(1).cpu().numpy()[0]
         decoded = ctc_decode(outputs)
         decode_str = self.model.decode_str
-        t = decode_str(targets[0].cpu().numpy())
+        decode_str(targets[0].cpu().numpy())
         s = decode_str(decoded)
         # log the OCR result for the first image in the batch
         fig = plt.figure(figsize=(20, 10))
@@ -633,26 +625,7 @@ class TextLightning(pl.LightningModule):
 ###
 
 
-@app.command()
-def defaults():
-    """Print the default config."""
-    yaml.dump(default_config, sys.stdout)
-
-
-@app.command()
-def dumpjit(src: str, dst: str):
-    print(f"loading {src}")
-    ckpt = torch.load(open(src, "rb"))
-    model = ckpt["hyper_parameters"]["model"]
-    model.cpu()
-    script = torch.jit.script(model)
-    print(f"dumping {dest}")
-    assert not os.path.exists(dest)
-    torch.jit.save(script, dest)
-
-
-@app.command()
-def train(argv: Optional[List[str]] = typer.Argument(None)):
+def train(argv: List[str]):
     argv = argv or []
     config = confparse.parse_args(argv, default_config)
     yaml.dump(config, sys.stdout)
@@ -694,7 +667,9 @@ def train(argv: Optional[List[str]] = typer.Argument(None)):
     )
 
     if config.get("dumpjit"):
-        assert "resume_from_checkpoint" in config["trainer"], "must resume from checkpoint to dump JIT script"
+        assert (
+            "resume_from_checkpoint" in config["trainer"]
+        ), "must resume from checkpoint to dump JIT script"
         script = smodel.get_jit_model()
         torch.jit.save(script, config["dumpjit"])
         print(f"# saved model to {config['dumpjit']}")
@@ -705,4 +680,4 @@ def train(argv: Optional[List[str]] = typer.Argument(None)):
 
 
 if __name__ == "__main__":
-    app()
+    train(sys.argv[1:])

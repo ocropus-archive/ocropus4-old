@@ -1,8 +1,6 @@
+import random
 import random as pyr
 import warnings
-from random import randint
-import math
-import random
 
 import numpy as np
 import pylab
@@ -33,7 +31,9 @@ def fgbg(selector, fg, bg, check=False):
     return selector * fg + (1.0 - selector) * bg
 
 
-def random_transform(translation=(-0.01, 0.01), rotation=(-2, 2), scale=(-0.1, 0.0), aniso=(-0.1, 0.1)):
+def random_transform(
+    translation=(-0.01, 0.01), rotation=(-2, 2), scale=(-0.1, 0.0), aniso=(-0.1, 0.1)
+):
     """Generate a random affine transform. Return a dict."""
     dx = pyr.uniform(*translation)
     dy = pyr.uniform(*translation)
@@ -44,7 +44,9 @@ def random_transform(translation=(-0.01, 0.01), rotation=(-2, 2), scale=(-0.1, 0
     return dict(angle=angle, scale=scale, aniso=aniso, translation=(dx, dy))
 
 
-def transform_image(image, angle=0.0, scale=1.0, aniso=1.0, translation=(0, 0), order=1):
+def transform_image(
+    image, angle=0.0, scale=1.0, aniso=1.0, translation=(0, 0), order=1
+):
     """Transform an image with a random set of transformations.
 
     Output is same size as input."""
@@ -58,7 +60,9 @@ def transform_image(image, angle=0.0, scale=1.0, aniso=1.0, translation=(0, 0), 
     w, h = image.shape
     c = np.array([w, h]) / 2.0
     d = c - np.dot(m, c) + np.array([dx * w, dy * h])
-    return ndi.affine_transform(image, m, offset=d, order=order, mode="constant", output=image.dtype)
+    return ndi.affine_transform(
+        image, m, offset=d, order=order, mode="constant", output=image.dtype
+    )
 
 
 def transform_all(*args, order=1, **kw):
@@ -71,14 +75,18 @@ def transform_all(*args, order=1, **kw):
     return tuple(transform_image(x, order=o, **t) for x, o in zip(args, order))
 
 
-def xtransform_image(image, angle=0.0, scale=1.0, aniso=1.0, translation=(0, 0), order=1):
+def xtransform_image(
+    image, angle=0.0, scale=1.0, aniso=1.0, translation=(0, 0), order=1
+):
     """Transform an image with a random set of transformations.
 
     Uses individual transforms and grows/shrinks image as necessary."""
     if angle != 0.0:
         image = ndi.rotate(image, angle, order=1, mode="constant")
     if scale != 1.0 or aniso != 1.0:
-        image = ndi.zoom(image, (scale*aniso, scale/aniso), order=1, mode="constant")
+        image = ndi.zoom(
+            image, (scale * aniso, scale / aniso), order=1, mode="constant"
+        )
     return image
 
 
@@ -162,7 +170,9 @@ def make_noise_at_scale(shape, scale):
     return np.clip(result[:h, :w], 0, 1)
 
 
-def noisify(image, sigma=(0.0, 2.0), amp1=0.05, sigma1=(0.5, 2.0), amp2=0.2, sigma2=(20.0, 40.0)):
+def noisify(
+    image, sigma=(0.0, 2.0), amp1=0.05, sigma1=(0.5, 2.0), amp2=0.2, sigma2=(20.0, 40.0)
+):
     if isinstance(sigma, tuple):
         sigma = random.uniform(*sigma)
     if isinstance(sigma1, tuple):
@@ -180,4 +190,3 @@ def noisify(image, sigma=(0.0, 2.0), amp1=0.05, sigma1=(0.5, 2.0), amp2=0.2, sig
     image = image - np.amin(image)
     image /= max(np.amax(image), 0.001)
     return image
-

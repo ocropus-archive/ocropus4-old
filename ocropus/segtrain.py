@@ -1,50 +1,29 @@
-import os
-import sys
-import time
-import math
-from typing import List, Tuple, Dict, Any, Optional
-
-import random
-import typer
-import matplotlib.pyplot as plt
-import numpy as np
-import torch
-from numpy import amin, median, mean
-from scipy import ndimage as ndi
-from torch import nn, optim
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
-import webdataset as wds
-from torchmore import layers
-import traceback
-import skimage
-import skimage.filters
-from functools import partial
-from itertools import islice
-import pytorch_lightning as pl
-import yaml
-from io import StringIO
-from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.callbacks import LearningRateMonitor
-from torch.optim.lr_scheduler import LambdaLR
-from matplotlib import gridspec
 import io
+import json
+import sys
+from io import StringIO
+from itertools import islice
+from typing import Any, Dict, List
+
+import numpy as np
 import PIL
 import PIL.Image
-import json
+import pytorch_lightning as pl
+import torch
+import webdataset as wds
+import yaml
+from matplotlib import gridspec
+from pytorch_lightning.callbacks import LearningRateMonitor
+from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
+from scipy import ndimage as ndi
+from torch import nn
+from torch.optim.lr_scheduler import LambdaLR
+from torchmore import layers
 
-from .utils import Schedule, repeatedly
-from . import utils
-from . import patches
+from . import confparse, degrade, jittable, segmodels
 from . import slices as sl
-from .utils import useopt, junk
-from . import degrade
-from . import confparse
-from . import jittable
-from . import segmodels
-
-
-app = typer.Typer()
+from . import utils
+from .utils import Schedule, junk, repeatedly, useopt
 
 default_config = """
 data:
@@ -346,117 +325,7 @@ class SegLightning(pl.LightningModule):
             exp.log({key: [wandb.Image(image, caption=key)]})
 
 
-###
-# Inference
-###
-
-
-def spread_labels(labels, maxdist=9999999):
-    """Spread the given labels to the background"""
-    distances, features = ndi.distance_transform_edt(
-        labels == 0, return_distances=1, return_indices=1
-    )
-    indexes = features[0] * labels.shape[1] + features[1]
-    spread = labels.ravel()[indexes.ravel()].reshape(*labels.shape)
-    spread *= distances < maxdist
-    return spread
-
-
-def marker_segmentation(markers, regions, maxdist=100):
-    labels, _ = ndi.label(markers)
-    spread = spread_labels(labels, maxdist=maxdist)
-    segmented = np.where(np.maximum(markers, regions), spread, 0)
-    return segmented
-
-
-def smooth_probabilities(probs, smooth):
-    if smooth == 0.0:
-        return probs
-    if isinstance(smooth, (int, float)):
-        smooth = (float(smooth), float(smooth), 0)
-    else:
-        assert len(smooth) == 2
-        smooth = list(smooth) + [0]
-    maxima = np.amax(np.amax(probs, 0), 0)
-    assert maxima.shape == (4,)
-    gprobs = ndi.gaussian_filter(probs, smooth)
-    gmaxima = np.amax(np.amax(gprobs, 0), 0)
-    gprobs /= (maxima / gmaxima)[np.newaxis, np.newaxis, :]
-    gprobs = gprobs / gprobs.sum(2)[:, :, np.newaxis]
-    return gprobs
-
-
-class Segmenter:
-    def __init__(self, model, scale=0.5, device=None):
-        self.smooth = 0.0
-        self.model = model
-        self.marker_threshold = 0.3
-        self.region_threshold = 0.3
-        self.maxdist = 100
-        self.patchsize = (512, 512)
-        self.overlap = (64, 64)
-        self.device = utils.device(device)
-
-    def activate(self, yes=True):
-        if yes:
-            self.model.to(self.device)
-        else:
-            self.model.cpu()
-
-    def segment(self, page):
-        assert isinstance(page, np.ndarray)
-        assert page.ndim == 2
-        assert page.shape[0] >= 100 and page.shape[0] < 20000, page.shape
-        assert page.shape[1] >= 100 and page.shape[1] < 20000, page.shape
-        self.page = page
-        self.activate()
-        self.model.eval()
-        if page.ndim == 2:
-            page = np.expand_dims(page, 2)
-        probs = patches.patchwise_inference(
-            page, self.model, patchsize=self.patchsize, overlap=self.overlap
-        )
-        self.probs = probs
-        self.gprobs = smooth_probabilities(probs, self.smooth)
-        self.segments = marker_segmentation(
-            self.gprobs[..., 3] > self.marker_threshold,
-            self.gprobs[..., 2] > self.region_threshold,
-            self.maxdist,
-        )
-        return [
-            (obj[0].start, obj[0].stop, obj[1].start, obj[1].stop)
-            for obj in ndi.find_objects(self.segments)
-        ]
-
-
-# class LineSegmenter(Segmenter):
-#     def __init__(self, smooth=(1, 4)):
-#         super().__init__(smooth=smooth)
-
-#     def get_targets(self, classes):
-#         return classes == 2
-
-
-def extract_boxes(page, boxes, pad=5):
-    for y0, y1, x0, x1 in boxes:
-        h, w = y1 - y0, x1 - x0
-        word = ndi.affine_transform(
-            page,
-            np.eye(2),
-            output_shape=(h + 2 * pad, w + 2 * pad),
-            offset=(y0 - pad, x0 - pad),
-            order=0,
-        )
-        yield word
-
-
-###
-# Command Line
-###
-
-
-@app.command()
-def train(argv: Optional[List[str]] = typer.Argument(None)) -> None:
+def train(argv: List[str]) -> None:
     argv = argv or []
     config = confparse.parse_args(argv, default_config)
     yaml.dump(config, sys.stdout)
@@ -498,7 +367,9 @@ def train(argv: Optional[List[str]] = typer.Argument(None)) -> None:
     print("mcheckpoint.dirpath", mcheckpoint.dirpath)
 
     if config.get("dumpjit"):
-        assert "resume_from_checkpoint" in config["trainer"], "must resume from checkpoint to dump JIT script"
+        assert (
+            "resume_from_checkpoint" in config["trainer"]
+        ), "must resume from checkpoint to dump JIT script"
         script = smodel.get_jit_model()
         torch.jit.save(script, config["dumpjit"])
         print(f"# saved model to {config['dumpjit']}")
@@ -506,64 +377,5 @@ def train(argv: Optional[List[str]] = typer.Argument(None)) -> None:
 
     trainer.fit(smodel, data)
 
-
-@app.command()
-def dumpjit(src: str, dst: str):
-    print(f"loading {src}")
-    ckpt = torch.load(open(src, "rb"))
-    model = ckpt["hyper_parameters"]["model"]
-    model.cpu()
-    script = torch.jit.script(model)
-    print(f"dumping {dest}")
-    assert not os.path.exists(dest)
-    torch.jit.save(script, dest)
-
-
-@app.command()
-def predict(
-    fname: str,
-    model: str,
-    extensions: str = "png;image.png;framed.png;ipatch.png seg.png;target.png;lines.png;spatch.png",
-    output: str = "",
-    display: bool = True,
-    limit: int = 999999999,
-):
-    model = loading.load_only_model(model)
-    segmenter = Segmenter(model)
-
-    pass  # FIXME do something here
-
-
-@app.command()
-def segment(
-    fname: str,
-    model: str,
-    extensions: str = "png;image.png;framed.png;ipatch.png;jpg;jpeg;JPEG",
-    output: str = "",
-    display: bool = True,
-    limit: int = 999999999,
-    device: str = None,
-):
-    device = utils.device(device)
-    if device.type == "cpu":
-        print("segment using CPU")
-    model = loading.load_only_model(model)
-    segmenter = Segmenter(model, device=device)
-
-    dataset = wds.WebDataset(fname).decode("rgb")
-
-    for sample in islice(dataset, 0, limit):
-        image = wds.getfirst(sample, extensions)
-        image = np.mean(image, 2)
-        result = segmenter.segment(image)
-
-        pass  # FIXME do something here
-
-
-@app.command()
-def noop():
-    pass
-
-
 if __name__ == "__main__":
-    app()
+    train(sys.argv[1:])

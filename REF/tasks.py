@@ -1,10 +1,11 @@
-from invoke import task
+import glob
 import os
 import re
+import shutil
 import sys
 import tempfile
-import shutil
-import glob
+
+from invoke import task
 
 ACTIVATE = ". ./venv/bin/activate;"
 PACKAGE = "webdataset"

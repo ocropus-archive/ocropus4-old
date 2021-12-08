@@ -1,24 +1,17 @@
+import functools
+import os
+import sys
+import traceback
+from collections import Counter
+
+import matplotlib.pyplot as plt
 import numpy as np
 import typer
-import sys
-import os
-import matplotlib.pyplot as plt
-from collections import Counter
-import functools
 import webdataset as wds
-import traceback
-
-from . import ocrorec
-from . import ocroseg
-from . import wordrec
-from . import loading
-from .utils import public
 from lxml import etree
 from lxml.builder import E
-from .utils import BBox
 
-
-Charset = ocrorec.Charset
+from . import loading, ocrorec, ocroseg, wordrec, utils
 
 app = typer.Typer()
 
@@ -109,7 +102,7 @@ def linebbox(words):
     """Compute a bounding box for the words of a text line."""
     if len(words) == []:
         return 0, 0, 0, 0
-    boxes = [BBox(*w["box"]) for w in words]
+    boxes = [utils.BBox(*w["box"]) for w in words]
     return functools.reduce(lambda x, y: x.union(y), boxes).coords()
 
 
@@ -183,7 +176,7 @@ def html_for_page(key, lines, image=None):
     return body
 
 
-@public
+@utils.public
 class LineGrouper:
     def __init__(self, model):
         self.seg = ocroseg.Segmenter(model)

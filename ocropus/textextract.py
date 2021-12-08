@@ -1,13 +1,12 @@
-import os
-import sys
 import io
 import re
+import sys
 
+import numpy as np
 import typer
+import webdataset as wds
 from lxml import html
 from matplotlib import pylab
-import webdataset as wds
-import numpy as np
 
 from . import utils
 
@@ -74,7 +73,10 @@ def hocr2images(
             conf = float(get_prop(line, "x_wconf"))
             if conf < acceptable_conf:
                 if verbose:
-                    print(f"# confidence {conf} < acceptable confidence {acceptable_conf}", file=sys.stderr)
+                    print(
+                        f"# confidence {conf} < acceptable confidence {acceptable_conf}",
+                        file=sys.stderr,
+                    )
                 continue
         bbox = [int(x) for x in get_prop(line, "bbox").split()]
         x0, y0, x1, y1 = bbox
@@ -89,8 +91,8 @@ def hocr2images(
             continue
         bbox = x0, y0, x1, y1
         if not acceptable_size((x0, y0, x1, y1)):
-            widths.append(x1-x0)
-            heights.append(y1-y0)
+            widths.append(x1 - x0)
+            heights.append(y1 - y0)
             badsize += 1
             continue
         lineimage = image[y0:y1, x0:x1, ...]
@@ -105,7 +107,10 @@ def hocr2images(
     if verbose:
         print(f"good {good} badsize {badsize} badtext {badtext}", file=sys.stderr)
         if len(widths) > 0:
-            print(f"widths {np.amin(widths)} {np.amax(widths)} heights {np.amin(heights)} {np.amax(heights)}", file=sys.stderr)
+            print(
+                f"widths {np.amin(widths)} {np.amax(widths)} heights {np.amin(heights)} {np.amax(heights)}",
+                file=sys.stderr,
+            )
 
 
 def acceptable_chars(text):
@@ -219,18 +224,17 @@ def hocr2framed(
                 page_y1 = max(page_y1, y1)
                 nelements += 1
             if nelements < minelements:
-                print(f"too few instances of {element} found ({nelements})", file=sys.stderr)
+                print(
+                    f"too few instances of {element} found ({nelements})",
+                    file=sys.stderr,
+                )
                 continue
             print("bbox", page_x0, page_y0, page_x1, page_y1, page.shape)
             mask = np.zeros_like(page)
             mask[page_y0:page_y1, page_x0:page_x1, ...] = 1.0
             bgvalue = np.amax(page) if lightbg else np.amin(page)
             npage = np.where(mask, page, bgvalue)
-            sink.write({
-                "__key__": key,
-                "page.jpg": npage,
-                "hocr.html": hocr
-            })
+            sink.write({"__key__": key, "page.jpg": npage, "hocr.html": hocr})
             if show > 0 and count % show == 0:
                 pylab.clf()
                 pylab.subplot(121)

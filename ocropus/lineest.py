@@ -1,8 +1,9 @@
 import os
 
-import numpy as np
 import matplotlib.pyplot as plt
-from scipy.ndimage import interpolation, filters
+import numpy as np
+from scipy.ndimage import filters, interpolation
+
 from .utils import public
 
 

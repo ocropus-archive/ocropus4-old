@@ -1,24 +1,14 @@
-from functools import partial
-import random as pyrand
 import sys
-from typing import List
+from functools import partial
+from itertools import islice
 
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 import typer
 import webdataset as wds
-import torch
-from torch import nn, optim
-from torch.utils import data
-from itertools import islice
-import scipy.ndimage as ndi
-from math import exp, log, cos, sin
 
-from . import slog
-from . import loading
-from . import utils
-from . import nlbin
-
+from . import loading, nlbin, slog, utils
 
 app = typer.Typer()
 
@@ -30,7 +20,9 @@ plt.rc("image", interpolation="nearest")
 app = typer.Typer()
 
 # default_jit_model = "http://storage.googleapis.com/ocropus4-models/ruby-sun-22-binarize.pt"
-default_jit_model = "http://storage.googleapis.com/ocropus4-models/effortless-glade-12-binarize.pt"
+default_jit_model = (
+    "http://storage.googleapis.com/ocropus4-models/effortless-glade-12-binarize.pt"
+)
 
 # In[29]:
 
@@ -57,7 +49,9 @@ def patchwise(image, f, r=(256, 1024), s=(177, 477)):
             if output is None:
                 continue
             # print(result[y:y+r, x:x+r].shape, output[:r, :r].shape)
-            result[y : y + r[0], x : x + r[1]] += output[: min(r[0], h - y), : min(r[1], w - x)]
+            result[y : y + r[0], x : x + r[1]] += output[
+                : min(r[0], h - y), : min(r[1], w - x)
+            ]
             counts[y : y + r[0], x : x + r[1]] += 1
     return result / np.maximum(counts, 1.0)
 
@@ -80,7 +74,10 @@ def binarize(
     assert output != "", "must specify output"
     model = loading.load_jit_model(model)
     if mode == "nlbin":
-        print("# using --mode=nlbin is slow; you can try --mode==normalize or --mode=none", file=sys.stderr)
+        print(
+            "# using --mode=nlbin is slow; you can try --mode==normalize or --mode=none",
+            file=sys.stderr,
+        )
     # model = torch.jit.load(model)
     r = eval(f"({patch})")
     s = eval(f"({step})")

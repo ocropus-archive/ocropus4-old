@@ -1,7 +1,4 @@
-import re
-
 import torch
-import torch.nn.functional as F
 import typer
 from torch import nn
 from torchmore import combos, flex, inputstats, layers
@@ -10,6 +7,7 @@ from . import ocrlayers, utils
 from .utils import model
 
 ninput = 3
+
 
 class SegModel(nn.Module):
     def __init__(self, mname, *, config={}):
@@ -41,7 +39,9 @@ class SegModel(nn.Module):
         assert images.min() >= 0.0 and images.max() <= 1.0
         for i in range(len(images)):
             images[i] -= images[i].min()
-            images[i] /= torch.max(images[i].amax(), torch.tensor([0.01], device=images[i].device))
+            images[i] /= torch.max(
+                images[i].amax(), torch.tensor([0.01], device=images[i].device)
+            )
             if images[i].mean() > 0.5:
                 images[i] = 1 - images[i]
 

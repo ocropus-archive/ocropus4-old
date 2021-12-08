@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 
-import sys
-import os
 import glob
+import os
 import re
+import sys
 import tempfile
+
 import typer
 import webdataset as wds
-
 
 app = typer.Typer()
 

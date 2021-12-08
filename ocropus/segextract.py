@@ -3,17 +3,14 @@ import re
 import sys
 
 import numpy as np
+import scipy.ndimage as ndi
+import typer
 import webdataset as wds
 from lxml import etree
 from matplotlib import pylab
-import scipy.ndimage as ndi
 
-from . import utils
-from . import patches
+from . import patches, utils
 from .utils import useopt
-
-import typer
-
 
 # FIXME move this into the function, make it a command line argument
 # FIXME ditto for confidence
@@ -128,7 +125,7 @@ def fix_bbox(bbox, image, sigma=5.0, threshold=0.3, pad=1):
     """Given an image and a bounding box, adjust the bounding box to content."""
     h, w = image.shape
     x0, y0, x1, y1 = bbox
-    if x1-x0 <= 0 or y1-y0 <= 0:
+    if x1 - x0 <= 0 or y1 - y0 <= 0:
         return None
     patch = image[y0:y1, x0:x1]
     smoothed = ndi.gaussian_filter(patch, sigma, mode="constant")
@@ -136,7 +133,7 @@ def fix_bbox(bbox, image, sigma=5.0, threshold=0.3, pad=1):
     thresholded = smoothed > threshold
     dy0, dy1 = nzrange(np.sum(thresholded, 1))
     dx0, dx1 = nzrange(np.sum(thresholded, 0))
-    if dx1-dx0 <= 0 or dy1-dy0 <= 0:
+    if dx1 - dx0 <= 0 or dy1 - dy0 <= 0:
         return None
     return (
         max(x0 + dx0 - pad, 0),
@@ -229,7 +226,10 @@ def marker_segmentation_target_for_bboxes_2(
     bboxes = [x for x in bboxes if x is not None]
     nafter = len(bboxes)
     if nbefore - nafter > 0:
-        print(f"fix_bboxes returned {nbefore-nafter} empty boxes (out of {nbefore})", file=sys.stderr)
+        print(
+            f"fix_bboxes returned {nbefore-nafter} empty boxes (out of {nbefore})",
+            file=sys.stderr,
+        )
     for bbox in bboxes:
         x0, y0, x1, y1 = bbox
         textmask = make_text_mask(bbox, image)
@@ -237,7 +237,9 @@ def marker_segmentation_target_for_bboxes_2(
         if erode > 0:
             target[y0:y1, x0:x1] = np.where(textmask, labels[0], target[y0:y1, x0:x1])
             textmask = ndi.minimum_filter(textmask, erode)
-        target[y0:y1, x0:x1] = np.where(textmask, np.where(cmask, labels[2], labels[1]), 0)
+        target[y0:y1, x0:x1] = np.where(
+            textmask, np.where(cmask, labels[2], labels[1]), 0
+        )
     halo = ndi.maximum_filter(target != 0, border)
     target = np.where(target, target, np.where(halo, labels[0], 0))
     return target.astype(np.uint8)
@@ -396,7 +398,7 @@ def bboxes_for_hocr(
         return []
     print(
         f"# {bad_conf} low conf, {no_conf} no conf, {len(bboxes)} good, {bad_text} bad text, {count} total",
-        file=sys.stderr
+        file=sys.stderr,
     )
     return bboxes
 
