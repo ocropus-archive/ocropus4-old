@@ -3,6 +3,7 @@ import os.path
 import random
 import re
 import sys
+from typing import List
 
 import numpy as np
 import typer
@@ -12,7 +13,20 @@ from PIL import Image, ImageDraw, ImageFont
 app = typer.Typer()
 
 
-def add_margin(pil_img, top, right, bottom, left, color):
+def add_margin(pil_img: PIL.Image.Image, top:int, right:int, bottom:int, left:int, color:Any):
+    """Add a margin to an image.
+
+    Args:
+        pil_img (PIL.Image.Image): input image
+        top (int): margin
+        right (int): margin
+        bottom (int): margin
+        left (int): margin
+        color (Any): PIL color spec
+
+    Returns:
+        PIL: image with margin
+    """
     width, height = pil_img.size
     new_width = width + right + left
     new_height = height + top + bottom
@@ -21,7 +35,8 @@ def add_margin(pil_img, top, right, bottom, left, color):
     return result
 
 
-def generate_text(words):
+def generate_text(words: List[str]):
+    """Generate text from a list of words."""
     case = random.randint(0, 3)
     specials = "-:/,.$%@&*^`~!?()[]{}_"
     specials = [c for c in specials]
@@ -72,6 +87,7 @@ def generate(
     shardsize: int = 10000,
     nwords: int = 1000000,
 ):
+    """Generate a dataset of printed text."""
     words = [s.strip() for s in open(wordlist).readlines()]
     print(f"got {len(words)} words")
     if fontlist != "":
