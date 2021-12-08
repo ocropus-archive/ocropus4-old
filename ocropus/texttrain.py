@@ -417,8 +417,7 @@ class TextDataLoader(pl.LightningDataModule):
         # Would like to shuffle here, but need to reorganize
         # batching logic to do so.
         # if mode == "train" and params.shuffle > 0:
-        #     dl = dl.unbatched().shuffle(params.shuffle)
-        dl = dl.batched(batch_size)
+        #     dl = dl.unbatched().shuffle(params.shuffle).batched(batch_size)
         return dl
 
     def train_dataloader(self) -> DataLoader:
