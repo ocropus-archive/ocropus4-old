@@ -1,4 +1,7 @@
-import functools, os, sys, traceback
+import functools
+import os
+import sys
+import traceback
 from collections import Counter
 
 import matplotlib.pyplot as plt

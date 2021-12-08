@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-import argparse, sys
+import argparse
+import sys
 from itertools import islice
 
 import matplotlib.pyplot as plt

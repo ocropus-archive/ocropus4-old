@@ -1,6 +1,11 @@
 """Text recognition."""
 
-import io, json, os, random, re, sys
+import io
+import json
+import os
+import random
+import re
+import sys
 from functools import partial
 from io import StringIO
 from itertools import islice

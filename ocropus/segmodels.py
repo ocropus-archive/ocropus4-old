@@ -1,5 +1,6 @@
 
-import torch, typer
+import torch
+import typer
 from torch import nn
 from torchmore import combos, flex, inputstats, layers
 

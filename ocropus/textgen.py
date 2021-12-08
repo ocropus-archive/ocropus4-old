@@ -1,4 +1,8 @@
-import os, os.path, random, re, sys
+import os
+import os.path
+import random
+import re
+import sys
 
 import numpy as np
 import typer

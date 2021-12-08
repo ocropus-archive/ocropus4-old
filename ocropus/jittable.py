@@ -1,7 +1,8 @@
 import math
 from typing import List, Tuple
 
-import torch, torch.jit
+import torch
+import torch.jit
 from torch.nn.functional import interpolate, pad
 
 

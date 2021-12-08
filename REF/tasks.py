@@ -1,4 +1,9 @@
-import glob, os, re, shutil, sys, tempfile
+import glob
+import os
+import re
+import shutil
+import sys
+import tempfile
 
 from invoke import task
 

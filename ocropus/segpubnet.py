@@ -1,4 +1,6 @@
-import os, signal, sys
+import os
+import signal
+import sys
 from itertools import islice
 
 import matplotlib.pyplot as plt
@@ -12,7 +14,9 @@ import webdataset as wds
 from matplotlib.patches import Rectangle
 from scipy import ndimage as ndi
 
-from . import loading, ocroseg, slices as sl, slog, utils
+from . import loading, ocroseg
+from . import slices as sl
+from . import slog, utils
 from .utils import junk, useopt
 
 logger = slog.NoLogger()

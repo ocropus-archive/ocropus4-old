@@ -1,4 +1,9 @@
-import io, os, os.path, re, sys, urllib.parse
+import io
+import os
+import os.path
+import re
+import sys
+import urllib.parse
 
 import webdataset.gopen as gopen
 

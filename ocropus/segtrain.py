@@ -1,4 +1,7 @@
-import io, json, os, sys
+import io
+import json
+import os
+import sys
 from io import StringIO
 from itertools import islice
 from typing import Any, Dict, List, Optional
@@ -20,8 +23,9 @@ from torch import nn
 from torch.optim.lr_scheduler import LambdaLR
 from torchmore import layers
 
-from . import (confparse, degrade, jittable, patches, segmodels, slices as sl,
-               utils)
+from . import confparse, degrade, jittable, patches, segmodels
+from . import slices as sl
+from . import utils
 from .utils import Schedule, junk, repeatedly, useopt
 
 app = typer.Typer()
