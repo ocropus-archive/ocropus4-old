@@ -1,10 +1,4 @@
-import glob
-import logging
 import os
-import pickle
-import re
-import sys
-import time
 from importlib import reload
 from itertools import islice
 
@@ -15,8 +9,6 @@ import scipy.ndimage as ndi
 import torch
 import torchtrainers as tt
 from helpers import asnp, ctc_decode, method
-from torch import nn, optim
-from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torchmore import flex, layers
 from webdataset import WebDataset

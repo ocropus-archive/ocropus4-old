@@ -8,10 +8,10 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from .utils import public
+from . import utils
 
 
-@public
+@utils.public
 class Zoom(nn.Module):
     def __init__(self, zoom=1.0):
         super().__init__()
@@ -30,7 +30,7 @@ class Zoom(nn.Module):
         return F.interpolate(a, scale_factor=self.zoom, recompute_scale_factor=False)
 
 
-@public
+@utils.public
 class GrayDocument(nn.Module):
     def __init__(self, noise=0.0, autoinvert=True):
         super().__init__()
@@ -64,7 +64,7 @@ class GrayDocument(nn.Module):
         return a
 
 
-@public
+@utils.public
 class Spectrum(nn.Module):
     def __init__(self, nonlin="logplus1"):
         nn.Module.__init__(self)
@@ -86,7 +86,7 @@ class Spectrum(nn.Module):
         return f"Spectrum-{self.nonlin}"
 
 
-@public
+@utils.public
 class GlobalAvgPool2d(nn.Module):
     def __init__(self):
         super().__init__()
@@ -95,7 +95,7 @@ class GlobalAvgPool2d(nn.Module):
         return F.adaptive_avg_pool2d(x, (1, 1))[:, :, 0, 0]
 
 
-@public
+@utils.public
 class MaxReduce(nn.Module):
     d: int
 

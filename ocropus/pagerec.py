@@ -11,10 +11,7 @@ import webdataset as wds
 from lxml import etree
 from lxml.builder import E
 
-from . import loading, ocrorec, ocroseg, wordrec
-from .utils import BBox, public
-
-Charset = ocrorec.Charset
+from . import loading, ocrorec, ocroseg, wordrec, utils
 
 app = typer.Typer()
 
@@ -105,7 +102,7 @@ def linebbox(words):
     """Compute a bounding box for the words of a text line."""
     if len(words) == []:
         return 0, 0, 0, 0
-    boxes = [BBox(*w["box"]) for w in words]
+    boxes = [utils.BBox(*w["box"]) for w in words]
     return functools.reduce(lambda x, y: x.union(y), boxes).coords()
 
 
@@ -179,7 +176,7 @@ def html_for_page(key, lines, image=None):
     return body
 
 
-@public
+@utils.public
 class LineGrouper:
     def __init__(self, model):
         self.seg = ocroseg.Segmenter(model)

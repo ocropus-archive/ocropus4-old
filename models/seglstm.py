@@ -1,4 +1,3 @@
-import torch
 from torch import nn
 from torchmore import combos, flex, layers
 
