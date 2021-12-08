@@ -37,10 +37,10 @@ _ = linemodels
 default_config = """
 data:
     train_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..21}.tar"
-    train_bs: 8
+    train_bs: 16
     val_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar"
     val_bs: 24
-    nepoch: 20000
+    nepoch: 200000
     num_workers: 8
     augment: distort
     normalize: simple
@@ -49,7 +49,7 @@ checkpoint:
 lightning:
     mname: ctext_model_211124
     lr: 0.03
-    lr_halflife: 2
+    lr_halflife: 1
     display_freq: 1000
     textmodel:
         charset: ascii
@@ -414,6 +414,9 @@ class TextDataLoader(pl.LightningDataModule):
             shuffle=False,
             num_workers=params.num_workers,
         ).slice(self.params.nepoch // batch_size)
+        if mode == "train" and params.shuffle > 0:
+            dl = dl.unbatched().shuffle(params.shuffle)
+        dl = dl.batched(batch_size)
         return dl
 
     def train_dataloader(self) -> DataLoader:

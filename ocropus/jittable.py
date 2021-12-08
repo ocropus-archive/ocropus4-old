@@ -40,9 +40,9 @@ def standardize_image(
         im = im.type(torch.float32)
     im -= torch.quantile(im, lo)
     im /= max(float(torch.quantile(im, hi)), 0.01)
-    im = im.clamp(0, 1)
     if torch.quantile(im, 0.5) > 0.5:
         im = 1 - im
+    im = im.clamp(0, 1)
     return im
 
 
@@ -51,7 +51,7 @@ def resize_word(
     image: torch.Tensor, factor: float = 7.0, quant: float = 2.0, threshold: float = 0.8
 ) -> torch.Tensor:
     assert image.dtype == torch.float, image.dtype
-    assert float(image.amax()) <= 1.01, image.amax()
+    assert image.min() >= 0 and image.max() <= 1
     if image.amax() < 0.01:
         return torch.zeros((3, 1, 1))
     image = image / image.amax()
@@ -73,12 +73,14 @@ def resize_word(
     assert scale > 0, scale
     scale = quantscale(scale, unit=quant)
     assert scale > 0, scale
+    assert image.min() >= 0 and image.max() <= 1
     simage = interpolate(
         image.unsqueeze(0),
         (int(scale * h), int(scale * w)),
         mode="bilinear",
         align_corners=False,
     )[0]
+    simage = simage.clamp(0, 1)
     return simage
 
 
@@ -86,6 +88,7 @@ def resize_word(
 def crop_image(
     image: torch.Tensor, threshold: float = 0.8, padding: int = 4
 ) -> torch.Tensor:
+    assert image.min() >= 0 and image.max() <= 1
     c, h, w = image.shape
     if h <= 1 or w <= 1:
         return image
@@ -101,8 +104,10 @@ def crop_image(
 
 @torch.jit.export
 def auto_resize(im: torch.Tensor) -> torch.Tensor:
+    assert im.min() >= 0 and im.max() <= 1
     resized = resize_word(im)
     cropped = crop_image(resized)
+    assert im.min() >= 0 and im.max() <= 1
     return cropped
 
 
@@ -113,6 +118,7 @@ def stack_images(images: List[torch.Tensor]) -> torch.Tensor:
         assert im.shape[0] in [1, 3]
         assert im.shape[1] >= 16
         assert im.shape[2] >= 16
+        assert im.min() >= 0 and im.max() <= 1
     maxima = torch.zeros(3, dtype=torch.int)
     for im in images:
         maxima = torch.max(maxima, torch.tensor(im.shape))
