@@ -7,8 +7,13 @@ import urllib.parse
 
 import webdataset.gopen as gopen_mod
 
-cachedir = os.environ.get("OCROCACHE", os.path.join(os.environ.get("HOME", "/tmp"), ".ocropus4/cache"))
-modeldir = os.environ.get("OCROMODELS", os.path.join(os.environ.get("HOME", "/tmp"), ".ocropus4/models"))
+cachedir = os.environ.get(
+    "OCROCACHE", os.path.join(os.environ.get("HOME", "/tmp"), ".ocropus4/cache")
+)
+modeldir = os.environ.get(
+    "OCROMODELS", os.path.join(os.environ.get("HOME", "/tmp"), ".ocropus4/models")
+)
+
 
 def cached_gopen(url, mode="rb", cachedir=cachedir, verbose=False, maxage=1e33, **kw):
     key = re.sub("/", "%2F", urllib.parse.quote(url))
@@ -40,4 +45,6 @@ def cached_gopen(url, mode="rb", cachedir=cachedir, verbose=False, maxage=1e33, 
 
 
 def model_gopen(url, mode="rb", modeldir=modeldir, verbose=False, maxage=1e33, **kw):
-    return cached_gopen(url, mode=mode, cachedir=modeldir, verbose=verbose, maxage=1e33, **kw)
+    return cached_gopen(
+        url, mode=mode, cachedir=modeldir, verbose=verbose, maxage=1e33, **kw
+    )

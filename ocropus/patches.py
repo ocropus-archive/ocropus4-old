@@ -85,7 +85,9 @@ def get_affine_patches(dst, src, images, size=None):
 
 
 def get_patch(image, y0, y1, x0, x1, **kw):
-    return ndi.affine_transform(image, np.eye(2), offset=(y0, x0), output_shape=(y1 - y0, x1 - x0), **kw)
+    return ndi.affine_transform(
+        image, np.eye(2), offset=(y0, x0), output_shape=(y1 - y0, x1 - x0), **kw
+    )
 
 
 def interesting_patches(
@@ -110,14 +112,16 @@ def interesting_patches(
     for i in range(trials):
         if count >= n:
             break
-        y = safe_randint(-r // 2, h - r//2 - 1)
-        x = safe_randint(-r // 2, w - r//2 - 1)
+        y = safe_randint(-r // 2, h - r // 2 - 1)
+        x = safe_randint(-r // 2, w - r // 2 - 1)
         rx, ry = int(uniform(0.8, 1.2) * r), int(uniform(0.8, 1.2) * r)
         if margin < 1.0:
             dx, dy = int(rx * margin), int(ry * margin)
         else:
             dx, dy = int(margin), int(margin)
-        patch = get_patch(indicator_image, y + dy , y + ry - dy, x + dx , x + rx - dx, order=0)
+        patch = get_patch(
+            indicator_image, y + dy, y + ry - dy, x + dx, x + rx - dx, order=0
+        )
         if np.sum(patch) < threshold:
             continue
         rect = [y, x, y + ry, x + rx]

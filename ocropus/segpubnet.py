@@ -229,13 +229,19 @@ class PubLaynetSegmenter:
         image_boxes = allboxes(images)
 
         # text regions are obtained through marker segmentation
-        text = ocroseg.marker_segmentation(markers, regions, maxdist=20)  # this is labels
+        text = ocroseg.marker_segmentation(
+            markers, regions, maxdist=20
+        )  # this is labels
         text = opening(text, *self.text_opening)  # nb: morphology on labels is OK
         text_boxes = ndi.find_objects(text)
 
         if merge:
-            merged_table_boxes = merge_against_background(table_boxes, text_boxes + image_boxes)
-            merged_image_boxes = merge_against_background(image_boxes, text_boxes + table_boxes)
+            merged_table_boxes = merge_against_background(
+                table_boxes, text_boxes + image_boxes
+            )
+            merged_image_boxes = merge_against_background(
+                image_boxes, text_boxes + table_boxes
+            )
         else:
             merged_table_boxes = table_boxes
             merged_image_boxes = image_boxes
@@ -254,9 +260,13 @@ class PubLaynetSegmenter:
             for b in text:
                 exclude[b[0], b[1]] = 0
             exclude = ndi.minimum_filter(exclude, (5, 20))
-            tables = [covering_rectangle(b, bin, exclude) for b in tables if large_rect(b)]
+            tables = [
+                covering_rectangle(b, bin, exclude) for b in tables if large_rect(b)
+            ]
             tables = [x for x in tables if x is not None]
-            images = [covering_rectangle(b, bin, exclude) for b in images if large_rect(b)]
+            images = [
+                covering_rectangle(b, bin, exclude) for b in images if large_rect(b)
+            ]
             images = [x for x in images if x is not None]
 
         self.last_result = result = text, tables, images
@@ -379,7 +389,11 @@ def pageseg(
         text, tables, images = segmenter.predict(im, scale, nocover=nocover)
         if display >= 0:
             pageseg_display(
-                im, segmenter, result=(text, tables, images), title=f"{count}: {key}", timeout=display
+                im,
+                segmenter,
+                result=(text, tables, images),
+                title=f"{count}: {key}",
+                timeout=display,
             )
         seg = segmenter.last_probs.copy()
         assert seg.shape[2] == 5
@@ -456,7 +470,9 @@ class PubTabnetSegmenter:
             regions = opening(regions, *self.opening)
 
         # text regions are obtained through marker segmentation
-        text = ocroseg.marker_segmentation(markers, regions, maxdist=20)  # this is labels
+        text = ocroseg.marker_segmentation(
+            markers, regions, maxdist=20
+        )  # this is labels
         text_boxes = ndi.find_objects(text)
 
         result = self.fix(text_boxes)
@@ -538,11 +554,7 @@ def tabseg(
         boxes = segmenter.predict(im, scale=scale)
         if display > 0:
             tabseg_display(im, segmenter, title=f"{count}: {key}", timeout=display)
-        result = {
-            "__key__": key,
-            "jpg": im,
-            "cells.json": boxes
-        }
+        result = {"__key__": key, "jpg": im, "cells.json": boxes}
         if sink is not None:
             sink.write(result)
     if sink is not None:

@@ -1,4 +1,3 @@
-
 import torch
 from torch import nn
 from torchmore import combos, flex, inputstats, layers
@@ -16,7 +15,9 @@ def charset_ascii():
 class TextModel(nn.Module):
     """Word-level text model."""
 
-    def __init__(self, mname, *, config={}, charset: str = "ascii", unknown_char: int = 26):
+    def __init__(
+        self, mname, *, config={}, charset: str = "ascii", unknown_char: int = 26
+    ):
         super().__init__()
         factory = globals()[mname]
         self.model = factory(**config)

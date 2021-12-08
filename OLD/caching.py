@@ -26,7 +26,7 @@ class CachedReader(io.IOBase):
 
     def read(self, size=-1):
         data = self.stream.read(size)
-        #print("read", None if data is None else len(data))
+        # print("read", None if data is None else len(data))
         if data is None:
             return self.close()
         self.cache.write(data)
@@ -67,8 +67,11 @@ def cached_gopen(url, mode="rb", cachedir=cachedir, verbose=False, **kw):
 
     return CachedReader(stream, cache, on_close=closer)
 
+
 def cached_open(url, mode="rb", cachedir=cachedir, verbose=False, **kw):
-    with cached_gopen(url, mode=mode, cachedir=cachedir, verbose=verbose, **kw) as stream:
+    with cached_gopen(
+        url, mode=mode, cachedir=cachedir, verbose=verbose, **kw
+    ) as stream:
         while stream.read(1000000) is not None:
             pass
     return cached_gopen(url, mode=mode, cachedir=cachedir, verbose=verbose, **kw)

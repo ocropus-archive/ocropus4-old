@@ -482,7 +482,9 @@ def train(argv: Optional[List[str]] = typer.Argument(None)) -> None:
     print("mcheckpoint.dirpath", mcheckpoint.dirpath)
 
     if config.get("dumpjit"):
-        assert "resume_from_checkpoint" in config["trainer"], "must resume from checkpoint to dump JIT script"
+        assert (
+            "resume_from_checkpoint" in config["trainer"]
+        ), "must resume from checkpoint to dump JIT script"
         script = smodel.get_jit_model()
         torch.jit.save(script, config["dumpjit"])
         print(f"# saved model to {config['dumpjit']}")

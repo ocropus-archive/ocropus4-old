@@ -6,5 +6,6 @@ import click
 def command(arg=19):
     print(arg, type(arg))
 
-if __name__=='__main__':
+
+if __name__ == "__main__":
     command()

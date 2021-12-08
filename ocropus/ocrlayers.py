@@ -63,6 +63,7 @@ class GrayDocument(nn.Module):
             a[i] = a[i].clip(0, 1)
         return a
 
+
 @public
 class Spectrum(nn.Module):
     def __init__(self, nonlin="logplus1"):
@@ -97,9 +98,10 @@ class GlobalAvgPool2d(nn.Module):
 @public
 class MaxReduce(nn.Module):
     d: int
+
     def __init__(self, d: int):
         super().__init__()
         self.d = d
+
     def forward(self, x):
         return x.max(self.d)[0]
-
