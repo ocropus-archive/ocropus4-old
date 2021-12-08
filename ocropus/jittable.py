@@ -107,7 +107,7 @@ def auto_resize(im: torch.Tensor) -> torch.Tensor:
     assert im.min() >= 0 and im.max() <= 1
     resized = resize_word(im)
     cropped = crop_image(resized)
-    assert im.min() >= 0 and im.max() <= 1
+    assert cropped.min() >= 0 and cropped.max() <= 1
     return cropped
 
 

@@ -414,8 +414,10 @@ class TextDataLoader(pl.LightningDataModule):
             shuffle=False,
             num_workers=params.num_workers,
         ).slice(self.params.nepoch // batch_size)
-        if mode == "train" and params.shuffle > 0:
-            dl = dl.unbatched().shuffle(params.shuffle)
+        # Would like to shuffle here, but need to reorganize
+        # batching logic to do so.
+        # if mode == "train" and params.shuffle > 0:
+        #     dl = dl.unbatched().shuffle(params.shuffle)
         dl = dl.batched(batch_size)
         return dl
 
