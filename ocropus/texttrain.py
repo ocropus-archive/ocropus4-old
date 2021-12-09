@@ -40,7 +40,7 @@ data:
     train_bs: 16
     val_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar"
     val_bs: 24
-    nepoch: 200000
+    nepoch: 20000
     num_workers: 8
     augment: distort
     normalize: simple
@@ -49,7 +49,7 @@ checkpoint:
 lightning:
     mname: ctext_model_211124
     lr: 0.03
-    lr_halflife: 1
+    lr_halflife: 10
     display_freq: 1000
     textmodel:
         charset: ascii
