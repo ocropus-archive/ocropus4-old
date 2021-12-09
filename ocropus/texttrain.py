@@ -47,14 +47,10 @@ data:
 checkpoint:
     every_n_epochs: 10
 lightning:
-    mname: ctext_model_211124
+    mname: ocropus.textmodels.ctext_model_211124
     lr: 0.03
     lr_halflife: 2
     display_freq: 1000
-    textmodel:
-        charset: ascii
-        config:
-            noutput: 128
 trainer:
     max_epochs: 10000
     gpus: 1

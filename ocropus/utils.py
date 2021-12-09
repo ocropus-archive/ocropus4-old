@@ -3,6 +3,7 @@ import os
 import re
 import sys
 import time
+import importlib
 from functools import wraps
 from typing import Union
 
@@ -436,3 +437,19 @@ def unflatten_yaml(d):
             target = setdefault(target, s, {})
         target[k[-1]] = v
     return result
+
+
+def load_module(filename):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("module", filename)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+def load_symbol(name):
+    assert "." in name, f"{name}: symbol name must be fully qualified"
+    mname, sname = name.rsplit(".", 1)
+    module = importlib.import_module(mname)
+    assert hasattr(module, sname), f"module {mname} has no attribute {sname}"
+    return getattr(module, sname)

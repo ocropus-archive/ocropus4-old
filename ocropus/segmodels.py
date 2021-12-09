@@ -12,7 +12,7 @@ ninput = 3
 class SegModel(nn.Module):
     def __init__(self, mname, *, config={}):
         super().__init__()
-        self.model = globals()[mname](**config)
+        self.model = utils.load_symbol(mname)(**config)
 
     @torch.jit.export
     def forward(self, images):

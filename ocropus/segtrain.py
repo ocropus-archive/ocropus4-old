@@ -37,12 +37,10 @@ data:
 checkpoint:
     every_n_epochs: 1
 lightning:
-    mname: segmentation_model_210910
+    mname: ocropus.segmodels.segmentation_model_210910
     lr: 0.01
     lr_halflife: 5
     display_freq: 100
-    segmodel:
-        config: {}
 trainer:
     max_epochs: 10000
     gpus: 1

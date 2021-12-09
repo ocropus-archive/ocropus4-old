@@ -16,12 +16,12 @@ class TextModel(nn.Module):
     """Word-level text model."""
 
     def __init__(
-        self, mname, *, config={}, charset: str = "ascii", unknown_char: int = 26
+        self, mname, *, config={}, charset: str = "ocropus.textmodels.charset_ascii", unknown_char: int = 26
     ):
         super().__init__()
-        factory = globals()[mname]
-        self.model = factory(**config)
-        self.charset = globals()[f"charset_{charset}"]()
+        self.charset = utils.load_symbol(charset)()
+        noutput = len(self.charset)
+        self.model = utils.load_symbol(mname)(noutput=noutput, **config)
         self.unknown_char = unknown_char
 
     @torch.jit.export
