@@ -1,8 +1,5 @@
-import io
-import json
-import sys
+import io, json, sys
 from io import StringIO
-from itertools import islice
 from typing import Any, Dict, List
 
 import numpy as np
@@ -18,12 +15,9 @@ from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from scipy import ndimage as ndi
 from torch import nn
 from torch.optim.lr_scheduler import LambdaLR
-from torchmore import layers
 
-from . import confparse, degrade, jittable, segmodels
-from . import slices as sl
-from . import utils
-from .utils import Schedule, junk, repeatedly, useopt
+from . import confparse, segmodels, utils
+from .utils import useopt
 
 default_config = """
 data:
@@ -374,6 +368,7 @@ def train(argv: List[str]) -> None:
         sys.exit(0)
 
     trainer.fit(smodel, data)
+
 
 if __name__ == "__main__":
     train(sys.argv[1:])

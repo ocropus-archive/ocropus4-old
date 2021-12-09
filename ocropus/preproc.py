@@ -1,6 +1,5 @@
 import sys
 from functools import partial
-from itertools import islice
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,7 +7,7 @@ import torch
 import typer
 import webdataset as wds
 
-from . import loading, nlbin, slog, utils
+from . import loading, nlbin, slog
 
 app = typer.Typer()
 

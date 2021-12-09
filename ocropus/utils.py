@@ -1,9 +1,9 @@
+import importlib
 import itertools as itt
 import os
 import re
 import sys
 import time
-import importlib
 from functools import wraps
 from typing import Union
 
@@ -446,6 +446,7 @@ def load_module(filename):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
 
 def load_symbol(name):
     assert "." in name, f"{name}: symbol name must be fully qualified"
