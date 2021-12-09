@@ -1,9 +1,8 @@
 import torch
-import typer
 from torch import nn
-from torchmore import combos, flex, inputstats, layers
+from torchmore import combos, flex, layers
 
-from . import ocrlayers, utils
+from . import utils
 from .utils import model
 
 ninput = 3
@@ -12,7 +11,7 @@ ninput = 3
 class SegModel(nn.Module):
     def __init__(self, mname, *, config={}):
         super().__init__()
-        self.model = globals()[mname](**config)
+        self.model = utils.load_symbol(mname)(**config)
 
     @torch.jit.export
     def forward(self, images):

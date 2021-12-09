@@ -1,10 +1,6 @@
 #!/usr/bin/env python
 
-import glob
-import os
-import re
-import sys
-import tempfile
+import glob, os, re, sys, tempfile
 
 import typer
 import webdataset as wds

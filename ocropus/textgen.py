@@ -1,8 +1,4 @@
-import os
-import os.path
-import random
-import re
-import sys
+import os, os.path, random, re, sys
 from typing import List
 
 import numpy as np
@@ -13,7 +9,9 @@ from PIL import Image, ImageDraw, ImageFont
 app = typer.Typer()
 
 
-def add_margin(pil_img: PIL.Image.Image, top:int, right:int, bottom:int, left:int, color:Any):
+def add_margin(
+    pil_img: PIL.Image.Image, top: int, right: int, bottom: int, left: int, color: Any
+):
     """Add a margin to an image.
 
     Args:

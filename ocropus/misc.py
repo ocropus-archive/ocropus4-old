@@ -1,16 +1,11 @@
 #!/usr/bin/env python
 
 import sys
-from itertools import islice
 
 import matplotlib.pyplot as plt
 import numpy as np
-import PIL
 import typer
 import webdataset as wds
-from webdataset.iterators import getfirst
-
-from . import utils
 
 app = typer.Typer()
 

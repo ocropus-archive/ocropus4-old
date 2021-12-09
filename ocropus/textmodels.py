@@ -1,9 +1,8 @@
 import torch
 from torch import nn
-from torchmore import combos, flex, inputstats, layers
+from torchmore import combos, flex, layers
 
 from . import ocrlayers, utils
-from .utils import model
 
 ninput = 3
 
@@ -16,12 +15,17 @@ class TextModel(nn.Module):
     """Word-level text model."""
 
     def __init__(
-        self, mname, *, config={}, charset: str = "ascii", unknown_char: int = 26
+        self,
+        mname,
+        *,
+        config={},
+        charset: str = "ocropus.textmodels.charset_ascii",
+        unknown_char: int = 26
     ):
         super().__init__()
-        factory = globals()[mname]
-        self.model = factory(**config)
-        self.charset = globals()[f"charset_{charset}"]()
+        self.charset = utils.load_symbol(charset)()
+        noutput = len(self.charset)
+        self.model = utils.load_symbol(mname)(noutput=noutput, **config)
         self.unknown_char = unknown_char
 
     @torch.jit.export
@@ -72,7 +76,7 @@ class TextModel(nn.Module):
                 images[i] = 1 - images[i]
 
 
-@model
+@utils.model
 def ctext_model_211124(noutput=1024, shape=(1, ninput, 48, 300)):
     model = nn.Sequential(
         layers.ModPadded(
@@ -92,7 +96,7 @@ def ctext_model_211124(noutput=1024, shape=(1, ninput, 48, 300)):
     return model
 
 
-@model
+@utils.model
 def text_model_210910(noutput=1024, shape=(1, ninput, 48, 300)):
     """Text recognition model using 2D LSTM and convolutions."""
     model = TextModel(

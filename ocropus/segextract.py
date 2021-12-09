@@ -1,6 +1,4 @@
-import io
-import re
-import sys
+import io, re, sys
 
 import numpy as np
 import scipy.ndimage as ndi

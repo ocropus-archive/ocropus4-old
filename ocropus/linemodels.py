@@ -1,8 +1,6 @@
 from torch import nn
 from torchmore import combos, flex, layers
 
-from .utils import useopt
-
 
 class ModPad(nn.Module):
     def __init__(self, mod=8):

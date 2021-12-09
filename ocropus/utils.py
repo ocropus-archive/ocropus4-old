@@ -1,3 +1,4 @@
+import importlib
 import itertools as itt
 import os
 import re
@@ -6,6 +7,7 @@ import time
 from functools import wraps
 from typing import Union
 
+from lxml import html
 import numpy as np
 import torch
 from torchmore import layers
@@ -436,3 +438,26 @@ def unflatten_yaml(d):
             target = setdefault(target, s, {})
         target[k[-1]] = v
     return result
+
+
+def load_module(filename):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("module", filename)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_symbol(name):
+    assert "." in name, f"{name}: symbol name must be fully qualified"
+    mname, sname = name.rsplit(".", 1)
+    module = importlib.import_module(mname)
+    assert hasattr(module, sname), f"module {mname} has no attribute {sname}"
+    return getattr(module, sname)
+
+
+def get_s3_listing(url):
+    data = os.popen("curl {}".format(url)).read()
+    parsed = html.fromstring(data.encode("utf-8"))
+    return [x.text for x in parsed.xpath("//key")]
