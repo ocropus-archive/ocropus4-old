@@ -45,11 +45,11 @@ data:
     augment: distort
     normalize: simple
 checkpoint:
-    every_n_epochs: 10
+    every_n_epochs: 1
 lightning:
     mname: ctext_model_211124
     lr: 0.03
-    lr_halflife: 10
+    lr_halflife: 100
     display_freq: 1000
     textmodel:
         charset: ascii
