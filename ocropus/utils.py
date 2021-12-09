@@ -7,6 +7,7 @@ import time
 from functools import wraps
 from typing import Union
 
+from lxml import html
 import numpy as np
 import torch
 from torchmore import layers
@@ -454,3 +455,9 @@ def load_symbol(name):
     module = importlib.import_module(mname)
     assert hasattr(module, sname), f"module {mname} has no attribute {sname}"
     return getattr(module, sname)
+
+
+def get_s3_listing(url):
+    data = os.popen("curl {}".format(url)).read()
+    parsed = html.fromstring(data.encode("utf-8"))
+    return [x.text for x in parsed.xpath("//key")]
