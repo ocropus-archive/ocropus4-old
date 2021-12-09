@@ -26,7 +26,7 @@ from . import confparse, jittable, textdata, textmodels
 default_config = """
 data:
     train_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..21}.tar"
-    train_bs: 8
+    train_bs: 16
     val_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar"
     val_bs: 24
     nepoch: 20000
@@ -38,7 +38,7 @@ checkpoint:
 lightning:
     mname: ocropus.textmodels.ctext_model_211124
     lr: 0.03
-    lr_halflife: 2
+    lr_halflife: 10
     display_freq: 1000
 trainer:
     max_epochs: 10000
