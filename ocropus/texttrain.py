@@ -10,6 +10,7 @@ import numpy as np
 import PIL
 import pytorch_lightning as pl
 import torch
+from torch.autograd.grad_mode import F
 import torch.jit
 import yaml
 from matplotlib import gridspec
@@ -19,35 +20,13 @@ from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from scipy import ndimage as ndi
 from torch import nn
 from torch.optim.lr_scheduler import LambdaLR
+import typer
 from torchmore import layers
 
 from . import confparse, jittable, textdata, textmodels
 
-default_config = """
-data:
-    train_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{00..21}.tar"
-    train_bs: 16
-    val_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-0000{22..22}.tar"
-    val_bs: 24
-    nepoch: 20000
-    num_workers: 8
-    augment: distort
-    normalize: simple
-checkpoint:
-    every_n_epochs: 10
-lightning:
-    mname: ocropus.textmodels.ctext_model_211124
-    lr: 0.03
-    lr_halflife: 10
-    display_freq: 1000
-trainer:
-    max_epochs: 10000
-    gpus: 1
-    default_root_dir: ./_logs
-logging: {}
-"""
 
-default_config = yaml.safe_load(StringIO(default_config))
+app = typer.Typer()
 
 
 def ctc_decode(
@@ -112,12 +91,11 @@ class TextLightning(pl.LightningModule):
     def __init__(
         self,
         mname: Optional[str] = None,
+        charset: Optional[str] = None,
         display_freq: int = 1000,
         lr: float = 3e-4,
         lr_halflife: int = 1000,
         config: Dict[Any, Any] = {},
-        textmodel: Dict[Any, Any] = {},
-        basemodel: Dict[Any, Any] = {},
     ):
         super().__init__()
         self.display_freq = display_freq
@@ -127,7 +105,7 @@ class TextLightning(pl.LightningModule):
         self.total = 0
         self.hparams.config = json.dumps(config)
         self.save_hyperparameters(ignore="display_freq".split())
-        self.model = textmodels.TextModel(mname, **textmodel)
+        self.model = textmodels.TextModel(mname, charset=charset)
         self.get_jit_model()
         print("model created and is JIT-able")
 
@@ -275,22 +253,44 @@ class TextLightning(pl.LightningModule):
 ##3 Top-Level Commands
 ###
 
+@app.command()
+def train(
+    mname: str = "ocropus.textmodels.ctext_model_211124",
+    charset: str = "ocropus.textmodels.charset_ascii",
+    lr: float = 0.03,
+    lr_halflife: int = 10,
+    gpus: int = 1,
+    default_root_dir: str = "./_logs",
+    checkpoint: int = 100000,
+    display_freq: int = 1000,
+    train_bucket: Optional[str] = None,
+    train_shards: Optional[str] = None,
+    val_shards: Optional[str] = None,
+    max_epochs: int = 10000,
+    train_bs: int = 16,
+    val_bs: int = 16,
+    augment: str = "distort",
+    wandb: str = "",
+    dumpjit: str = "",
+    resume: Optional[str] = "",
+):
+    config = dict(locals())
 
-def train(argv: List[str]):
-    argv = argv or []
-    config = confparse.parse_args(argv, default_config)
-    yaml.dump(config, sys.stdout)
-
-    dataconfig = config["data"]
-    data = textdata.TextDataLoader(**dataconfig)
+    data = textdata.TextDataLoader(
+        train_bucket=train_bucket,
+        train_shards=train_shards,
+        val_shards=val_shards,
+        train_bs=train_bs,
+        val_bs=val_bs,
+        augment=augment,
+    )
     print(
         "# checking training batch size", next(iter(data.train_dataloader()))[0].size()
     )
 
-    lmodel = TextLightning(**config["lightning"])
-    lmodel.hparams.train_bs = dataconfig["train_bs"]
-    lmodel.hparams.augment = dataconfig["augment"]
-    lmodel.hparams.normalize = dataconfig["normalize"]
+    lmodel = TextLightning(mname=mname, charset=charset)
+    for k, v in config.items():
+        setattr(lmodel.hparams, k, v)
 
     callbacks = []
 
@@ -298,29 +298,27 @@ def train(argv: List[str]):
         LearningRateMonitor(logging_interval="step"),
     )
 
-    cpconfig = config["checkpoint"]
-    mcheckpoint = ModelCheckpoint(**cpconfig)
+    mcheckpoint = ModelCheckpoint(every_n_train_steps=checkpoint//train_bs)
     callbacks.append(mcheckpoint)
 
-    tconfig = config["trainer"].copy()
-
-    if "logging" in config and "wandb" in config["logging"]:
-        print(f"# logging to {config['logging']['wandb']}")
+    if wandb != "":
         from pytorch_lightning.loggers import WandbLogger
-
-        tconfig["logger"] = WandbLogger(**config["logging"]["wandb"])
+        wconfig = eval(f"{wandb}")
+        tconfig["logger"] = WandbLogger(**wconfig)
+        print(f"# using wandb logger with config {wconfig}")
     else:
         print(f"# logging locally")
 
     trainer = pl.Trainer(
         callbacks=callbacks,
-        **tconfig,
+        max_epochs=max_epochs,
+        gpus=gpus,
+        resume_from_checkpoint=resume,
+        default_root_dir=default_root_dir,
     )
 
-    if config.get("dumpjit"):
-        assert (
-            "resume_from_checkpoint" in config["trainer"]
-        ), "must resume from checkpoint to dump JIT script"
+    if dumpjit != "":
+        assert resume_from_checkpoint != "", "must specify checkpoint to dump"
         script = smodel.get_jit_model()
         torch.jit.save(script, config["dumpjit"])
         print(f"# saved model to {config['dumpjit']}")
@@ -331,4 +329,4 @@ def train(argv: List[str]):
 
 
 if __name__ == "__main__":
-    train(sys.argv[1:])
+    app()

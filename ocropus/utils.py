@@ -458,6 +458,6 @@ def load_symbol(name):
 
 
 def get_s3_listing(url):
-    data = os.popen("curl {}".format(url)).read()
+    data = os.popen("curl -s -L {}".format(url)).read()
     parsed = html.fromstring(data.encode("utf-8"))
     return [x.text for x in parsed.xpath("//key")]

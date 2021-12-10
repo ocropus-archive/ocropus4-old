@@ -32,6 +32,9 @@ segtrain)  # recognize pages with layout information
 texttrain)  # recognize pages with layout information
     $python3 -m ocropus.texttrain "$@"
     ;;
+textgen)  # recognize pages with layout information
+    $python3 -m ocropus.textgen "$@"
+    ;;
 models)  # list and show models
     $python3 -m ocropus.models "$@"
     ;;

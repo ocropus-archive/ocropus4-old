@@ -1,6 +1,7 @@
 """Text recognition."""
 
 import random, re
+import os.path
 from functools import partial
 from typing import Any, Dict, List, Optional, Union, Tuple
 
@@ -10,6 +11,7 @@ import torch.jit
 import webdataset as wds
 from scipy import ndimage as ndi
 from torch.utils.data import DataLoader
+from urllib.parse import urljoin
 
 from . import confparse, degrade, jittable, utils
 
@@ -216,15 +218,20 @@ def good_text(regex: str, sample: str) -> bool:
 class TextDataLoader(pl.LightningDataModule):
     """Lightning Data Module for OCR training."""
 
+    default_bucket = "https://storage.googleapis.com/nvdata-ocropus-words"
+    default_shards = "uw3-word-{000000..000022}.tar"
+    default_val_shards = "http://storage.googleapis.com/nvdata-ocropus-val/val-word-{000000..000007}.tar"
+
     def __init__(
         self,
+        train_bucket: Optional[str] = None,
         train_shards: Optional[Union[str, List[str]]] = None,
         val_shards: Optional[Union[str, List[str]]] = None,
-        train_bs: int = 4,
-        val_bs: int = 20,
+        train_bs: int = 16,
+        val_bs: int = 24,
         text_select_re: str = "[A-Za-z0-9]",
-        nepoch: int = 5000,
-        num_workers: int = 4,
+        nepoch: int = 50000,
+        num_workers: int = 8,
         cache_size: int = -1,
         cache_dir: str = None,
         shuffle: int = 5000,
@@ -238,6 +245,7 @@ class TextDataLoader(pl.LightningDataModule):
         """Initialize the TextDataLoader
 
         Args:
+            train_bucket (Optional[str]): URL of the bucket containing the training data
             train_shards (Optional[Union[str, List[str], Dict[Any, Any]]], optional): list of shards to train on. Defaults to None.
             val_shards (Optional[Union[str, List[str]]], optional): list of shards to validate on. Defaults to None.
             train_bs (int, optional): batch size for training. Defaults to 4.
@@ -255,14 +263,31 @@ class TextDataLoader(pl.LightningDataModule):
             max_h (int, optional): maximum image height (larger=ignored). Defaults to 200.
         """
         super().__init__()
-        print(locals())
-        assert train_shards is not None
-        if val_shards == "":
-            val_shards = None
-        self.params = confparse.Params(locals())
+        train_bucket = train_bucket or self.default_bucket
+        train_shards = train_shards or self.default_shards
+        val_shards = val_shards or self.default_val_shards
+        if train_shards == "all":
+            train_shards = utils.get_s3_listing(train_bucket)
+            train_shards = [os.path.join(train_bucket, shard) for shard in train_shards]
+        else:
+            train_shards = os.path.join(train_bucket, train_shards)
+        print("+++", train_shards)
+        self.train_shards = train_shards
+        self.train_bs = train_bs
+        self.val_shards = val_shards
+        self.val_bs = val_bs
         self.cache_size = cache_size
         self.cache_dir = cache_dir
         self.num_workers = num_workers
+        self.shuffle = shuffle
+        self.extensions = extensions
+        self.text_normalizer = text_normalizer
+        self.text_select_re = text_select_re
+        self.num_workers = num_workers
+        self.nepoch = nepoch
+        self.max_w = max_w
+        self.max_h = max_h
+        print(f"+++ {self.train_shards}, {self.val_shards}")
 
     def make_loader(
         self,
@@ -282,7 +307,6 @@ class TextDataLoader(pl.LightningDataModule):
         Returns:
             DataLoader: data loader
         """
-        params = self.params
         ds = wds.WebDataset(
             fname,
             cache_size=float(self.cache_size),
@@ -291,27 +315,27 @@ class TextDataLoader(pl.LightningDataModule):
             shardshuffle=50,
             resampled=True,
         )
-        if mode == "train" and params.shuffle > 0:
-            ds = ds.shuffle(params.shuffle)
-        ds = ds.decode("torchrgb8").to_tuple(params.extensions)
-        text_normalizer = eval(f"normalize_{params.text_normalizer}")
+        if mode == "train" and self.shuffle > 0:
+            ds = ds.shuffle(self.shuffle)
+        ds = ds.decode("torchrgb8").to_tuple(self.extensions)
+        text_normalizer = eval(f"normalize_{self.text_normalizer}")
         ds = ds.map_tuple(identity, text_normalizer)
-        if params.text_select_re != "":
-            ds = ds.select(partial(good_text, params.text_select_re))
+        if self.text_select_re != "":
+            ds = ds.select(partial(good_text, self.text_select_re))
         if augment != "":
             f = eval(f"augment_{augment}")
             ds = ds.map_tuple(f, identity)
         ds = ds.map_tuple(jittable.standardize_image, identity)
         ds = ds.select(goodsize)
         ds = ds.map_tuple(jittable.auto_resize, identity)
-        ds = ds.select(partial(goodsize, max_w=params.max_w, max_h=params.max_h))
+        ds = ds.select(partial(goodsize, max_w=self.max_w, max_h=self.max_h))
         dl = wds.WebLoader(
             ds,
             collate_fn=collate4ocr,
             batch_size=batch_size,
             shuffle=False,
-            num_workers=params.num_workers,
-        ).slice(self.params.nepoch // batch_size)
+            num_workers=self.num_workers,
+        ).slice(self.nepoch // batch_size)
         return dl
 
     def train_dataloader(self) -> DataLoader:
@@ -321,8 +345,8 @@ class TextDataLoader(pl.LightningDataModule):
             DataLoader: data loader
         """
         return self.make_loader(
-            self.params["train_shards"],
-            self.params["train_bs"],
+            self.train_shards,
+            self.train_bs,
             mode="train",
         )
 
@@ -332,11 +356,11 @@ class TextDataLoader(pl.LightningDataModule):
         Returns:
             DataLoader: data loader
         """
-        if self.params.get("val_shards") is None:
+        if self.val_shards in ["", None]:
             return None
         return self.make_loader(
-            self.params["val_shards"],
-            self.params["val_bs"],
+            self.val_shards,
+            self.val_bs,
             mode="val",
             augment="",
         )

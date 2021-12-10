@@ -1,9 +1,10 @@
 import os, os.path, random, re, sys
-from typing import List
+from typing import List, Any
 
 import numpy as np
 import typer
 import webdataset as wds
+import PIL.Image
 from PIL import Image, ImageDraw, ImageFont
 
 app = typer.Typer()
