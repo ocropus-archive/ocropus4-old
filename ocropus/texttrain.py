@@ -95,7 +95,6 @@ class TextLightning(pl.LightningModule):
         display_freq: int = 1000,
         lr: float = 3e-4,
         lr_halflife: int = 10,
-        config: Dict[Any, Any] = {},
     ):
         super().__init__()
         self.display_freq = display_freq
@@ -103,8 +102,7 @@ class TextLightning(pl.LightningModule):
         self.lr_halflife = lr_halflife
         self.ctc_loss = nn.CTCLoss(zero_infinity=True)
         self.total = 0
-        self.hparams.config = json.dumps(config)
-        self.save_hyperparameters(ignore="display_freq".split())
+        self.save_hyperparameters()
         self.model = textmodels.TextModel(mname, charset=charset)
         self.get_jit_model()
         print("model created and is JIT-able")
@@ -146,9 +144,7 @@ class TextLightning(pl.LightningModule):
         self.log("val_err", err)
         return loss
 
-    def compute_loss(
-        self, outputs: torch.Tensor, targets: List[torch.Tensor]
-    ) -> torch.Tensor:
+    def compute_loss(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> torch.Tensor:
         assert len(targets) == len(outputs)
         targets, tlens = pack_for_ctc(targets)
         b, d, L = outputs.size()
@@ -159,9 +155,7 @@ class TextLightning(pl.LightningModule):
         assert tlens.sum() == targets.size(0)
         return self.ctc_loss(outputs.cpu(), targets.cpu(), olens.cpu(), tlens.cpu())
 
-    def compute_error(
-        self, outputs: torch.Tensor, targets: List[torch.Tensor]
-    ) -> float:
+    def compute_error(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> float:
         probs = outputs.detach().cpu().softmax(1)
         targets = [[int(x) for x in t] for t in targets]
         total = sum(len(t) for t in targets)
@@ -253,6 +247,7 @@ class TextLightning(pl.LightningModule):
 ### Top-Level Commands
 ###
 
+
 @app.command()
 def train(
     augment: str = "distort",
@@ -284,13 +279,14 @@ def train(
         val_bs=val_bs,
         val_shards=val_shards,
     )
-    print(
-        "# checking training batch size", next(iter(data.train_dataloader()))[0].size()
-    )
+    print("# checking training batch size", next(iter(data.train_dataloader()))[0].size())
 
-    lmodel = TextLightning(mname=mname, charset=charset)
-    for k, v in config.items():
-        setattr(lmodel.hparams, k, v)
+    lmodel = TextLightning(
+        mname=mname,
+        charset=charset,
+        lr=lr,
+        lr_halflife=lr_halflife,
+    )
 
     callbacks = []
 
@@ -306,6 +302,7 @@ def train(
     kw = {}
     if wandb != "":
         from pytorch_lightning.loggers import WandbLogger
+
         wconfig = eval(f"{wandb}")
         kw["logger"] = WandbLogger(**wconfig)
         print(f"# using wandb logger with config {wconfig}")
