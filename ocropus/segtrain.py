@@ -67,9 +67,7 @@ class SegLightning(pl.LightningModule):
         segmodel: Dict[Any, Any] = {},
     ):
         super().__init__()
-        self.params = confparse.Params(locals())
-        self.save_hyperparameters()
-        self.hparams.config = json.dumps(self.params.__dict__)
+        self.save_hyperparameters
         self.model = segmodels.SegModel(mname, **segmodel)
         self.get_jit_model()
         print("model created and is JIT-able")
