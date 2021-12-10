@@ -264,23 +264,8 @@ class TextDataLoader(pl.LightningDataModule):
         """
         super().__init__()
         train_shards = utils.get_shards(train_bucket, train_shards)
-        val_shards = val_shards or self.default_val_shards
-        self.train_shards = train_shards
-        self.train_bs = train_bs
-        self.val_shards = val_shards
-        self.val_bs = val_bs
-        self.cache_size = cache_size
-        self.cache_dir = cache_dir
-        self.num_workers = num_workers
-        self.shuffle = shuffle
-        self.extensions = extensions
-        self.text_normalizer = text_normalizer
-        self.text_select_re = text_select_re
-        self.num_workers = num_workers
-        self.nepoch = nepoch
-        self.max_w = max_w
-        self.max_h = max_h
-        print(f"+++ {self.train_shards}, {self.val_shards}")
+        train_bucket = None
+        self.save_hyperaparameters()
 
     def make_loader(
         self,
@@ -302,33 +287,33 @@ class TextDataLoader(pl.LightningDataModule):
         """
         ds = wds.WebDataset(
             fname,
-            cache_size=float(self.cache_size),
-            cache_dir=self.cache_dir,
+            cache_size=float(self.hparams.cache_size),
+            cache_dir=self.hparams.cache_dir,
             verbose=True,
             shardshuffle=50,
             resampled=True,
         )
-        if mode == "train" and self.shuffle > 0:
-            ds = ds.shuffle(self.shuffle)
-        ds = ds.decode("torchrgb8").to_tuple(self.extensions)
-        text_normalizer = eval(f"normalize_{self.text_normalizer}")
+        if mode == "train" and self.hparams.shuffle > 0:
+            ds = ds.shuffle(self.hparams.shuffle)
+        ds = ds.decode("torchrgb8").to_tuple(self.hparams.extensions)
+        text_normalizer = eval(f"normalize_{self.hparams.text_normalizer}")
         ds = ds.map_tuple(identity, text_normalizer)
-        if self.text_select_re != "":
-            ds = ds.select(partial(good_text, self.text_select_re))
+        if self.hparams.text_select_re != "":
+            ds = ds.select(partial(good_text, self.hparams.text_select_re))
         if augment != "":
             f = eval(f"augment_{augment}")
             ds = ds.map_tuple(f, identity)
         ds = ds.map_tuple(jittable.standardize_image, identity)
         ds = ds.select(goodsize)
         ds = ds.map_tuple(jittable.auto_resize, identity)
-        ds = ds.select(partial(goodsize, max_w=self.max_w, max_h=self.max_h))
+        ds = ds.select(partial(goodsize, max_w=self.hparams.max_w, max_h=self.hparams.max_h))
         dl = wds.WebLoader(
             ds,
             collate_fn=collate4ocr,
             batch_size=batch_size,
             shuffle=False,
-            num_workers=self.num_workers,
-        ).slice(self.nepoch // batch_size)
+            num_workers=self.hparams.num_workers,
+        ).slice(self.hparams.nepoch // batch_size)
         return dl
 
     def train_dataloader(self) -> DataLoader:
@@ -338,8 +323,8 @@ class TextDataLoader(pl.LightningDataModule):
             DataLoader: data loader
         """
         return self.make_loader(
-            self.train_shards,
-            self.train_bs,
+            self.hparams.train_shards,
+            self.hparams.train_bs,
             mode="train",
         )
 
@@ -349,11 +334,11 @@ class TextDataLoader(pl.LightningDataModule):
         Returns:
             DataLoader: data loader
         """
-        if self.val_shards in ["", None]:
+        if self.hparams.val_shards in ["", None]:
             return None
         return self.make_loader(
-            self.val_shards,
-            self.val_bs,
+            self.hparams.val_shards,
+            self.hparams.val_bs,
             mode="val",
             augment="",
         )

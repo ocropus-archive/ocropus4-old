@@ -67,7 +67,7 @@ class SegLightning(pl.LightningModule):
         segmodel: Dict[Any, Any] = {},
     ):
         super().__init__()
-        self.save_hyperparameters
+        self.save_hyperparameters()
         self.model = segmodels.SegModel(mname, **segmodel)
         self.get_jit_model()
         print("model created and is JIT-able")
@@ -77,12 +77,12 @@ class SegLightning(pl.LightningModule):
         return script
 
     def configure_optimizers(self):
-        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.params.lr)
+        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.hparams.lr)
         scheduler = LambdaLR(optimizer, self.schedule)
         return [optimizer], [scheduler]
 
     def schedule(self, epoch: int):
-        return 0.5 ** (epoch // self.params.lr_halflife)
+        return 0.5 ** (epoch // self.hparams.lr_halflife)
 
     def make_weight_mask(self, targets, w, d):
         mask = targets.detach().cpu().numpy()
@@ -108,8 +108,8 @@ class SegLightning(pl.LightningModule):
         )
         targets = targets[:, :h, :w]
         # lsm = outputs.log_softmax(1)
-        if self.params.margin > 0:
-            m = self.params.margin
+        if self.hparams.margin > 0:
+            m = self.hparams.margin
             outputs = outputs[:, :, m:-m, m:-m]
             targets = targets[:, m:-m, m:-m]
             if mask is not None:
@@ -136,9 +136,9 @@ class SegLightning(pl.LightningModule):
             assert outputs.ndim == 4
             bs, h, w = targets.shape
             outputs = outputs[:, :, :h, :w]
-        if self.params.weightmask >= 0 or self.params.bordermask >= 0:
+        if self.hparams.weightmask >= 0 or self.hparams.bordermask >= 0:
             mask = self.make_weight_mask(
-                targets, self.params.weightmask, self.params.bordermask
+                targets, self.hparams.weightmask, self.hparams.bordermask
             )
             self.last_mask = mask
         else:
@@ -151,7 +151,7 @@ class SegLightning(pl.LightningModule):
             errors = (pred != targets).sum()
             err = float(errors) / float(targets.nelement())
             self.log(f"{mode}_err", err, prog_bar=True)
-        if mode == "train" and index % self.params.display_freq == 0:
+        if mode == "train" and index % self.hparams.display_freq == 0:
             self.display_result(index, inputs, targets, outputs, mask)
         return loss
 
