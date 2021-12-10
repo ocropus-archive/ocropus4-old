@@ -261,7 +261,7 @@ def train(
     lr_halflife: int = 10,
     gpus: int = 1,
     default_root_dir: str = "./_logs",
-    checkpoint: int = 100000,
+    checkpoint: int = 1,
     display_freq: int = 1000,
     train_bucket: Optional[str] = None,
     train_shards: Optional[str] = None,
@@ -298,7 +298,9 @@ def train(
         LearningRateMonitor(logging_interval="step"),
     )
 
-    mcheckpoint = ModelCheckpoint(every_n_train_steps=checkpoint//train_bs)
+    mcheckpoint = ModelCheckpoint(
+        every_n_epochs=checkpoint,
+    )
     callbacks.append(mcheckpoint)
 
     if wandb != "":

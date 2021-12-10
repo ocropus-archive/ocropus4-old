@@ -263,15 +263,8 @@ class TextDataLoader(pl.LightningDataModule):
             max_h (int, optional): maximum image height (larger=ignored). Defaults to 200.
         """
         super().__init__()
-        train_bucket = train_bucket or self.default_bucket
-        train_shards = train_shards or self.default_shards
+        train_shards = utils.get_shards(train_bucket, train_shards)
         val_shards = val_shards or self.default_val_shards
-        if train_shards == "all":
-            train_shards = utils.get_s3_listing(train_bucket)
-            train_shards = [os.path.join(train_bucket, shard) for shard in train_shards]
-        else:
-            train_shards = os.path.join(train_bucket, train_shards)
-        print("+++", train_shards)
         self.train_shards = train_shards
         self.train_bs = train_bs
         self.val_shards = val_shards

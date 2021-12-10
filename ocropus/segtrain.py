@@ -1,13 +1,16 @@
 import io, json, sys
 from io import StringIO
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+from click.core import Option
 
 import numpy as np
 import PIL
 import PIL.Image
 import pytorch_lightning as pl
 import torch
+from torch.nn.modules.module import register_module_backward_hook
 import yaml
+import typer
 from matplotlib import gridspec
 from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
@@ -16,6 +19,8 @@ from torch import nn
 from torch.optim.lr_scheduler import LambdaLR
 
 from . import confparse, segmodels, segdata
+
+app = typer.Typer()
 
 default_config = """
 data:
@@ -219,59 +224,88 @@ class SegLightning(pl.LightningModule):
 
             exp.log({key: [wandb.Image(image, caption=key)]})
 
-
-def train(argv: List[str]) -> None:
-    argv = argv or []
-    config = confparse.parse_args(argv, default_config)
-    yaml.dump(config, sys.stdout)
-
-    dataconfig = config["data"]
-    data = segdata.SegDataLoader(**dataconfig)
+@app.command()
+def train(
+    train_bucket: Optional[str] = None,
+    train_shards: Optional[str] = None,
+    train_bs: int = 2,
+    val_shards: Optional[str] = None,
+    val_bs: int = 2,
+    augmentation: str = "default",
+    num_workers: int = 8,
+    nepoch: int = 200000,
+    checkpoint: int = 200000,
+    mname: str = "ocropus.segmodels.segmentation_model_210910",
+    lr: float = 0.01,
+    lr_halflife: int = 500000,
+    display_freq: int = 100,
+    max_epochs: int = 10000,
+    gpus: str = "0,",
+    default_root_dir: str = "./_logs",
+    resume: Optional[str] = None,
+    dumpjit: Optional[str] = None,
+    wandb: str = "",
+) -> None:
+    data = segdata.SegDataLoader(
+        train_bucket = train_bucket,
+        train_shards = train_shards,
+        val_shards = val_shards,
+        train_bs = train_bs,
+        val_bs = val_bs,
+        augmentation = augmentation,
+        num_workers = num_workers,
+        nepoch = nepoch,
+    )
     batch = next(iter(data.train_dataloader()))
     print(
         f"# checking training batch size {batch[0].size()} {batch[1].size()}",
     )
 
-    smodel = SegLightning(**config["lightning"])
-    smodel.hparams.train_bs = dataconfig["train_bs"]
-    smodel.hparams.augmentation = dataconfig["augmentation"]
+    smodel = SegLightning(
+        mname=mname,
+        lr=lr,
+        lr_halflife=lr_halflife,
+        display_freq=display_freq,
+    )
+    smodel.train_bs = train_bs
+    smodel.augmentation = augmentation
 
     callbacks = []
 
     callbacks.append(
         LearningRateMonitor(logging_interval="step"),
     )
-    cpconfig = config["checkpoint"]
-    mcheckpoint = ModelCheckpoint(**cpconfig)
+    mcheckpoint = ModelCheckpoint(
+        every_n_epochs=checkpoint,
+    )
     callbacks.append(mcheckpoint)
 
-    tconfig = config["trainer"]
-
-    if "logging" in config and "wandb" in config["logging"]:
-        print(f"# logging to {config['logging']['wandb']}")
+    if wandb != "":
+        wconfig = eval("{"+wandb+"}")
+        print(f"# logging to {wconfig}")
         from pytorch_lightning.loggers import WandbLogger
 
-        tconfig["logger"] = WandbLogger(**config["logging"]["wandb"])
+        tconfig["logger"] = WandbLogger(**wconfig)
     else:
         print(f"# logging locally")
 
     trainer = pl.Trainer(
         callbacks=callbacks,
-        **tconfig,
+        max_epochs=max_epochs,
+        gpus=gpus,
+        default_root_dir=default_root_dir,
+        resume_from_checkpoint=resume,
     )
-    print("mcheckpoint.dirpath", mcheckpoint.dirpath)
 
-    if config.get("dumpjit"):
-        assert (
-            "resume_from_checkpoint" in config["trainer"]
-        ), "must resume from checkpoint to dump JIT script"
+    if dumpjit is not None:
+        assert resume is not None, "dumpjit requires a checkpoint"
         script = smodel.get_jit_model()
-        torch.jit.save(script, config["dumpjit"])
-        print(f"# saved model to {config['dumpjit']}")
+        torch.jit.save(script, dumpjit)
+        print(f"# saved model to {dumpjit}")
         sys.exit(0)
 
     trainer.fit(smodel, data)
 
 
 if __name__ == "__main__":
-    train(sys.argv[1:])
+    app()
