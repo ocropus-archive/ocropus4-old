@@ -465,7 +465,8 @@ def get_s3_listing(url):
 def maybe_expand_bucket(url):
     if url.endswith("/"):
         url = url.rstrip("/")
-        shards = get_s3_listing(bucket)
+        shards = get_s3_listing(url)
+        print(f"# got {len(shards)} shards from {url}")
         return [url + "/" + shard for shard in shards]
     else:
         return url

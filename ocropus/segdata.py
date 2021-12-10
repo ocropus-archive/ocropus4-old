@@ -55,13 +55,11 @@ def augmentation_default(sample):
 
 
 class SegDataLoader(pl.LightningDataModule):
-    default_train_bucket = "http://storage.googleapis.com/nvdata-ocropus-wseg"
-    default_train_shards = "uw3-wseg-{000000..000117}.tar"
+    default_train_shards = "http://storage.googleapis.com/nvdata-ocropus-wseg/uw3-wseg-{000000..000117}.tar"
     default_val_shards = "http://storage.googleapis.com/nvdata-ocropus-val/val-wseg-000000.tar"
 
     def __init__(
         self,
-        train_bucket=None,
         train_shards=None,
         train_bs=2,
         val_shards=None,
@@ -76,47 +74,39 @@ class SegDataLoader(pl.LightningDataModule):
         nepoch=1000000000,
     ):
         super().__init__()
-        train_bucket = train_bucket or self.default_train_bucket
         train_shards = train_shards or self.default_train_shards
-        self.train_shards = utils.get_shards(train_bucket, train_shards)
-        self.train_bs = train_bs
-        self.val_shards = val_shards or self.default_val_shards
-        self.val_bs = val_bs
-        self.extensions = extensions
-        self.scale = scale
-        self.augmentation = augmentation
-        self.shuffle = shuffle
-        self.num_workers = num_workers
-        self.invert = invert
-        self.remapper = remapper
-        self.nepoch = nepoch
-
+        train_shards = utils.maybe_expand_bucket(train_shards)
+        val_shards = val_shards or self.default_val_shards
+        self.save_hyperparameters()
 
     def make_loader(self, urls, batch_size, mode):
-        print(locals())
         training = wds.WebDataset(urls, handler=wds.warn_and_continue)
         training = training.shuffle(
-            self.shuffle,
+            self.hparams.shuffle,
             handler=wds.warn_and_continue,
         )
         training = training.decode("torchrgb8")
-        training = training.to_tuple(
-            self.extensions, handler=wds.warn_and_continue
-        )
+        training = training.to_tuple(self.hparams.extensions, handler=wds.warn_and_continue)
         training = training.map(convert_image_target)
-        if self.remapper is not None:
-            training = training.map_tuple(None, self.remapper)
+        if self.hparams.remapper is not None:
+            training = training.map_tuple(None, self.hparams.remapper)
         if mode == "train":
-            augmentation = eval(f"augmentation_{self.augmentation}")
+            augmentation = eval(f"augmentation_{self.hparams.augmentation}")
             training = training.map(augmentation)
-        return wds.WebLoader(
-            training, batch_size=batch_size, num_workers=self.num_workers
-        ).slice(self.nepoch // batch_size)
+        return wds.WebLoader(training, batch_size=batch_size, num_workers=self.hparams.num_workers).slice(
+            self.hparams.nepoch // batch_size
+        )
 
     def train_dataloader(self):
         return self.make_loader(
-            self.train_shards, self.train_bs, "train"
+            self.hparams.train_shards,
+            self.hparams.train_bs,
+            "train",
         )
 
     def val_dataloader(self):
-        return self.make_loader(self.val_shards, self.val_bs, "val")
+        return self.make_loader(
+            self.hparams.val_shards,
+            self.hparams.val_bs,
+            "val",
+        )

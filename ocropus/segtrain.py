@@ -22,36 +22,6 @@ from . import confparse, segmodels, segdata
 
 app = typer.Typer()
 
-default_config = """
-data:
-    train_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-wseg-sub/uw3-wseg-{000000..000116}.tar"
-    train_bs: 2
-    val_shards: "pipe:curl -s -L http://storage.googleapis.com/nvdata-ocropus-wseg-sub/uw3-wseg-{000117..000117}.tar"
-    val_bs: 2
-    augmentation: default
-    num_workers: 8
-    nepoch: 200000
-checkpoint:
-    every_n_epochs: 1
-lightning:
-    mname: ocropus.segmodels.segmentation_model_210910
-    lr: 0.01
-    lr_halflife: 5
-    display_freq: 100
-trainer:
-    max_epochs: 10000
-    gpus: 1
-    default_root_dir: ./_logs
-logging: {}
-"""
-
-default_config = yaml.safe_load(StringIO(default_config))
-
-
-###
-# Loading and Preprocessing
-###
-
 
 class SegLightning(pl.LightningModule):
     def __init__(
@@ -117,15 +87,13 @@ class SegLightning(pl.LightningModule):
         if mask is None:
             loss = nn.CrossEntropyLoss()(outputs, targets.to(outputs.device))
         else:
-            loss = nn.CrossEntropyLoss(reduction="none")(
-                outputs, targets.to(outputs.device)
-            )
+            loss = nn.CrossEntropyLoss(reduction="none")(outputs, targets.to(outputs.device))
             loss = torch.sum(loss * mask.to(loss.device)) / (0.1 + mask.sum())
         return loss
 
     def training_step(self, batch, index, mode="train"):
         inputs, targets = batch
-        assert inputs.ndim == 4, (inputs.shape, outputs.shape, targets.shape)
+        assert inputs.ndim == 4, inputs.shape
         assert inputs.shape[1] == 3, inputs.shape
         outputs = self.model.forward(inputs)
         assert outputs.ndim == 4, (inputs.shape, outputs.shape, targets.shape)
@@ -137,9 +105,7 @@ class SegLightning(pl.LightningModule):
             bs, h, w = targets.shape
             outputs = outputs[:, :, :h, :w]
         if self.hparams.weightmask >= 0 or self.hparams.bordermask >= 0:
-            mask = self.make_weight_mask(
-                targets, self.hparams.weightmask, self.hparams.bordermask
-            )
+            mask = self.make_weight_mask(targets, self.hparams.weightmask, self.hparams.bordermask)
             self.last_mask = mask
         else:
             mask = None
@@ -165,9 +131,7 @@ class SegLightning(pl.LightningModule):
 
         fig = plt.figure(figsize=(10, 10))
         gs = gridspec.GridSpec(2, 2)
-        fig_img, fig_out, fig_slice, fig_gt = [
-            fig.add_subplot(gs[k // 2, k % 2]) for k in range(4)
-        ]
+        fig_img, fig_out, fig_slice, fig_gt = [fig.add_subplot(gs[k // 2, k % 2]) for k in range(4)]
         fig_img.set_title(f"{index}")
         doc = inputs[0, 0].detach().cpu().numpy()
         mask = getattr(self, "last_mask")
@@ -222,9 +186,9 @@ class SegLightning(pl.LightningModule):
 
             exp.log({key: [wandb.Image(image, caption=key)]})
 
+
 @app.command()
 def train(
-    train_bucket: Optional[str] = None,
     train_shards: Optional[str] = None,
     train_bs: int = 2,
     val_shards: Optional[str] = None,
@@ -244,15 +208,18 @@ def train(
     dumpjit: Optional[str] = None,
     wandb: str = "",
 ) -> None:
+    """Train segmentation model.
+
+    NB: trailing / in train_shards indicates bucket to be expanded. Only works for S3-like http.
+    """
     data = segdata.SegDataLoader(
-        train_bucket = train_bucket,
-        train_shards = train_shards,
-        val_shards = val_shards,
-        train_bs = train_bs,
-        val_bs = val_bs,
-        augmentation = augmentation,
-        num_workers = num_workers,
-        nepoch = nepoch,
+        train_shards=train_shards,
+        val_shards=val_shards,
+        train_bs=train_bs,
+        val_bs=val_bs,
+        augmentation=augmentation,
+        num_workers=num_workers,
+        nepoch=nepoch,
     )
     batch = next(iter(data.train_dataloader()))
     print(
@@ -265,8 +232,6 @@ def train(
         lr_halflife=lr_halflife,
         display_freq=display_freq,
     )
-    smodel.train_bs = train_bs
-    smodel.augmentation = augmentation
 
     callbacks = []
 
@@ -278,14 +243,15 @@ def train(
     )
     callbacks.append(mcheckpoint)
 
+    kw = {}
     if wandb != "":
-        wconfig = eval("{"+wandb+"}")
+        wconfig = eval("{" + wandb + "}")
         print(f"# logging to {wconfig}")
         from pytorch_lightning.loggers import WandbLogger
 
-        tconfig["logger"] = WandbLogger(**wconfig)
+        kw["logger"] = WandbLogger(**wconfig)
     else:
-        print(f"# logging locally")
+        print("# logging locally")
 
     trainer = pl.Trainer(
         callbacks=callbacks,
@@ -293,6 +259,7 @@ def train(
         gpus=gpus,
         default_root_dir=default_root_dir,
         resume_from_checkpoint=resume,
+        **kw,
     )
 
     if dumpjit is not None:
