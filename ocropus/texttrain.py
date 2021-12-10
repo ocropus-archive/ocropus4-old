@@ -94,7 +94,7 @@ class TextLightning(pl.LightningModule):
         charset: Optional[str] = None,
         display_freq: int = 1000,
         lr: float = 3e-4,
-        lr_halflife: int = 1000,
+        lr_halflife: int = 10,
         config: Dict[Any, Any] = {},
     ):
         super().__init__()
@@ -255,34 +255,34 @@ class TextLightning(pl.LightningModule):
 
 @app.command()
 def train(
-    mname: str = "ocropus.textmodels.ctext_model_211124",
+    augment: str = "distort",
     charset: str = "ocropus.textmodels.charset_ascii",
+    checkpoint: int = 1,
+    default_root_dir: str = "./_logs",
+    display_freq: int = 1000,
+    dumpjit: str = "",
+    gpus: int = 1,
     lr: float = 0.03,
     lr_halflife: int = 10,
-    gpus: int = 1,
-    default_root_dir: str = "./_logs",
-    checkpoint: int = 1,
-    display_freq: int = 1000,
-    train_bucket: Optional[str] = None,
-    train_shards: Optional[str] = None,
-    val_shards: Optional[str] = None,
     max_epochs: int = 10000,
-    train_bs: int = 16,
-    val_bs: int = 16,
-    augment: str = "distort",
-    wandb: str = "",
-    dumpjit: str = "",
+    mname: str = "ocropus.textmodels.ctext_model_211124",
+    nepoch: int = 200000,
     resume: Optional[str] = "",
+    train_bs: int = 16,
+    train_shards: Optional[str] = None,
+    val_bs: int = 16,
+    val_shards: Optional[str] = None,
+    wandb: str = "",
 ):
     config = dict(locals())
 
     data = textdata.TextDataLoader(
-        train_bucket=train_bucket,
-        train_shards=train_shards,
-        val_shards=val_shards,
-        train_bs=train_bs,
-        val_bs=val_bs,
         augment=augment,
+        nepoch=nepoch,
+        train_bs=train_bs,
+        train_shards=train_shards,
+        val_bs=val_bs,
+        val_shards=val_shards,
     )
     print(
         "# checking training batch size", next(iter(data.train_dataloader()))[0].size()
