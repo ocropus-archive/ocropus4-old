@@ -250,7 +250,7 @@ class TextLightning(pl.LightningModule):
 
 
 ###
-##3 Top-Level Commands
+### Top-Level Commands
 ###
 
 @app.command()
@@ -303,13 +303,14 @@ def train(
     )
     callbacks.append(mcheckpoint)
 
+    kw = {}
     if wandb != "":
         from pytorch_lightning.loggers import WandbLogger
         wconfig = eval(f"{wandb}")
-        tconfig["logger"] = WandbLogger(**wconfig)
+        kw["logger"] = WandbLogger(**wconfig)
         print(f"# using wandb logger with config {wconfig}")
     else:
-        print(f"# logging locally")
+        print("# logging locally")
 
     trainer = pl.Trainer(
         callbacks=callbacks,
@@ -317,11 +318,12 @@ def train(
         gpus=gpus,
         resume_from_checkpoint=resume,
         default_root_dir=default_root_dir,
+        **kw,
     )
 
     if dumpjit != "":
-        assert resume_from_checkpoint != "", "must specify checkpoint to dump"
-        script = smodel.get_jit_model()
+        assert resume != "", "must specify checkpoint to dump"
+        script = lmodel.get_jit_model()
         torch.jit.save(script, config["dumpjit"])
         print(f"# saved model to {config['dumpjit']}")
         sys.exit(0)

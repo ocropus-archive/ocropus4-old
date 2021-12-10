@@ -20,11 +20,11 @@ def identity(x: Any) -> Any:
     """Identity function."""
     return x
 
+
 min_w, min_h, max_w, max_h = 15, 15, 4000, 200
 
-def collate4ocr(
-    samples: List[Tuple[torch.Tensor, str]]
-) -> Tuple[torch.Tensor, List[str]]:
+
+def collate4ocr(samples: List[Tuple[torch.Tensor, str]]) -> Tuple[torch.Tensor, List[str]]:
     """Collate OCR images and text into tensor/list batch.
 
     Args:
@@ -36,7 +36,6 @@ def collate4ocr(
     images, seqs = zip(*samples)
     images = jittable.stack_images(images)
     return images, seqs
-
 
 
 def goodsize(sample: Dict[Any, Any], max_w: int = max_w, max_h: int = max_h) -> bool:
@@ -218,13 +217,11 @@ def good_text(regex: str, sample: str) -> bool:
 class TextDataLoader(pl.LightningDataModule):
     """Lightning Data Module for OCR training."""
 
-    default_bucket = "https://storage.googleapis.com/nvdata-ocropus-words"
-    default_shards = "uw3-word-{000000..000022}.tar"
+    default_train_shards = "http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-{000000..000022}.tar"
     default_val_shards = "http://storage.googleapis.com/nvdata-ocropus-val/val-word-{000000..000007}.tar"
 
     def __init__(
         self,
-        train_bucket: Optional[str] = None,
         train_shards: Optional[Union[str, List[str]]] = None,
         val_shards: Optional[Union[str, List[str]]] = None,
         train_bs: int = 16,
@@ -245,7 +242,6 @@ class TextDataLoader(pl.LightningDataModule):
         """Initialize the TextDataLoader
 
         Args:
-            train_bucket (Optional[str]): URL of the bucket containing the training data
             train_shards (Optional[Union[str, List[str], Dict[Any, Any]]], optional): list of shards to train on. Defaults to None.
             val_shards (Optional[Union[str, List[str]]], optional): list of shards to validate on. Defaults to None.
             train_bs (int, optional): batch size for training. Defaults to 4.
@@ -263,9 +259,10 @@ class TextDataLoader(pl.LightningDataModule):
             max_h (int, optional): maximum image height (larger=ignored). Defaults to 200.
         """
         super().__init__()
-        train_shards = utils.get_shards(train_bucket, train_shards)
-        train_bucket = None
-        self.save_hyperaparameters()
+        train_shards = train_shards or self.default_train_shards
+        train_shards = utils.maybe_expand_bucket(train_shards)
+        val_shards = val_shards or self.default_val_shards
+        self.save_hyperparameters()
 
     def make_loader(
         self,

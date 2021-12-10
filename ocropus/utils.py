@@ -462,19 +462,10 @@ def get_s3_listing(url):
     parsed = html.fromstring(data.encode("utf-8"))
     return [x.text for x in parsed.xpath("//key")]
 
-def get_shards(bucket, shards):
-    """Takes a bucket and a shard spec and returns a shard list suitable for WebDataset.
-    
-    This usually just joins the bucket and the shards together.
-    If shards is "all" or "*" or "", then it will list the bucket and return
-    all shards in that bucket as a list.
-    """
-    bucket = bucket or ""
-    shards = shards or ""
-    if shards in [None, "all", "*", ""]:
-        shards = utils.get_s3_listing(bucket)
-        shards = [os.path.join(bucket, shard) for shard in shards]
-        print(f"# Found {len(shards)} shards in {bucket}")
+def maybe_expand_bucket(url):
+    if url.endswith("/"):
+        url = url.rstrip("/")
+        shards = get_s3_listing(bucket)
+        return [url + "/" + shard for shard in shards]
     else:
-        shards = os.path.join(bucket, shards)
-    return shards
+        return url
