@@ -190,13 +190,13 @@ class SegLightning(pl.LightningModule):
 @app.command()
 def train(
     train_shards: Optional[str] = None,
-    train_bs: int = 2,
+    train_bs: int = 4,
     val_shards: Optional[str] = None,
-    val_bs: int = 2,
+    val_bs: int = 4,
     augmentation: str = "default",
     num_workers: int = 8,
     nepoch: int = 200000,
-    checkpoint: int = 200000,
+    checkpoint: int = 1,
     mname: str = "ocropus.segmodels.segmentation_model_210910",
     lr: float = 0.01,
     lr_halflife: int = 500000,
