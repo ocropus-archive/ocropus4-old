@@ -6,12 +6,11 @@ import numpy as np
 import torch
 import typer
 import webdataset as wds
+import scipy.ndimage
 
-from . import loading, nlbin, slog, utils
+from . import nlbin, utils, utils, loading
 
 app = typer.Typer()
-
-logger = slog.NoLogger()
 
 plt.rc("image", cmap="gray")
 plt.rc("image", interpolation="nearest")
@@ -24,26 +23,39 @@ app = typer.Typer()
 
 
 def map_patch(model, patch):
-    h, w = patch.shape
+    assert patch.ndim == 3, patch.shape
+    c, h, w = patch.shape
     if w < 16 or h < 16:
         return None
-    a = torch.tensor(patch).unsqueeze(0).unsqueeze(0)
     model.eval()
     with torch.no_grad():
-        result = model(a.cuda()).cpu()
-    return result[0, 0].detach().cpu().numpy()
+        result = model(patch.unsqueeze(0).cuda()).cpu()[0]
+    assert result.ndim == 3, result.shape
+    assert result.shape[0] == 1, result.shape
+    if result.shape[-2:] != (h, w):
+        assert abs(result.shape[1] - h) <= 8, [result.shape, h]
+        assert abs(result.shape[2] - w) <= 8, [result.shape, w]
+        temp = torch.zeros((1, h, w), dtype=result.dtype)
+        oh, ow = min(h, result.shape[1]), min(w, result.shape[2])
+        temp[:, :oh, :ow] = result[:, :oh, :ow]
+        result = temp
+    return result
 
 
-def patchwise(image, f, r=(256, 1024), s=(177, 477)):
-    h, w = image.shape
-    result = np.zeros(image.shape)
-    counts = np.zeros(image.shape)
+def patchwise(image: torch.Tensor, f, r=(256, 1024), s=(177, 477)):
+    assert image.ndim == 3, image.shape
+    h, w = image.shape[-2:]
+    result = torch.zeros((h, w), dtype=image.dtype)
+    counts = torch.zeros((h, w), dtype=torch.int32)
     for y in range(0, h, s[0]):
         for x in range(0, w, s[1]):
-            input = image[y : y + r[0], x : x + r[1]]
+            input = image[:, y : y + r[0], x : x + r[1]]
             output = f(input)
             if output is None:
                 continue
+            assert output.ndim == 3
+            assert output.shape[-2:] == input.shape[-2:], [output.shape, input.shape]
+            output = output[0]
             # print(result[y:y+r, x:x+r].shape, output[:r, :r].shape)
             result[y : y + r[0], x : x + r[1]] += output[: min(r[0], h - y), : min(r[1], w - x)]
             counts[y : y + r[0], x : x + r[1]] += 1
@@ -51,10 +63,12 @@ def patchwise(image, f, r=(256, 1024), s=(177, 477)):
 
 
 def norm_none(raw):
+    raw = raw.mean(axis=0, keepdims=True)
     return raw
 
 
 def norm_simple(raw):
+    raw = raw.mean(axis=0, keepdims=True)
     lo, hi = np.percentile(raw, 5), np.percentile(raw, 95)
     hi = max(lo + 0.3, hi)
     image = raw - lo
@@ -79,6 +93,10 @@ def norm_nlbin(page, zoomed=4.0, hi_r=50, lo_r=30, min_delta=0.5):
     import torch.nn.functional as F
     import kornia.filters as kfilters
 
+    assert page.ndim == 3
+    page = 1.0 - page
+    page = page.mean(axis=0, keepdims=True)
+    page = page.unsqueeze(0)
     page = page.cuda()
     assert torch.min(page) >= 0.0 and torch.max(page) <= 1.0
     est = F.interpolate(page, scale_factor=1.0 / zoomed, mode="bilinear")
@@ -92,31 +110,54 @@ def norm_nlbin(page, zoomed=4.0, hi_r=50, lo_r=30, min_delta=0.5):
     lo = kfilters.gaussian_blur2d(lo, (lr, lr), (lr // 3, lr // 3), border_type="replicate")
     lo = F.interpolate(lo, size=page.shape[-2:])
     result = (page - lo) / torch.max(hi - lo, torch.tensor(0.5))
+    result = result[0]
+    assert result.ndim == 3
+    result = 1.0 - result
+    result.clamp_(0.0, 1.0)
     return result.cpu()
 
 
 class Binarizer:
     def __init__(
         self,
-        model,
+        model="",
         mode="nlbin",
         r=(256, 1024),
         s=(177, 477),
+        verbose=False,
     ):
-        self.normalizer = utils.load_symbol(f"ocropus/ocroimg/norm_{mode}")
-        self.model = loading.load_jit_model(model)
-        self.model.eval()
+        self.normalizer = utils.load_symbol(f"ocropus.ocroimg.norm_{mode}")
+        if model != "":
+            self.model = loading.load_jit_model(model)
+            self.model.eval()
+            self.model.cuda()
+        else:
+            self.model = None
         self.r, self.s = r, s
+        self.verbose = verbose
 
     def binarize(self, image: torch.Tensor) -> torch.Tensor:
         assert isinstance(image, torch.Tensor)
-        if image.ndim == 3:
-            image = image.mean(0)
+        assert image.ndim == 3
+        assert int(image.shape[0]) in [1, 3]
+        if self.verbose:
+            print(f"# Binarizing {image.shape}")
         image = self.normalizer(image)
-        image = torch.tensor(image).unsqueeze(0).unsqueeze(0)
-        result = patchwise(image, partial(map_patch, self.model), r=self.r, s=self.s)
-        result = result.clip(0, 1)
-        return result
+        assert image.min() >= 0 and image.max() <= 1
+        assert int(image.shape[0]) in [1, 3]
+        if self.model is not None:
+            if self.verbose:
+                print("# Using model")
+            image = image.mean(axis=0, keepdim=True)
+            image = patchwise(image, partial(map_patch, self.model), r=self.r, s=self.s)
+            image = image.clip(0, 1)
+        else:
+            if self.verbose:
+                print("# Not using model")
+            image = image.mean(axis=0)
+        if self.verbose:
+            print(f"# Binarized {image.shape}")
+        return image
 
 
 default_jit_model = "http://storage.googleapis.com/ocropus4-models/effortless-glade-12-binarize.pt"
@@ -125,33 +166,49 @@ default_jit_model = "http://storage.googleapis.com/ocropus4-models/effortless-gl
 @app.command()
 def binarize(
     fname: str,
-    model: str = default_jit_model,
+    model: str = "",
     output: str = "",
+    zoom: float = 1.0,
     extensions="jpg;png;jpeg;page.jpg;page.jpeg",
     mode: str = "nlbin",
     deskew: bool = True,
     keep: bool = True,
-    patch: str = "256,1024",
-    step: str = "177,477",
+    patch: str = "400, 400",
+    step: str = "300, 300",
     show: float = -1,
+    verbose: bool = False,
+    unzoom: bool = False,
 ) -> None:
     """Binarize the images in a WebDataset."""
-    assert model != "", "must specify model"
+    if model == "default":
+        model = default_jit_model
     assert output != "", "must specify output"
-    binarizer = Binarizer(model, mode=mode, r=eval(f"({patch})"), s=eval(f"({step})"))
-    source = wds.WebDataset(fname).decode("torchrgb").rename(jpeg=extensions)
+    binarizer = Binarizer(model=model, mode=mode, r=eval(f"({patch})"), s=eval(f"({step})"), verbose=verbose)
+    source = wds.WebDataset(fname).decode("rgb").rename(jpeg=extensions)
     sink = wds.TarWriter(output)
     if show >= 0:
         plt.ion()
     for sample in source:
-        raw = wds.getfirst(sample, extensions)
-        if raw is None:
+        img = wds.getfirst(sample, extensions)
+        if img is None:
             continue
+        if zoom != 1.0:
+            img = scipy.ndimage.zoom(img, (zoom, zoom, 1), order=1).clip(0, 1)
+        raw = torch.tensor(img.transpose(2, 0, 1))
         print(sample["__key__"], raw.dtype, raw.shape)
+        assert isinstance(raw, torch.Tensor)
+        assert raw.ndim == 3
         binarized = binarizer.binarize(raw)
+        assert isinstance(binarized, torch.Tensor)
+        assert binarized.ndim == 2
+        assert binarized.shape[-2:] == raw.shape[-2:]
+        binarized = torch.stack([binarized, binarized, binarized], axis=0).numpy().transpose(1, 2, 0)
+        if unzoom:
+            binarized = scipy.ndimage.zoom(binarized, (1.0 / zoom, 1.0 / zoom, 1), order=1)
         if show >= 0:
+            plt.clf()
             plt.subplot(1, 2, 1)
-            plt.imshow(raw)
+            plt.imshow(img)
             plt.subplot(1, 2, 2)
             plt.imshow(binarized)
             plt.ginput(1, show)
