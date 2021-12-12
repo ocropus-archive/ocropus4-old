@@ -26,6 +26,9 @@ case $library in
 
 # data extraction
 
+ocroimg)  # recognize pages with layout information
+    $python3 -m ocropus.ocroimg "$@"
+    ;;
 segtrain)  # recognize pages with layout information
     $python3 -m ocropus.segtrain "$@"
     ;;
