@@ -126,7 +126,7 @@ class Binarizer:
         s=(177, 477),
         verbose=False,
     ):
-        self.normalizer = utils.load_symbol(f"ocropus.ocroimg.norm_{mode}")
+        self.normalizer = utils.load_symbol(f"ocropus.ocropre.norm_{mode}")
         if model != "":
             self.model = loading.load_jit_model(model)
             self.model.eval()
@@ -136,7 +136,12 @@ class Binarizer:
         self.r, self.s = r, s
         self.verbose = verbose
 
-    def binarize(self, image: torch.Tensor) -> torch.Tensor:
+    def binarize(self, image: torch.Tensor, zoom=1.0, zoomed=1.0) -> torch.Tensor:
+        import torch.nn.functional as F
+
+        prezoom = zoom * zoomed
+        if prezoom != 1.0:
+            image = F.interpolate(image.unsqueeze(0), scale_factor=prezoom, mode="bilinear")[0]
         assert isinstance(image, torch.Tensor)
         assert image.ndim == 3
         assert int(image.shape[0]) in [1, 3]
@@ -157,6 +162,8 @@ class Binarizer:
             image = image.mean(axis=0)
         if self.verbose:
             print(f"# Binarized {image.shape}")
+        if zoomed != 1.0:
+            image = F.interpolate(image.unsqueeze(0).unsqueeze(0), scale_factor=1.0 / zoomed, mode="bilinear")[0, 0]
         return image
 
 
@@ -168,7 +175,6 @@ def binarize(
     fname: str,
     model: str = "",
     output: str = "",
-    zoom: float = 1.0,
     extensions="jpg;png;jpeg;page.jpg;page.jpeg",
     mode: str = "nlbin",
     deskew: bool = True,
@@ -177,7 +183,8 @@ def binarize(
     step: str = "300, 300",
     show: float = -1,
     verbose: bool = False,
-    unzoom: bool = False,
+    zoom: float = 1.0,
+    zoomed: float = 1.0,
 ) -> None:
     """Binarize the images in a WebDataset."""
     if model == "default":
@@ -192,19 +199,16 @@ def binarize(
         img = wds.getfirst(sample, extensions)
         if img is None:
             continue
-        if zoom != 1.0:
-            img = scipy.ndimage.zoom(img, (zoom, zoom, 1), order=1).clip(0, 1)
         raw = torch.tensor(img.transpose(2, 0, 1))
         print(sample["__key__"], raw.dtype, raw.shape)
         assert isinstance(raw, torch.Tensor)
         assert raw.ndim == 3
-        binarized = binarizer.binarize(raw)
+        binarized = binarizer.binarize(raw, zoom=zoom, zoomed=zoomed)
         assert isinstance(binarized, torch.Tensor)
         assert binarized.ndim == 2
-        assert binarized.shape[-2:] == raw.shape[-2:]
+        if zoom == 1.0:
+            assert binarized.shape[-2:] == raw.shape[-2:]
         binarized = torch.stack([binarized, binarized, binarized], axis=0).numpy().transpose(1, 2, 0)
-        if unzoom:
-            binarized = scipy.ndimage.zoom(binarized, (1.0 / zoom, 1.0 / zoom, 1), order=1)
         if show >= 0:
             plt.clf()
             plt.subplot(1, 2, 1)
