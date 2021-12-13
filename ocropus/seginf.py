@@ -1,17 +1,18 @@
 from itertools import islice
 
+import typer
 import numpy as np
 import scipy.ndimage as ndi
 import webdataset as wds
 
-from . import utils
+from . import utils, patches, loading
+
+app = typer.Typer()
 
 
 def spread_labels(labels, maxdist=9999999):
     """Spread the given labels to the background"""
-    distances, features = ndi.distance_transform_edt(
-        labels == 0, return_distances=1, return_indices=1
-    )
+    distances, features = ndi.distance_transform_edt(labels == 0, return_distances=1, return_indices=1)
     indexes = features[0] * labels.shape[1] + features[1]
     spread = labels.ravel()[indexes.ravel()].reshape(*labels.shape)
     spread *= distances < maxdist
@@ -69,9 +70,7 @@ class Segmenter:
         self.model.eval()
         if page.ndim == 2:
             page = np.expand_dims(page, 2)
-        probs = patches.patchwise_inference(
-            page, self.model, patchsize=self.patchsize, overlap=self.overlap
-        )
+        probs = patches.patchwise_inference(page, self.model, patchsize=self.patchsize, overlap=self.overlap)
         self.probs = probs
         self.gprobs = smooth_probabilities(probs, self.smooth)
         self.segments = marker_segmentation(
@@ -80,8 +79,7 @@ class Segmenter:
             self.maxdist,
         )
         return [
-            (obj[0].start, obj[0].stop, obj[1].start, obj[1].stop)
-            for obj in ndi.find_objects(self.segments)
+            (obj[0].start, obj[0].stop, obj[1].start, obj[1].stop) for obj in ndi.find_objects(self.segments)
         ]
 
 
@@ -98,6 +96,7 @@ def extract_boxes(page, boxes, pad=5):
         yield word
 
 
+@app.command()
 def segment(
     fname: str,
     model: str,
@@ -108,7 +107,7 @@ def segment(
     device: str = None,
 ):
     device = utils.device(device)
-    if device.type == "cpu":
+    if device == "cpu":
         print("segment using CPU")
     model = loading.load_only_model(model)
     segmenter = Segmenter(model, device=device)
@@ -121,3 +120,7 @@ def segment(
         segmenter.segment(image)
 
         pass  # FIXME do something here
+
+
+if __name__ == "__main__":
+    app()
