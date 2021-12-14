@@ -68,7 +68,7 @@ def augment_none(image: torch.Tensor) -> torch.Tensor:
 
 
 @utils.useopt
-def augment_transform(image: torch.Tensor, p: float = 0.5) -> torch.Tensor:
+def augment_transform(timage: torch.Tensor, p: float = 0.5) -> torch.Tensor:
     """Augment image using geometric transformations and noise.
 
     Also binarizes some images.
@@ -80,22 +80,22 @@ def augment_transform(image: torch.Tensor, p: float = 0.5) -> torch.Tensor:
     Returns:
         torch.Tensor: augmented image
     """
-    image = utils.as_npimage(image)
+    image = utils.as_npimage(timage)
     if random.uniform(0, 1) < p:
         image = degrade.normalize(image)
         image = 1.0 * (image > 0.5)
     if image.shape[0] > 80.0:
         image = ndi.zoom(image, 80.0 / image.shape[0], order=1)
     if random.uniform(0, 1) < p:
-        (image,) = degrade.transform_all(image, scale=(-0.3, 0))
+        (image,) = degrade.random_transform_all(image, scale=(-0.3, 0))
     if random.uniform(0, 1) < p:
         image = degrade.noisify(image)
-    image = utils.as_torchimage(image)
-    return image
+    result = utils.as_torchimage(image)
+    return result
 
 
 @utils.useopt
-def augment_distort(image: torch.Tensor, p: float = 0.5) -> torch.Tensor:
+def augment_distort(timage: torch.Tensor, p: float = 0.5, pinv: float=0.2) -> torch.Tensor:
     """Augment image using distortions and noise.
 
     Also binarizes some images.
@@ -103,11 +103,12 @@ def augment_distort(image: torch.Tensor, p: float = 0.5) -> torch.Tensor:
     Args:
         image (torch.Tensor): original image
         p (float, optional): probability of binarization. Defaults to 0.5.
+        p (float, optional): probability of inverting the image. Defaults to 0.2.
 
     Returns:
         [type]: augmented image
     """
-    image = utils.as_npimage(image)
+    image = utils.as_npimage(timage)
     image = image.mean(axis=2)
     if random.uniform(0, 1) < p:
         image = degrade.normalize(image)
@@ -115,13 +116,15 @@ def augment_distort(image: torch.Tensor, p: float = 0.5) -> torch.Tensor:
     if image.shape[0] > 80.0:
         image = ndi.zoom(image, 80.0 / image.shape[0], order=1)
     if random.uniform(0, 1) < p:
-        (image,) = degrade.transform_all(image, scale=(-0.3, 0))
+        (image,) = degrade.random_transform_all(image, scale=(-0.3, 0))
     if random.uniform(0, 1) < p:
         (image,) = degrade.distort_all(image)
     if random.uniform(0, 1) < p:
         image = degrade.noisify(image)
-    image = utils.as_torchimage(image)
-    return image
+    if random.uniform(0, 1) < pinv:
+        image = 1.0 - image
+    result = utils.as_torchimage(image)
+    return result
 
 
 ###

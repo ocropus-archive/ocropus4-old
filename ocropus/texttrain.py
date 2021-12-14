@@ -279,7 +279,9 @@ def train(
         val_bs=val_bs,
         val_shards=val_shards,
     )
-    print("# checking training batch size", next(iter(data.train_dataloader()))[0].size())
+
+    if dumpjit == "":
+        print("# checking training batch size", next(iter(data.train_dataloader()))[0].size())
 
     lmodel = TextLightning(
         mname=mname,
