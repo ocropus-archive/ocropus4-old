@@ -10,7 +10,7 @@ import typer
 import webdataset as wds
 from scipy import stats
 from scipy.ndimage import filters, interpolation, morphology
-from webdataset.iterators import getfirst
+from webdataset import getfirst
 
 from . import utils
 

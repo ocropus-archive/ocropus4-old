@@ -233,6 +233,19 @@ def train(
         display_freq=display_freq,
     )
 
+    if dumpjit is not None:
+        assert resume is not None, "dumpjit requires a checkpoint"
+        print(f"# loading {resume}")
+        ckpt = torch.load(open(resume, "rb"))
+        print("# setting state dict")
+        smodel.load_state_dict(ckpt["state_dict"])
+        print("# compiling jit model")
+        script = smodel.get_jit_model()
+        print(f"# saving {dumpjit}")
+        torch.jit.save(script, dumpjit)
+        print(f"# saved model to {dumpjit}")
+        sys.exit(0)
+
     callbacks = []
 
     callbacks.append(
@@ -261,13 +274,6 @@ def train(
         resume_from_checkpoint=resume,
         **kw,
     )
-
-    if dumpjit is not None:
-        assert resume is not None, "dumpjit requires a checkpoint"
-        script = smodel.get_jit_model()
-        torch.jit.save(script, dumpjit)
-        print(f"# saved model to {dumpjit}")
-        sys.exit(0)
 
     trainer.fit(smodel, data)
 
