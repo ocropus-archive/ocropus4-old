@@ -65,7 +65,7 @@ def transform_image(
     )
 
 
-def transform_all(*args, order=1, **kw):
+def random_transform_all(*args, order=1, **kw):
     """Perform the same random transformation to all images.
 
     Output is same size as input."""

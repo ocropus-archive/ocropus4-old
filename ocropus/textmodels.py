@@ -49,8 +49,10 @@ class TextModel(nn.Module):
     @torch.jit.export
     def forward(self, images: torch.Tensor) -> torch.Tensor:
         assert images.min() >= 0.0 and images.max() <= 1.0
-        self.standardize(images)
         b, c, h, w = images.shape
+        for i in range(b):
+            images[i] -= images[i].min()
+            images[i] /= images[i].max() + 1e-6
         assert b >= 1 and b <= 16384
         assert c == 3
         assert h >= 12 and h <= 512 and w > 15 and w <= 2048
