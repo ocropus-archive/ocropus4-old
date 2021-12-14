@@ -129,9 +129,10 @@ class Binarizer:
         r=(256, 1024),
         s=(177, 477),
         verbose=False,
+        device=None,
     ):
         self.normalizer = utils.load_symbol(f"ocropus.preinf.norm_{mode}")
-        if model != "":
+        if model != "" and model != "none":
             self.model = loading.load_jit_model(model)
             self.model.eval()
             self.model.cuda()
@@ -139,6 +140,7 @@ class Binarizer:
             self.model = None
         self.r, self.s = r, s
         self.verbose = verbose
+        self.device = device
 
     def npbinarize(self, image: np.ndarray, zoom=1.0, zoomed=1.0) -> np.ndarray:
         assert image.ndim == 3 and image.shape[2] == 3, image.shape
@@ -155,20 +157,23 @@ class Binarizer:
         if prezoom != 1.0:
             image = F.interpolate(image.unsqueeze(0), scale_factor=prezoom, mode="bilinear")[0]
         assert isinstance(image, torch.Tensor)
-        
+
         assert image.ndim == 3
         assert image.shape[0] == 3
         image = self.normalizer(image)
         if image.shape[0] == 3:
             image = image.mean(0)
-        
+
         assert image.min() >= 0 and image.max() <= 1
         assert image.ndim == 3
         assert image.shape[0] == 1
         assert image.dtype == torch.float32
-        
+
         if self.model is not None:
+            self.model.eval()
+            self.model.to(device=self.device)
             image = patchwise(image, partial(map_patch, self.model), r=self.r, s=self.s)
+            self.model.cpu()
             assert image.ndim == 3
             assert image.shape[0] == 1
             assert image.dtype == torch.float32
@@ -176,12 +181,12 @@ class Binarizer:
             image = image.clip(0, 1)
         else:
             image = image.mean(axis=0)
-            
+
         if zoomed != 1.0:
             image = F.interpolate(
                 image.unsqueeze(0).unsqueeze(0), scale_factor=1.0 / zoomed, mode="bilinear"
             )[0, 0]
-            
+
         return image
 
 
