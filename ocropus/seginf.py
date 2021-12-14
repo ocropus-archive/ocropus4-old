@@ -60,7 +60,7 @@ class Segmenter:
         else:
             self.model.cpu()
 
-    def segment(self, page):
+    def npsegment(self, page):
         assert isinstance(page, np.ndarray)
         assert page.ndim == 2
         assert page.shape[0] >= 100 and page.shape[0] < 20000, page.shape
@@ -70,7 +70,14 @@ class Segmenter:
         self.model.eval()
         if page.ndim == 2:
             page = np.expand_dims(page, 2)
-        probs = patches.patchwise_inference(page, self.model, patchsize=self.patchsize, overlap=self.overlap)
+        if page.shape[2] == 1:
+            page = np.repeat(page, 3, 2)
+        probs = patches.patchwise_inference(
+            page,
+            self.model,
+            patchsize=self.patchsize,
+            overlap=self.overlap,
+        )
         self.probs = probs
         self.gprobs = smooth_probabilities(probs, self.smooth)
         self.segments = marker_segmentation(

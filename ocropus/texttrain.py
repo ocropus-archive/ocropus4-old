@@ -250,7 +250,7 @@ class TextLightning(pl.LightningModule):
 
 
 ###
-### Top-Level Commands
+# Top-Level Commands
 ###
 
 @app.command()
@@ -292,6 +292,19 @@ def train(
     for k, v in config.items():
         setattr(lmodel.hparams, k, v)
 
+    if dumpjit is not None:
+        assert resume is not None, "dumpjit requires a checkpoint"
+        print(f"# loading {resume}")
+        ckpt = torch.load(open(resume, "rb"))
+        print("# setting state dict")
+        lmodel.load_state_dict(ckpt["state_dict"])
+        print("# compiling jit model")
+        script = lmodel.get_jit_model()
+        print(f"# saving {dumpjit}")
+        torch.jit.save(script, dumpjit)
+        print(f"# saved model to {dumpjit}")
+        sys.exit(0)
+
     callbacks = []
 
     callbacks.append(
@@ -320,13 +333,6 @@ def train(
         default_root_dir=default_root_dir,
         **kw,
     )
-
-    if dumpjit != "":
-        assert resume != "", "must specify checkpoint to dump"
-        script = lmodel.get_jit_model()
-        torch.jit.save(script, config["dumpjit"])
-        print(f"# saved model to {config['dumpjit']}")
-        sys.exit(0)
 
     print("mcheckpoint.dirpath", mcheckpoint.dirpath)
     trainer.fit(lmodel, data)

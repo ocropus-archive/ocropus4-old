@@ -136,6 +136,7 @@ def interesting_patches(
 
 
 def overlapping_tiles(image, r=(32, 32), s=(512, 512)):
+    assert image.ndim == 3
     h, w = image.shape[:2]
     patches = []
     for y in range(0, h, s[0]):
@@ -172,6 +173,9 @@ def full_inference(batch, model, *args, **kw):
 
 
 def patchwise_inference(image, model, patchsize=(512, 512), overlap=(64, 64)):
+    assert isinstance(image, np.ndarray)
+    assert image.ndim == 3
+    assert image.shape[-1] == 3
     patches = overlapping_tiles(image, r=overlap, s=patchsize)
     outputs = []
     for npatch in patches:
