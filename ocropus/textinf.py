@@ -27,6 +27,11 @@ class TextRecognizer:
         self.to("cpu")
 
     def recognize(self, lines: torch.Tensor) -> List[str]:
+        assert lines.ndim == 4
+        assert lines.shape[1] == 3
+        assert lines.min() >= 0 and lines.max() <= 1
+        assert lines.shape[2] >= 16 and lines.shape[2] <= 512
+        assert lines.shape[3] >= 16 and lines.shape[3] <= 1024
         lines = lines.to(self.device)
         with torch.no_grad():
             self.model.eval()

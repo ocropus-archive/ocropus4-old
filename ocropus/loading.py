@@ -115,11 +115,12 @@ def download_cache(url, modeldir=modeldir, timeout=60):
     _, fname = os.path.split(urlparse(url).path)
     # cache_path = os.path.join(modeldir, hashlib.sha1(url.encode("utf-8")).hexdigest() + "_" + fname)
     cache_path = os.path.join(modeldir, fname)
-    if os.path.exists(cache_path) and os.path.getmtime(cache_path) > time.time() - timeout:
-        print(f"# using {cache_path}", file=sys.stderr)
-        return cache_path
-    else:
-        os.remove(cache_path)
+    if os.path.exists(cache_path):
+        if os.path.getmtime(cache_path) > time.time() - timeout:
+            print(f"# using {cache_path}", file=sys.stderr)
+            return cache_path
+        else:
+            os.remove(cache_path)
     print(f"# downloading {url} to {cache_path}", file=sys.stderr)
     r = requests.get(url, stream=True)
     with open(cache_path, "wb") as f:

@@ -45,9 +45,9 @@ def marker_segmentation(markers, regions, maxdist=100):
 
 
 class Segmenter:
-    def __init__(self, model, device=None, invert=True):
+    def __init__(self, mname, device=None, invert=True):
         self.invert = invert
-        self.model = model
+        self.model = loading.load_jit_model(mname)
         self.marker_threshold = 0.3
         self.region_threshold = 0.3
         self.maxdist = 100
@@ -120,8 +120,7 @@ def segment(
 
     binarizer = preinf.Binarizer(model=binmodel, device=device)
 
-    segmodel = loading.load_jit_model(model)
-    segmenter = Segmenter(segmodel, device=device)
+    segmenter = Segmenter(segmname, device=device)
 
     dataset = wds.WebDataset(fname).decode("torchrgb")
 
