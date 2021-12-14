@@ -8,14 +8,28 @@ from .utils import model
 ninput = 3
 
 
+def update_stats(stats, x, l:float=0.99):
+    assert x.ndim == 4
+    stats[0] += len(x)
+    stats[1] = l * stats[1] + (1 - l) * len(x)
+    stats[2] = l * stats[2] + (1 - l) * x.min()
+    stats[3] = l * stats[3] + (1 - l) * x.max()
+    stats[4] = l * stats[4] + (1 - l) * x.mean()
+    stats[5] = l * stats[5] + (1 - l) * x.median()
+    stats[6] = l * stats[6] + (1 - l) * x.shape[-2]
+    stats[7] = l * stats[7] + (1 - l) * x.shape[-1]
+
+
 class SegModel(nn.Module):
     def __init__(self, mname, *, config={}):
         super().__init__()
         self.model = utils.load_symbol(mname)(**config)
+        self.stats = torch.zeros(8)
 
     @torch.jit.export
     def forward(self, images):
         assert images.min() >= 0 and images.max() <= 1
+        update_stats(self.stats, images)
         self.standardize(images)
         b, c, h, w = images.shape
         assert b >= 1 and b <= 16384
@@ -38,9 +52,7 @@ class SegModel(nn.Module):
         assert images.min() >= 0.0 and images.max() <= 1.0
         for i in range(len(images)):
             images[i] -= images[i].min()
-            images[i] /= torch.max(
-                images[i].amax(), torch.tensor([0.01], device=images[i].device)
-            )
+            images[i] /= torch.max(images[i].amax(), torch.tensor([0.01], device=images[i].device))
             if images[i].mean() > 0.5:
                 images[i] = 1 - images[i]
 
