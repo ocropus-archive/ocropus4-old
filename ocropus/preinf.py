@@ -20,14 +20,16 @@ app = typer.Typer()
 # default_jit_model = "http://storage.googleapis.com/ocropus4-models/ruby-sun-22-binarize.pt"
 
 
-def map_patch(model, patch):
+def map_patch(model, patch, device=None):
+    assert patch.dtype == torch.float32
     assert patch.ndim == 3, patch.shape
     c, h, w = patch.shape
     if w < 16 or h < 16:
         return None
     model.eval()
+    device = next(model.parameters()).device
     with torch.no_grad():
-        result = model(patch.unsqueeze(0).cuda()).cpu()[0]
+        result = model(patch.unsqueeze(0).to(device))[0]
     assert result.ndim == 3, result.shape
     # assert result.shape[0] == 2, result.shape
     if result.shape[-2:] != (h, w):
@@ -37,10 +39,11 @@ def map_patch(model, patch):
         oh, ow = min(h, result.shape[1]), min(w, result.shape[2])
         temp[:, :oh, :ow] = result[:, :oh, :ow]
         result = temp
+    assert result.dtype == torch.float32
     return result
 
 
-def patchwise(image: torch.Tensor, f, r=(256, 1024), s=(177, 477), m=(64, 64)):
+def patchwise(image: torch.Tensor, f, r=(400, 400), s=(300, 300), m=(64, 64)):
     assert image.ndim == 3, image.shape
     h, w = image.shape[-2:]
     # result = torch.zeros((h, w), dtype=image.dtype)
@@ -51,16 +54,16 @@ def patchwise(image: torch.Tensor, f, r=(256, 1024), s=(177, 477), m=(64, 64)):
             input = image[:, y : y + r[0], x : x + r[1]]
             if input.shape[-2] < m[0] or input.shape[-1] < m[1]:
                 continue
-            output = f(input)
+            output = f(input).to(device=image.device, dtype=torch.float32)
             if output is None:
                 continue
             assert output.ndim == 3
             assert output.shape[-2:] == input.shape[-2:], [output.shape, input.shape]
             if result is None:
-                result = torch.zeros((output.shape[0], h, w), dtype=output.dtype)
+                result = torch.zeros((output.shape[0], h, w), dtype=output.dtype, device=image.device)
             result[:, y : y + r[0], x : x + r[1]] += output[:, : min(r[0], h - y), : min(r[1], w - x)]
             counts[y : y + r[0], x : x + r[1]] += 1
-    return result / np.maximum(counts, 1.0)[None, :, :]
+    return result / torch.maximum(counts, torch.ones_like(counts))[None, :, :]
 
 
 def norm_none(raw):
@@ -152,32 +155,33 @@ class Binarizer:
         if prezoom != 1.0:
             image = F.interpolate(image.unsqueeze(0), scale_factor=prezoom, mode="bilinear")[0]
         assert isinstance(image, torch.Tensor)
+        
         assert image.ndim == 3
-        assert int(image.shape[0]) in [1, 3]
-        if self.verbose:
-            print(f"# Binarizing {image.shape}")
+        assert image.shape[0] == 3
         image = self.normalizer(image)
+        if image.shape[0] == 3:
+            image = image.mean(0)
+        
         assert image.min() >= 0 and image.max() <= 1
-        assert int(image.shape[0]) in [1, 3]
+        assert image.ndim == 3
+        assert image.shape[0] == 1
+        assert image.dtype == torch.float32
+        
         if self.model is not None:
-            if self.verbose:
-                print("# Using model")
-            image = image.mean(axis=0, keepdim=True)
             image = patchwise(image, partial(map_patch, self.model), r=self.r, s=self.s)
             assert image.ndim == 3
             assert image.shape[0] == 1
-            image = image[0]
+            assert image.dtype == torch.float32
+            image = image.mean(axis=0)
             image = image.clip(0, 1)
         else:
-            if self.verbose:
-                print("# Not using model")
             image = image.mean(axis=0)
-        if self.verbose:
-            print(f"# Binarized {image.shape}")
+            
         if zoomed != 1.0:
             image = F.interpolate(
                 image.unsqueeze(0).unsqueeze(0), scale_factor=1.0 / zoomed, mode="bilinear"
             )[0, 0]
+            
         return image
 
 
