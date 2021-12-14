@@ -293,8 +293,9 @@ def train(
     if dumpjit is not None:
         assert resume is not None, "dumpjit requires a checkpoint"
         print(f"# loading {resume}")
-        ckpt = torch.load(open(resume, "rb"))
+        ckpt = torch.load(open(resume, "rb"), map_location="cpu")
         print("# setting state dict")
+        lmodel.cpu()
         lmodel.load_state_dict(ckpt["state_dict"])
         print("# compiling jit model")
         script = lmodel.get_jit_model()
