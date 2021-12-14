@@ -28,52 +28,6 @@ from . import confparse, jittable, textdata, textmodels
 
 app = typer.Typer()
 
-
-def ctc_decode(
-    probs: torch.Tensor, sigma: float = 1.0, threshold: float = 0.7, full: bool = False
-) -> Union[List[int], Tuple[List[int], List[float]]]:
-    """Perform simple CTC decoding of the probability outputs from an LSTM or similar model.
-
-    Args:
-        probs (torch.Tensor): probabilities in BDL format.
-        sigma (float, optional): smoothing. Defaults to 1.0.
-        threshold (float, optional): thresholding of output probabilities. Defaults to 0.7.
-        full (bool, optional): return both classes and probabilities. Defaults to False.
-
-    Returns:
-        Union[List[int], Tuple[List[int], List[float]]]: [description]
-    """
-    if not isinstance(probs, np.ndarray):
-        probs = probs.detach().cpu().numpy()
-    probs = probs.T
-    delta = np.amax(abs(probs.sum(1) - 1))
-    assert delta < 1e-4, f"input not normalized ({delta}); did you apply .softmax()?"
-    probs = ndi.gaussian_filter(probs, (sigma, 0))
-    probs /= probs.sum(1)[:, newaxis]
-    labels, n = ndi.label(probs[:, 0] < threshold)
-    mask = tile(labels[:, newaxis], (1, probs.shape[1]))
-    mask[:, 0] = 0
-    maxima = ndi.maximum_position(probs, mask, arange(1, amax(mask) + 1))
-    if not full:
-        return [c for r, c in sorted(maxima)]
-    else:
-        return [(r, c, probs[r, c]) for r, c in sorted(maxima)]
-
-
-def pack_for_ctc(seqs: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Pack a list of tensors into tensors in the format required by CTC.
-
-    Args:
-        seqs (List[torch.Tensor]): list of tensors (integer sequences)
-
-    Returns:
-        Tuple[torch.Tensor, torch.Tensor]: packed tensor
-    """
-    allseqs = torch.cat(seqs).long()
-    alllens = torch.tensor([len(s) for s in seqs]).long()
-    return (allseqs, alllens)
-
-
 ###
 ### Text Recognition Models
 ###
@@ -146,7 +100,7 @@ class TextLightning(pl.LightningModule):
 
     def compute_loss(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> torch.Tensor:
         assert len(targets) == len(outputs)
-        targets, tlens = pack_for_ctc(targets)
+        targets, tlens = textmodels.pack_for_ctc(targets)
         b, d, L = outputs.size()
         olens = torch.full((b,), L, dtype=torch.long)
         outputs = outputs.log_softmax(1)
@@ -159,7 +113,7 @@ class TextLightning(pl.LightningModule):
         probs = outputs.detach().cpu().softmax(1)
         targets = [[int(x) for x in t] for t in targets]
         total = sum(len(t) for t in targets)
-        predicted = [ctc_decode(p) for p in probs]
+        predicted = [textmodels.ctc_decode(p) for p in probs]
         errs = [editdistance.distance(p, t) for p, t in zip(predicted, targets)]
         return sum(errs) / float(total)
 
@@ -179,7 +133,7 @@ class TextLightning(pl.LightningModule):
         outputs: torch.Tensor,
     ) -> None:
         self.show_ocr_results(index, inputs, targets, outputs)
-        decoded = ctc_decode(outputs.detach().cpu().softmax(1).numpy()[0])
+        decoded = textmodels.ctc_decode(outputs.detach().cpu().softmax(1).numpy()[0])
         t = self.model.decode_str(targets[0].cpu().numpy())
         s = self.model.decode_str(decoded)
         print(f"\n{t} : {s}")
@@ -194,7 +148,7 @@ class TextLightning(pl.LightningModule):
         """Log the given inputs, targets, and outputs to the logger."""
         inputs = inputs.detach().cpu().numpy()[0]
         outputs = outputs.detach().softmax(1).cpu().numpy()[0]
-        decoded = ctc_decode(outputs)
+        decoded = textmodels.ctc_decode(outputs)
         decode_str = self.model.decode_str
         decode_str(targets[0].cpu().numpy())
         s = decode_str(decoded)
@@ -239,7 +193,7 @@ class TextLightning(pl.LightningModule):
     def predict_batch(self, inputs: torch.Tensor, **kw) -> List[str]:
         """Predict and decode a batch."""
         probs = self.probs_batch(inputs)
-        result = [ctc_decode(p, **kw) for p in probs]
+        result = [textmodels.ctc_decode(p, **kw) for p in probs]
         return result
 
 
@@ -255,14 +209,14 @@ def train(
     checkpoint: int = 1,
     default_root_dir: str = "./_logs",
     display_freq: int = 1000,
-    dumpjit: str = "",
+    dumpjit: Optional[str] = None,
     gpus: int = 1,
     lr: float = 0.03,
     lr_halflife: int = 10,
     max_epochs: int = 10000,
     mname: str = "ocropus.textmodels.ctext_model_211124",
     nepoch: int = 200000,
-    resume: Optional[str] = "",
+    resume: Optional[str] = None,
     train_bs: int = 16,
     train_shards: Optional[str] = None,
     val_bs: int = 16,

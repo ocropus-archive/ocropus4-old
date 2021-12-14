@@ -1,10 +1,59 @@
 import torch
 from torch import nn
 from torchmore import combos, flex, layers
+from typing import List, Tuple, Union
+import scipy.ndimage as ndi
+import numpy as np
+from numpy import amax, arange, newaxis, tile
 
 from . import ocrlayers, utils
 
 ninput = 3
+
+
+def ctc_decode(
+    probs: torch.Tensor, sigma: float = 1.0, threshold: float = 0.7, full: bool = False
+) -> Union[List[int], Tuple[List[int], List[float]]]:
+    """Perform simple CTC decoding of the probability outputs from an LSTM or similar model.
+
+    Args:
+        probs (torch.Tensor): probabilities in BDL format.
+        sigma (float, optional): smoothing. Defaults to 1.0.
+        threshold (float, optional): thresholding of output probabilities. Defaults to 0.7.
+        full (bool, optional): return both classes and probabilities. Defaults to False.
+
+    Returns:
+        Union[List[int], Tuple[List[int], List[float]]]: [description]
+    """
+    if not isinstance(probs, np.ndarray):
+        probs = probs.detach().cpu().numpy()
+    probs = probs.T
+    delta = np.amax(abs(probs.sum(1) - 1))
+    assert delta < 1e-4, f"input not normalized ({delta}); did you apply .softmax()?"
+    probs = ndi.gaussian_filter(probs, (sigma, 0))
+    probs /= probs.sum(1)[:, newaxis]
+    labels, n = ndi.label(probs[:, 0] < threshold)
+    mask = tile(labels[:, newaxis], (1, probs.shape[1]))
+    mask[:, 0] = 0
+    maxima = ndi.maximum_position(probs, mask, arange(1, amax(mask) + 1))
+    if not full:
+        return [c for r, c in sorted(maxima)]
+    else:
+        return [(r, c, probs[r, c]) for r, c in sorted(maxima)]
+
+
+def pack_for_ctc(seqs: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Pack a list of tensors into tensors in the format required by CTC.
+
+    Args:
+        seqs (List[torch.Tensor]): list of tensors (integer sequences)
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: packed tensor
+    """
+    allseqs = torch.cat(seqs).long()
+    alllens = torch.tensor([len(s) for s in seqs]).long()
+    return (allseqs, alllens)
 
 
 def charset_ascii():
@@ -15,12 +64,7 @@ class TextModel(nn.Module):
     """Word-level text model."""
 
     def __init__(
-        self,
-        mname,
-        *,
-        config={},
-        charset: str = "ocropus.textmodels.charset_ascii",
-        unknown_char: int = 26
+        self, mname, *, config={}, charset: str = "ocropus.textmodels.charset_ascii", unknown_char: int = 26
     ):
         super().__init__()
         self.charset = utils.load_symbol(charset)()
@@ -32,18 +76,14 @@ class TextModel(nn.Module):
     def encode_str(self, s: str) -> torch.Tensor:
         result = torch.zeros(len(s), dtype=torch.int64)
         for i, c in enumerate(s):
-            result[i] = (
-                self.charset.index(c) if c in self.charset else self.unknown_char
-            )
+            result[i] = self.charset.index(c) if c in self.charset else self.unknown_char
         return result
 
     @torch.jit.export
     def decode_str(self, l: torch.Tensor) -> str:
         result = ""
         for c in l:
-            result += (
-                self.charset[c] if c < len(self.charset) else chr(self.unknown_char)
-            )
+            result += self.charset[c] if c < len(self.charset) else chr(self.unknown_char)
         return result
 
     @torch.jit.export
@@ -71,9 +111,7 @@ class TextModel(nn.Module):
         assert images.min() >= 0.0 and images.max() <= 1.0
         for i in range(len(images)):
             images[i] -= images[i].min()
-            images[i] /= torch.max(
-                images[i].amax(), torch.tensor([0.01], device=images[i].device)
-            )
+            images[i] /= torch.max(images[i].amax(), torch.tensor([0.01], device=images[i].device))
             if images[i].mean() > 0.5:
                 images[i] = 1 - images[i]
 
