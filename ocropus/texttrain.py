@@ -259,7 +259,7 @@ def train(
     charset: str = "ocropus.textmodels.charset_ascii",
     checkpoint: int = 1,
     default_root_dir: str = "./_logs",
-    display_freq: int = 1000,
+    display_freq: int = 100,
     dumpjit: str = "",
     gpus: int = 1,
     lr: float = 0.03,

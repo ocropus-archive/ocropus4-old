@@ -200,7 +200,7 @@ def train(
     mname: str = "ocropus.segmodels.segmentation_model_210910",
     lr: float = 0.01,
     lr_halflife: int = 500000,
-    display_freq: int = 100,
+    display_freq: int = 50,
     max_epochs: int = 10000,
     gpus: str = "0,",
     default_root_dir: str = "./_logs",
