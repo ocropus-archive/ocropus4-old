@@ -26,6 +26,12 @@ case $library in
 
 # data extraction
 
+ocr)  # recognize pages with layout information
+    $python3 -m ocropus.ocr "$@"
+    ;;
+seginf)  # recognize pages with layout information
+    $python3 -m ocropus.seginf "$@"
+    ;;
 preinf)  # recognize pages with layout information
     $python3 -m ocropus.preinf "$@"
     ;;

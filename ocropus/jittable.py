@@ -39,8 +39,6 @@ def standardize_image(
         im = im.type(torch.float32)
     im -= torch.quantile(im, lo)
     im /= max(float(torch.quantile(im, hi)), 0.01)
-    if torch.quantile(im, 0.5) > 0.5:
-        im = 1 - im
     im = im.clamp(0, 1)
     return im
 

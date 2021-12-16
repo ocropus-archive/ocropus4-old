@@ -98,49 +98,6 @@ def find_function(name, path):
 
 
 #
-# model and state bundles
-#
-
-
-def dict_to_model(state, module_path=module_path):
-    constructor = find_function(state["mname"], module_path)
-    assert constructor is not None, f"can't find {state['mname']} in {module_path}"
-    args, kw = state["margs"]
-    model = constructor(*args, **kw)
-    model.mname_ = state.get("mname")
-    model.margs_ = state["margs"]
-    model.step_ = state.get("step", 0)
-    extra = state.get("extra", {})
-    model.extra_ = extra if extra != {} else dict(state, mstate=None)
-    model.load_state_dict(state["mstate"])
-    return model
-
-
-def model_to_dict(model):
-    return dict(
-        mstate=model.state_dict(),
-        mname=model.mname_,
-        margs=model.margs_,
-        extra=getattr(model, "extra_", {}),
-        step=getattr(model, "step_", 0),
-    )
-
-
-def construct_model(name, *args, module_path=module_path, **kw):
-    if name.endswith(".py") or name.startswith("\n"):
-        warnings.warn("source used in construct_model")
-        constructor = load_function(name)
-    else:
-        constructor = find_function(name, module_path)
-        assert constructor is not None, f"can't find {name} in {module_path}"
-    model = constructor(*args, **kw)
-    model.mname_ = name
-    model.margs_ = (args, kw)
-    model.step_ = 0
-    return model
-
-
-#
 # model loading and saving
 #
 
@@ -148,7 +105,7 @@ def construct_model(name, *args, module_path=module_path, **kw):
 modeldir = os.environ.get("OCROMODELS", os.path.join(os.environ.get("HOME", "/tmp"), ".ocropus4/models"))
 
 
-def download_cache(url, modeldir=modeldir):
+def download_cache(url, modeldir=modeldir, timeout=60):
     """Download a file to a cache directory and return the path to the file."""
 
     if modeldir is None:
@@ -156,9 +113,14 @@ def download_cache(url, modeldir=modeldir):
     if not os.path.exists(modeldir):
         os.makedirs(modeldir)
     _, fname = os.path.split(urlparse(url).path)
-    cache_path = os.path.join(modeldir, hashlib.sha1(url.encode("utf-8")).hexdigest() + "_" + fname)
+    # cache_path = os.path.join(modeldir, hashlib.sha1(url.encode("utf-8")).hexdigest() + "_" + fname)
+    cache_path = os.path.join(modeldir, fname)
     if os.path.exists(cache_path):
-        return cache_path
+        if os.path.getmtime(cache_path) > time.time() - timeout:
+            print(f"# using {cache_path}", file=sys.stderr)
+            return cache_path
+        else:
+            os.remove(cache_path)
     print(f"# downloading {url} to {cache_path}", file=sys.stderr)
     r = requests.get(url, stream=True)
     with open(cache_path, "wb") as f:
@@ -166,62 +128,12 @@ def download_cache(url, modeldir=modeldir):
     return cache_path
 
 
-def load_only_model(fname, *args, module_path=module_path, device="cpu", **kw):
-    if re.search(r"(?i)^https?:.*\.pth$", fname):
-        return load_only_model(download_cache(fname), *args, module_path=module_path, device=device, **kw)
-    if fname.endswith(".sqlite3"):
-        assert os.path.exists(fname)
-        logger = slog.Logger(fname)
-        state = logger.load_last()
-    else:
-        state = torch.load(fname, map_location=torch.device(device))
-    model = dict_to_model(state, module_path=module_path)
-    return model
-
-
 def load_jit_model(fname, device="cpu"):
     import torch.jit
+
     if re.search(r"(?i)^https?:.*", fname):
         cached = download_cache(fname)
-        print("*** remote", cached)
         model = torch.jit.load(cached)
     else:
-        print("*** local", fname)
         model = torch.jit.load(fname)
     return model
-
-
-def load_or_construct_model(path, *args, module_path=module_path, device="cpu", **kw):
-    _, ext = os.path.splitext(path)
-    if ext in [".py", ".sqlite3", ".pth", ".pt", ".jit", ".onnx"]:
-        return load_only_model(path, *args, module_path=module_path, device=device, **kw)
-    else:
-        return construct_model(path, *args, module_path=module_path, **kw)
-
-
-##
-## Model Saving
-##
-#
-#
-#def save_model_as_dict(model, fname, step=None):
-#    """Save a PyTorch model (parameters and source code) to a file."""
-#    state = model_to_dict(model)
-#    torch.save(state, fname)
-#
-#
-#def dump_model_as_dict(model):
-#    """Dump a model to a string using torch.save."""
-#    buf = io.BytesIO()
-#    save_model_as_dict(model, buf)
-#    return buf.getbuffer()
-#
-#
-#def log_model(logger, model, loss=None, step=None, optimizer=None, **kw):
-#    assert loss is not None
-#    assert step is not None
-#    state = model_to_dict(model)
-#    state.update(kw)
-#    logger.save_ocrmodel(model, scalar=loss, step=step)
-#    logger.flush()
-#

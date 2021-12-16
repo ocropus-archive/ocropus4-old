@@ -1,10 +1,59 @@
 import torch
 from torch import nn
 from torchmore import combos, flex, layers
+from typing import List, Tuple, Union
+import scipy.ndimage as ndi
+import numpy as np
+from numpy import amax, arange, newaxis, tile
 
 from . import ocrlayers, utils
 
 ninput = 3
+
+
+def ctc_decode(
+    probs: torch.Tensor, sigma: float = 1.0, threshold: float = 0.7, full: bool = False
+) -> Union[List[int], Tuple[List[int], List[float]]]:
+    """Perform simple CTC decoding of the probability outputs from an LSTM or similar model.
+
+    Args:
+        probs (torch.Tensor): probabilities in BDL format.
+        sigma (float, optional): smoothing. Defaults to 1.0.
+        threshold (float, optional): thresholding of output probabilities. Defaults to 0.7.
+        full (bool, optional): return both classes and probabilities. Defaults to False.
+
+    Returns:
+        Union[List[int], Tuple[List[int], List[float]]]: [description]
+    """
+    if not isinstance(probs, np.ndarray):
+        probs = probs.detach().cpu().numpy()
+    probs = probs.T
+    delta = np.amax(abs(probs.sum(1) - 1))
+    assert delta < 1e-4, f"input not normalized ({delta}); did you apply .softmax()?"
+    probs = ndi.gaussian_filter(probs, (sigma, 0))
+    probs /= probs.sum(1)[:, newaxis]
+    labels, n = ndi.label(probs[:, 0] < threshold)
+    mask = tile(labels[:, newaxis], (1, probs.shape[1]))
+    mask[:, 0] = 0
+    maxima = ndi.maximum_position(probs, mask, arange(1, amax(mask) + 1))
+    if not full:
+        return [c for r, c in sorted(maxima)]
+    else:
+        return [(r, c, probs[r, c]) for r, c in sorted(maxima)]
+
+
+def pack_for_ctc(seqs: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Pack a list of tensors into tensors in the format required by CTC.
+
+    Args:
+        seqs (List[torch.Tensor]): list of tensors (integer sequences)
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: packed tensor
+    """
+    allseqs = torch.cat(seqs).long()
+    alllens = torch.tensor([len(s) for s in seqs]).long()
+    return (allseqs, alllens)
 
 
 def charset_ascii():
@@ -15,12 +64,7 @@ class TextModel(nn.Module):
     """Word-level text model."""
 
     def __init__(
-        self,
-        mname,
-        *,
-        config={},
-        charset: str = "ocropus.textmodels.charset_ascii",
-        unknown_char: int = 26
+        self, mname, *, config={}, charset: str = "ocropus.textmodels.charset_ascii", unknown_char: int = 26
     ):
         super().__init__()
         self.charset = utils.load_symbol(charset)()
@@ -32,25 +76,23 @@ class TextModel(nn.Module):
     def encode_str(self, s: str) -> torch.Tensor:
         result = torch.zeros(len(s), dtype=torch.int64)
         for i, c in enumerate(s):
-            result[i] = (
-                self.charset.index(c) if c in self.charset else self.unknown_char
-            )
+            result[i] = self.charset.index(c) if c in self.charset else self.unknown_char
         return result
 
     @torch.jit.export
     def decode_str(self, l: torch.Tensor) -> str:
         result = ""
         for c in l:
-            result += (
-                self.charset[c] if c < len(self.charset) else chr(self.unknown_char)
-            )
+            result += self.charset[c] if c < len(self.charset) else chr(self.unknown_char)
         return result
 
     @torch.jit.export
     def forward(self, images: torch.Tensor) -> torch.Tensor:
         assert images.min() >= 0.0 and images.max() <= 1.0
-        self.standardize(images)
         b, c, h, w = images.shape
+        for i in range(b):
+            images[i] -= images[i].min()
+            images[i] /= images[i].max() + 1e-6
         assert b >= 1 and b <= 16384
         assert c == 3
         assert h >= 12 and h <= 512 and w > 15 and w <= 2048
@@ -69,9 +111,7 @@ class TextModel(nn.Module):
         assert images.min() >= 0.0 and images.max() <= 1.0
         for i in range(len(images)):
             images[i] -= images[i].min()
-            images[i] /= torch.max(
-                images[i].amax(), torch.tensor([0.01], device=images[i].device)
-            )
+            images[i] /= torch.max(images[i].amax(), torch.tensor([0.01], device=images[i].device))
             if images[i].mean() > 0.5:
                 images[i] = 1 - images[i]
 
@@ -99,24 +139,22 @@ def ctext_model_211124(noutput=1024, shape=(1, ninput, 48, 300)):
 @utils.model
 def text_model_210910(noutput=1024, shape=(1, ninput, 48, 300)):
     """Text recognition model using 2D LSTM and convolutions."""
-    model = TextModel(
-        nn.Sequential(
-            *combos.conv2d_block(32, 3, mp=(2, 1), repeat=2),
-            *combos.conv2d_block(48, 3, mp=(2, 1), repeat=2),
-            *combos.conv2d_block(64, 3, mp=2, repeat=2),
-            *combos.conv2d_block(96, 3, repeat=2),
-            flex.Lstm2(100),
-            # layers.Fun("lambda x: x.max(2)[0]"),
-            ocrlayers.MaxReduce(2),
-            flex.ConvTranspose1d(400, 1, stride=2, padding=1),
-            flex.Conv1d(100, 3, padding=1),
-            flex.BatchNorm1d(),
-            nn.ReLU(),
-            layers.Reorder("BDL", "LBD"),
-            flex.LSTM(100, bidirectional=True),
-            layers.Reorder("LBD", "BDL"),
-            flex.Conv1d(noutput, 1),
-        )
+    model = nn.Sequential(
+        *combos.conv2d_block(32, 3, mp=(2, 1), repeat=2),
+        *combos.conv2d_block(48, 3, mp=(2, 1), repeat=2),
+        *combos.conv2d_block(64, 3, mp=2, repeat=2),
+        *combos.conv2d_block(96, 3, repeat=2),
+        flex.Lstm2(100),
+        # layers.Fun("lambda x: x.max(2)[0]"),
+        ocrlayers.MaxReduce(2),
+        flex.ConvTranspose1d(400, 1, stride=2, padding=1),
+        flex.Conv1d(100, 3, padding=1),
+        flex.BatchNorm1d(),
+        nn.ReLU(),
+        layers.Reorder("BDL", "LBD"),
+        flex.LSTM(100, bidirectional=True),
+        layers.Reorder("LBD", "BDL"),
+        flex.Conv1d(noutput, 1),
     )
     flex.shape_inference(model, shape)
     return model
