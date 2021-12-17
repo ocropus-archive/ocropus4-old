@@ -226,10 +226,12 @@ http://storage.googleapis.com/nvdata-ocropus-words/bin-gsub-{000000..000167}.tar
 http://storage.googleapis.com/nvdata-ocropus-words/bin-ia1-{000000..000033}.tar
 """.strip().split("\n")
 
+
 class TextDataLoader(pl.LightningDataModule):
     """Lightning Data Module for OCR training."""
 
     default_train_shards = "http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-{000000..000022}.tar"
+    default_bucket = "http://storage.googleapis.com/nvdata-ocropus-words/"
     default_val_shards = "http://storage.googleapis.com/nvdata-ocropus-val/val-word-{000000..000007}.tar"
 
     def __init__(
@@ -274,8 +276,11 @@ class TextDataLoader(pl.LightningDataModule):
         super().__init__()
         if train_shards is None:
             pass
-        elif train_shards == "small":
+        elif train_shards == "@small":
             train_shards = self.default_train_shards
+        elif train_shards == "@bucket":
+            train_shards = self.default_bucket
+            train_shards = utils.maybe_expand_bucket(train_shards)
         else:
             train_shards = utils.maybe_expand_bucket(train_shards)
         val_shards = val_shards or self.default_val_shards
