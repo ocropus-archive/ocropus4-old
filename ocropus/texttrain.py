@@ -225,6 +225,23 @@ def train(
 ):
     config = dict(locals())
 
+    if dumpjit is not None:
+        assert resume is not None, "dumpjit requires a checkpoint"
+        print(f"# loading {resume}")
+        ckpt = torch.load(open(resume, "rb"), map_location="cpu")
+        print(ckpt["hparams_name"])
+        print(ckpt["hyper_parameters"])
+        lmodel = TextLightning(**ckpt["hyper_parameters"])
+        print("# setting state dict")
+        lmodel.cpu()
+        lmodel.load_state_dict(ckpt["state_dict"])
+        print("# compiling jit model")
+        script = lmodel.get_jit_model()
+        print(f"# saving {dumpjit}")
+        torch.jit.save(script, dumpjit)
+        print(f"# saved model to {dumpjit}")
+        sys.exit(0)
+
     data = textdata.TextDataLoader(
         augment=augment,
         nepoch=nepoch,
@@ -243,20 +260,6 @@ def train(
         lr=lr,
         lr_halflife=lr_halflife,
     )
-
-    if dumpjit is not None:
-        assert resume is not None, "dumpjit requires a checkpoint"
-        print(f"# loading {resume}")
-        ckpt = torch.load(open(resume, "rb"), map_location="cpu")
-        print("# setting state dict")
-        lmodel.cpu()
-        lmodel.load_state_dict(ckpt["state_dict"])
-        print("# compiling jit model")
-        script = lmodel.get_jit_model()
-        print(f"# saving {dumpjit}")
-        torch.jit.save(script, dumpjit)
-        print(f"# saved model to {dumpjit}")
-        sys.exit(0)
 
     callbacks = []
 
