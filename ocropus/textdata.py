@@ -216,6 +216,15 @@ def good_text(regex: str, sample: str) -> bool:
 ### Data Loading
 ###
 
+all_shards = """
+http://storage.googleapis.com/nvdata-ocropus-words/generated-{000000..000313}.tar
+http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-{000000..000022}.tar
+http://storage.googleapis.com/nvdata-ocropus-words/ia1-{000000..000033}.tar
+http://storage.googleapis.com/nvdata-ocropus-words/cdipsub-{000000..000092}.tar
+http://storage.googleapis.com/nvdata-ocropus-words/gsub-{000000..000167}.tar
+http://storage.googleapis.com/nvdata-ocropus-words/bin-gsub-{000000..000167}.tar
+http://storage.googleapis.com/nvdata-ocropus-words/bin-ia1-{000000..000033}.tar
+""".strip().split("\n")
 
 class TextDataLoader(pl.LightningDataModule):
     """Lightning Data Module for OCR training."""
@@ -226,6 +235,7 @@ class TextDataLoader(pl.LightningDataModule):
     def __init__(
         self,
         train_shards: Optional[Union[str, List[str]]] = None,
+        probs: List[float] = [1.0, 1.0, 0.0],
         val_shards: Optional[Union[str, List[str]]] = None,
         train_bs: int = 16,
         val_bs: int = 24,
@@ -262,8 +272,12 @@ class TextDataLoader(pl.LightningDataModule):
             max_h (int, optional): maximum image height (larger=ignored). Defaults to 200.
         """
         super().__init__()
-        train_shards = train_shards or self.default_train_shards
-        train_shards = utils.maybe_expand_bucket(train_shards)
+        if train_shards is None:
+            pass
+        elif train_shards == "small":
+            train_shards = self.default_train_shards
+        else:
+            train_shards = utils.maybe_expand_bucket(train_shards)
         val_shards = val_shards or self.default_val_shards
         self.save_hyperparameters()
 
@@ -285,14 +299,17 @@ class TextDataLoader(pl.LightningDataModule):
         Returns:
             DataLoader: data loader
         """
-        ds = wds.WebDataset(
-            fname,
-            cache_size=float(self.hparams.cache_size),
-            cache_dir=self.hparams.cache_dir,
-            verbose=True,
-            shardshuffle=50,
-            resampled=True,
-        )
+        if isinstance(fname, (str, list)):
+            ds = wds.WebDataset(
+                fname,
+                cache_size=float(self.hparams.cache_size),
+                cache_dir=self.hparams.cache_dir,
+                verbose=True,
+                shardshuffle=50,
+                resampled=True,
+            )
+        else:
+            ds = fname
         if mode == "train" and self.hparams.shuffle > 0:
             ds = ds.shuffle(self.hparams.shuffle)
         ds = ds.decode("torchrgb8").to_tuple(self.hparams.extensions)
@@ -322,11 +339,27 @@ class TextDataLoader(pl.LightningDataModule):
         Returns:
             DataLoader: data loader
         """
-        return self.make_loader(
-            self.hparams.train_shards,
-            self.hparams.train_bs,
-            mode="train",
-        )
+        if self.hparams.train_shards is None:
+            sources = []
+            for url in all_shards:
+                print(f"adding {url}")
+                ds = wds.WebDataset(
+                    url,
+                    cache_size=float(self.hparams.cache_size),
+                    cache_dir=self.hparams.cache_dir,
+                    verbose=True,
+                    shardshuffle=50,
+                    resampled=True,
+                )
+                sources.append(ds)
+            probs = list(self.hparams.probs) + [self.hparams.probs[-1]] * (len(sources) - len(self.hparams.probs))
+            ds = wds.FluidWrapper(wds.RandomMix(sources, probs))
+            print("with probabilities:", probs)
+        else:
+            print("using training shards:", self.hparams.train_shards)
+            ds = self.hparams.train_shards
+
+        return self.make_loader(ds, self.hparams.train_bs, mode="train",)
 
     def val_dataloader(self) -> DataLoader:
         """Make a data loader for validation.

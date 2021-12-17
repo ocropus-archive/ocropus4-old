@@ -37,7 +37,6 @@ class TextRecognizer:
             self.model.eval()
             result = self.model(lines).softmax(1).cpu()
         seqs = [textmodels.ctc_decode(x) for x in result]
-        print(seqs)
         text = [self.model.decode_str(torch.tensor(x)) for x in seqs]
         return text
 
