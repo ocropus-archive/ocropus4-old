@@ -215,7 +215,7 @@ def train(
     dumpjit: str = "",
     gpus: int = 1,
     lr: float = 1e-3,
-    lr_halflife: int = 50,
+    lr_halflife: int = 10,
     max_epochs: int = 10000,
     mname: str = "ocropus.textmodels.text_model_211217",
     mopts: str = "",
