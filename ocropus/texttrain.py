@@ -211,13 +211,13 @@ def train(
     charset: str = "ocropus.textmodels.charset_ascii",
     checkpoint: int = 1,
     default_root_dir: str = "./_logs",
-    display_freq: int = 100,
+    display_freq: int = 20,
     dumpjit: str = "",
     gpus: int = 1,
-    lr: float = 5e-4,
+    lr: float = 1e-3,
     lr_halflife: int = 50,
     max_epochs: int = 10000,
-    mname: str = "ocropus.textmodels.text_model_210910",
+    mname: str = "ocropus.textmodels.text_model_211217",
     mopts: str = "",
     nepoch: int = 200000,
     resume: Optional[str] = None,
@@ -229,7 +229,7 @@ def train(
 ):
     config = dict(locals())
 
-    if dumpjit is not None:
+    if dumpjit != "":
         assert resume is not None, "dumpjit requires a checkpoint"
         print(f"# loading {resume}")
         ckpt = torch.load(open(resume, "rb"), map_location="cpu")
@@ -254,9 +254,6 @@ def train(
         val_bs=val_bs,
         val_shards=val_shards,
     )
-
-    if dumpjit == "":
-        print("# checking training batch size", next(iter(data.train_dataloader()))[0].size())
 
     mopts = eval(f"dict({mopts})")
     lmodel = TextLightning(
