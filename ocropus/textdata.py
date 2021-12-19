@@ -220,26 +220,16 @@ def good_text(regex: str, sample: str) -> bool:
 ###
 
 
-all_urls = """
-http://storage.googleapis.com/nvdata-ocropus-words/generated-{000000..000313}.tar
-http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-{000000..000022}.tar
-http://storage.googleapis.com/nvdata-ocropus-words/ia1-{000000..000033}.tar
-http://storage.googleapis.com/nvdata-ocropus-words/gsub-{000000..000167}.tar
-http://storage.googleapis.com/nvdata-ocropus-words/cdipsub-{000000..000092}.tar
-http://storage.googleapis.com/nvdata-ocropus-words/bin-gsub-{000000..000167}.tar
-http://storage.googleapis.com/nvdata-ocropus-words/bin-ia1-{000000..000033}.tar
-""".strip().split(
-    "\n"
-)
 
 
 def make_mixed_loader(probs, hparams):
-    assert len(probs) <= len(all_urls)
-    probs = probs + [probs[-1]] * (len(all_urls) - len(probs))
-    sources = []
-    for i, url in enumerate(all_urls):
+    bucket = "http://storage.googleapis.com/nvdata-ocropus-words/"
+    n = 7
+    assert len(probs) <= n
+    probs = probs + [probs[-1]] * (n - len(probs))
+    def load(url):
         print(f"adding {url} with weight {probs[i]}")
-        ds = wds.WebDataset(
+        return wds.WebDataset(
             url,
             cache_size=float(hparams.cache_size),
             cache_dir=hparams.cache_dir,
@@ -247,7 +237,14 @@ def make_mixed_loader(probs, hparams):
             shardshuffle=50,
             resampled=True,
         )
-        sources.append(ds)
+    sources = []
+    sources.append(load("generated-{000000..000313}.tar"))
+    sources.append(load("uw3-word-{000000..000022}.tar"))
+    sources.append(load("ia1-{000000..000033}.tar"))
+    sources.append(load("gsub-{000000..000167}.tar"))
+    sources.append(load("cdipsub-{000000..000092}.tar"))
+    sources.append(load("bin-gsub-{000000..000167}.tar"))
+    sources.append(load("bin-ia1-{000000..000033}.tar"))
     ds = wds.FluidWrapper(wds.RandomMix(sources, probs))
     return ds
 
