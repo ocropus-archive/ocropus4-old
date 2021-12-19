@@ -256,12 +256,13 @@ class TextDataLoader(pl.LightningDataModule):
     """Lightning Data Module for OCR training."""
 
     val_shards = "http://storage.googleapis.com/nvdata-ocropus-val/val-word-{000000..000007}.tar"
-    extensions = "line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt",
+    extensions = "line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt"
     shuffle = 5000
-    nepoch = 50000,
+    nepoch = 50000
 
     def __init__(
         self,
+        probs: List[float] = [1.0, 1.0, 0.2],
         train_bs: int = 16,
         val_bs: int = 24,
         num_workers: int = 8,
@@ -271,12 +272,11 @@ class TextDataLoader(pl.LightningDataModule):
         **kw,
     ):
         super().__init__()
-        val_shards = val_shards or self.default_val_shards
         self.save_hyperparameters()
 
     def train_dataloader(self) -> DataLoader:
         bs = self.hparams.train_bs
-        ds = make_mixed_loader(eval(fname), self.hparams)
+        ds = make_mixed_loader(self.hparams.probs, self.hparams)
         ds = ds.shuffle(self.shuffle)
         ds = ds.decode("torchrgb8").to_tuple(self.extensions)
         ds = ds.map_tuple(identity, normalize_tex)
