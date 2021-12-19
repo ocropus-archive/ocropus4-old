@@ -209,10 +209,9 @@ def normalize_tex(s: str) -> str:
     return s.strip()
 
 
-def good_text(regex: str, sample: str) -> bool:
+def good_text(regex: str, sample: dict) -> bool:
     """Check if a string matches a regular expression."""
-    image, txt = sample
-    return re.search(regex, txt)
+    return re.search(regex, sample["txt"].decode("utf-8"))
 
 
 ###
@@ -227,16 +226,15 @@ def make_mixed_loader(probs, hparams):
     n = 7
     assert len(probs) <= n
     probs = probs + [probs[-1]] * (n - len(probs))
-    def load(url):
-        print(f"adding {url} with weight {probs[i]}")
+    def load(url, normalize=normalize_simple, select="[A-Za-z0-9]"):
         return wds.WebDataset(
-            url,
+            bucket + url,
             cache_size=float(hparams.cache_size),
             cache_dir=hparams.cache_dir,
             verbose=True,
             shardshuffle=50,
             resampled=True,
-        )
+        ).rename(txt="txt;gt.txt").select(partial(good_text, select))
     sources = []
     sources.append(load("generated-{000000..000313}.tar"))
     sources.append(load("uw3-word-{000000..000022}.tar"))
@@ -276,8 +274,6 @@ class TextDataLoader(pl.LightningDataModule):
         ds = make_mixed_loader(self.hparams.probs, self.hparams)
         ds = ds.shuffle(self.shuffle)
         ds = ds.decode("torchrgb8").to_tuple(self.extensions)
-        ds = ds.map_tuple(identity, normalize_tex)
-        ds = ds.select(partial(good_text, "[A-Za-z0-9]"))
         ds = ds.map_tuple(eval(f"augment_{self.hparams.augment}"), identity)
         ds = ds.map_tuple(jittable.standardize_image, identity)
         ds = ds.select(partial(goodsize, max_w=1000, max_h=100))
@@ -300,10 +296,9 @@ class TextDataLoader(pl.LightningDataModule):
             cache_size=float(self.hparams.cache_size),
             cache_dir=self.hparams.cache_dir,
             verbose=True,
-        )
+        ).rename(txt="txt;gt.txt").select(partial(good_text, "[A-Za-z0-9]"))
         ds = ds.decode("torchrgb8").to_tuple(self.extensions)
         ds = ds.map_tuple(identity, normalize_simple)
-        ds = ds.select(partial(good_text, "[A-Za-z0-9]"))
         ds = ds.map_tuple(jittable.standardize_image, identity)
         ds = ds.select(partial(goodsize, max_w=1000, max_h=100))
         ds = ds.map_tuple(jittable.auto_resize, identity)
