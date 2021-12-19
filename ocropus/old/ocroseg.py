@@ -477,13 +477,10 @@ class Segmenter:
         self.maxdist = 100
         self.patchsize = (512, 512)
         self.overlap = (64, 64)
-        self.device = utils.device(device)
+        self.device = device or utils.device(device)
 
-    def activate(self, yes=True):
-        if yes:
-            self.model.to(self.device)
-        else:
-            self.model.cpu()
+    def to(self, device):
+        self.model.to(device)
 
     def segment(self, page):
         assert isinstance(page, np.ndarray)
@@ -491,11 +488,14 @@ class Segmenter:
         assert page.shape[0] >= 100 and page.shape[0] < 20000, page.shape
         assert page.shape[1] >= 100 and page.shape[1] < 20000, page.shape
         self.page = page
-        self.activate()
-        self.model.eval()
         if page.ndim == 2:
             page = np.expand_dims(page, 2)
-        probs = patches.patchwise_inference(page, self.model, patchsize=self.patchsize, overlap=self.overlap)
+        self.model.to(self.device)
+        try:
+            self.model.eval()
+            probs = patches.patchwise_inference(page, self.model, patchsize=self.patchsize, overlap=self.overlap)
+        finally:
+            self.model.to("cpu")
         self.probs = probs
         self.gprobs = smooth_probabilities(probs, self.smooth)
         self.segments = marker_segmentation(

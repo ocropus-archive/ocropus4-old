@@ -234,20 +234,20 @@ class BinTrainer:
 
 class Binarizer:
     def __init__(self, fname=None, device=None):
-        self.device = utils.device(device)
+        self.device = device or utils.device(device)
         self.model = loading.load_only_model(fname)
 
-    def activate(self, yes=True):
-        if yes:
-            self.model.to(self.device)
-        else:
-            self.model.cpu()
+    def to(self, device):
+        self.model.to(device)
 
     def binarize(self, image, nocheck=False, unzoom=True):
-        self.activate(True)
         image = image.transpose(2, 0, 1)
         inputs = torch.tensor(image).unsqueeze(0).to(self.device)
-        outputs = self.model(inputs)[0, 0]
+        self.to(self.device)
+        try:
+            outputs = self.model(inputs)[0, 0]
+        finally:
+            self.to("cpu")
         result = np.array(outputs.detach().cpu().numpy(), dtype=float)
         return result
 

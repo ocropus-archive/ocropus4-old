@@ -12,6 +12,7 @@ import webdataset as wds
 from scipy import ndimage as ndi
 from torch.utils.data import DataLoader
 from urllib.parse import urljoin
+from dataclasses import dataclass, field
 
 from . import confparse, degrade, jittable, utils
 
@@ -81,6 +82,8 @@ def augment_transform(timage: torch.Tensor, p: float = 0.5) -> torch.Tensor:
         torch.Tensor: augmented image
     """
     image = utils.as_npimage(timage)
+    if image.mean() > 0.5:
+        image = 1.0 - image
     if random.uniform(0, 1) < p:
         image = degrade.normalize(image)
         image = 1.0 * (image > 0.5)
@@ -95,7 +98,7 @@ def augment_transform(timage: torch.Tensor, p: float = 0.5) -> torch.Tensor:
 
 
 @utils.useopt
-def augment_distort(timage: torch.Tensor, p: float = 0.5, pinv: float=0.2) -> torch.Tensor:
+def augment_distort(timage: torch.Tensor, p: float = 0.5, maxh=100.0) -> torch.Tensor:
     """Augment image using distortions and noise.
 
     Also binarizes some images.
@@ -110,19 +113,19 @@ def augment_distort(timage: torch.Tensor, p: float = 0.5, pinv: float=0.2) -> to
     """
     image = utils.as_npimage(timage)
     image = image.mean(axis=2)
+    if image.mean() > 0.5:
+        image = 1.0 - image
     if random.uniform(0, 1) < p:
         image = degrade.normalize(image)
         image = 1.0 * (image > 0.5)
-    if image.shape[0] > 80.0:
-        image = ndi.zoom(image, 80.0 / image.shape[0], order=1)
+    if image.shape[0] > maxh:
+        image = ndi.zoom(image, float(maxh) / image.shape[0], order=1)
     if random.uniform(0, 1) < p:
         (image,) = degrade.random_transform_all(image, scale=(-0.3, 0))
     if random.uniform(0, 1) < p:
         (image,) = degrade.distort_all(image)
     if random.uniform(0, 1) < p:
         image = degrade.noisify(image)
-    if random.uniform(0, 1) < pinv:
-        image = 1.0 - image
     result = utils.as_torchimage(image)
     return result
 

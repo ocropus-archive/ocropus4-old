@@ -45,6 +45,7 @@ class TextLightning(pl.LightningModule):
     def __init__(
         self,
         mname: Optional[str] = None,
+        mopts: Dict[str, Any] = None,
         charset: Optional[str] = None,
         display_freq: int = 1000,
         lr: float = 3e-4,
@@ -56,8 +57,10 @@ class TextLightning(pl.LightningModule):
         self.lr_halflife = lr_halflife
         self.ctc_loss = nn.CTCLoss(zero_infinity=True)
         self.total = 0
+        for k, v in mopts.items():
+            setattr(self.hparams, k, v)
         self.save_hyperparameters()
-        self.model = textmodels.TextModel(mname, charset=charset)
+        self.model = textmodels.TextModel(mname, charset=charset, config=mopts)
         self.get_jit_model()
         print("model created and is JIT-able")
 
@@ -208,13 +211,14 @@ def train(
     charset: str = "ocropus.textmodels.charset_ascii",
     checkpoint: int = 1,
     default_root_dir: str = "./_logs",
-    display_freq: int = 100,
+    display_freq: int = 20,
     dumpjit: str = "",
     gpus: int = 1,
-    lr: float = 5e-4,
-    lr_halflife: int = 50,
+    lr: float = 1e-3,
+    lr_halflife: int = 10,
     max_epochs: int = 10000,
-    mname: str = "ocropus.textmodels.text_model_210910",
+    mname: str = "ocropus.textmodels.text_model_211217",
+    mopts: str = "",
     nepoch: int = 200000,
     resume: Optional[str] = None,
     train_bs: int = 16,
@@ -225,7 +229,7 @@ def train(
 ):
     config = dict(locals())
 
-    if dumpjit is not None:
+    if dumpjit != "":
         assert resume is not None, "dumpjit requires a checkpoint"
         print(f"# loading {resume}")
         ckpt = torch.load(open(resume, "rb"), map_location="cpu")
@@ -251,11 +255,10 @@ def train(
         val_shards=val_shards,
     )
 
-    if dumpjit == "":
-        print("# checking training batch size", next(iter(data.train_dataloader()))[0].size())
-
+    mopts = eval(f"dict({mopts})")
     lmodel = TextLightning(
         mname=mname,
+        mopts=mopts,
         charset=charset,
         lr=lr,
         lr_halflife=lr_halflife,

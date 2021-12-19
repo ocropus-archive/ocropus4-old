@@ -158,3 +158,65 @@ def text_model_210910(noutput=1024, shape=(1, ninput, 48, 300)):
     )
     flex.shape_inference(model, shape)
     return model
+
+
+@utils.model
+def text_model_211217(noutput=1024, shape=(1, ninput, 48, 300)):
+    """Text recognition model using 2D LSTM and convolutions."""
+    model = nn.Sequential(
+        *combos.conv2d_block(32, 3, mp=(2, 1), repeat=2),
+        *combos.conv2d_block(48, 3, mp=(2, 1), repeat=2),
+        *combos.conv2d_block(64, 3, mp=2, repeat=2),
+        *combos.conv2d_block(96, 3, repeat=2),
+        flex.Lstm2(100),
+        # layers.Fun("lambda x: x.max(2)[0]"),
+        ocrlayers.MaxReduce(2),
+        flex.ConvTranspose1d(400, 1, stride=2, padding=1),
+        flex.Conv1d(100, 3, padding=1),
+        flex.BatchNorm1d(),
+        nn.ReLU(),
+        layers.Reorder("BDL", "LBD"),
+        flex.LSTM(300, bidirectional=True),
+        layers.Reorder("LBD", "BDL"),
+        flex.Conv1d(noutput, 1),
+    )
+    flex.shape_inference(model, shape)
+    return model
+
+
+@utils.model
+def text_model_211215(
+    noutput=1024,
+    shape=(1, ninput, 48, 300),
+    depth=4,
+    width=32,
+    growth=1.5,
+    xshrink=10,
+    yshrink=10,
+    lstm_initial=0,
+    lstm_2d=100,
+    lstm_final=300,
+):
+    """Text recognition model using 2D LSTM and convolutions."""
+    fmpx = 1.0 / (float(xshrink) ** (1.0 / depth))
+    fmpy = 1.0 / (float(yshrink) ** (1.0 / depth))
+    initial = []
+    if lstm_initial > 0:
+        initial += flex.Lstm(lstm_initial)
+    for i in range(depth):
+        initial += combos.conv2d_block(int(width * (growth ** depth)), fmp=(fmpy, fmpx), repeat=2)
+    model = nn.Sequential(
+        layers.KeepSize(sub=nn.Sequential(*initial)),
+        flex.Lstm2(lstm_2d),
+        ocrlayers.MaxReduce(2),
+        # flex.ConvTranspose1d(400, 1, stride=2, padding=1),
+        flex.Conv1d(width * 4, 3, padding=1),
+        flex.BatchNorm1d(),
+        nn.ReLU(),
+        layers.Reorder("BDL", "LBD"),
+        flex.LSTM(lstm_final, bidirectional=True),
+        layers.Reorder("LBD", "BDL"),
+        flex.Conv1d(noutput, 1),
+    )
+    flex.shape_inference(model, shape)
+    return model
