@@ -217,128 +217,102 @@ def good_text(regex: str, sample: str) -> bool:
 ###
 
 
-class TextDataLoader(pl.LightningDataModule):
-    """Lightning Data Module for OCR training."""
+all_urls = """
+http://storage.googleapis.com/nvdata-ocropus-words/generated-{000000..000313}.tar
+http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-{000000..000022}.tar
+http://storage.googleapis.com/nvdata-ocropus-words/ia1-{000000..000033}.tar
+http://storage.googleapis.com/nvdata-ocropus-words/gsub-{000000..000167}.tar
+http://storage.googleapis.com/nvdata-ocropus-words/cdipsub-{000000..000092}.tar
+http://storage.googleapis.com/nvdata-ocropus-words/bin-gsub-{000000..000167}.tar
+http://storage.googleapis.com/nvdata-ocropus-words/bin-ia1-{000000..000033}.tar
+""".strip().split(
+    "\n"
+)
 
-    default_train_shards = "http://storage.googleapis.com/nvdata-ocropus-words/uw3-word-{000000..000022}.tar"
-    default_val_shards = "http://storage.googleapis.com/nvdata-ocropus-val/val-word-{000000..000007}.tar"
 
-    def __init__(
-        self,
-        train_shards: Optional[Union[str, List[str]]] = None,
-        val_shards: Optional[Union[str, List[str]]] = None,
-        train_bs: int = 16,
-        val_bs: int = 24,
-        text_select_re: str = "[A-Za-z0-9]",
-        nepoch: int = 50000,
-        num_workers: int = 8,
-        cache_size: int = -1,
-        cache_dir: str = None,
-        shuffle: int = 5000,
-        augment: str = "distort",
-        text_normalizer: str = "simple",
-        extensions: str = "line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt",
-        max_w: int = 1000,
-        max_h: int = 200,
-        **kw,
-    ):
-        """Initialize the TextDataLoader
-
-        Args:
-            train_shards (Optional[Union[str, List[str], Dict[Any, Any]]], optional): list of shards to train on. Defaults to None.
-            val_shards (Optional[Union[str, List[str]]], optional): list of shards to validate on. Defaults to None.
-            train_bs (int, optional): batch size for training. Defaults to 4.
-            val_bs (int, optional): batch size for validation. Defaults to 20.
-            text_select_re (str, optional): regular expression that selects training samples. Defaults to "[A-Za-z0-9]".
-            nepoch (int, optional): number of samples per epoch. Defaults to 5000.
-            num_workers (int, optional): number of workers per loader. Defaults to 4.
-            cache_size (int, optional): cache size for downloading shards. Defaults to -1.
-            cache_dir (str, optional): directory where shards are cached. Defaults to None.
-            shuffle (int, optional): size of inline shuffle buffer. Defaults to 5000.
-            augment (str, optional): choice of sample augmentation. Defaults to "distort".
-            text_normalizer (str, optional): choice of text normalization. Defaults to "simple".
-            extensions (str, optional): choice of file name extensions. Defaults to "line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt".
-            max_w (int, optional): maximum image width (larger=ignored). Defaults to 1000.
-            max_h (int, optional): maximum image height (larger=ignored). Defaults to 200.
-        """
-        super().__init__()
-        train_shards = train_shards or self.default_train_shards
-        train_shards = utils.maybe_expand_bucket(train_shards)
-        val_shards = val_shards or self.default_val_shards
-        self.save_hyperparameters()
-
-    def make_loader(
-        self,
-        fname: Union[str, List[str], Dict[Any, Any]],
-        batch_size: int,
-        mode: str = "train",
-        augment: str = "distort",
-    ) -> DataLoader:
-        """Make a data loader for a given collection of shards.
-
-        Args:
-            fname (Union[str, List[str], Dict[Any, Any]]): shard spec, shard list, or dataset dict spec
-            batch_size (int): desired batch size
-            mode (str, optional): mode (val or train). Defaults to "train".
-            augment (str, optional): augmentation function to use. Defaults to "distort".
-
-        Returns:
-            DataLoader: data loader
-        """
+def make_mixed_loader(probs, hparams):
+    assert len(probs) <= len(all_urls)
+    probs = probs + [probs[-1]] * (len(all_urls) - len(probs))
+    sources = []
+    for i, url in enumerate(all_urls):
+        print(f"adding {url} with weight {probs[i]}")
         ds = wds.WebDataset(
-            fname,
-            cache_size=float(self.hparams.cache_size),
-            cache_dir=self.hparams.cache_dir,
+            url,
+            cache_size=float(hparams.cache_size),
+            cache_dir=hparams.cache_dir,
             verbose=True,
             shardshuffle=50,
             resampled=True,
         )
-        if mode == "train" and self.hparams.shuffle > 0:
-            ds = ds.shuffle(self.hparams.shuffle)
-        ds = ds.decode("torchrgb8").to_tuple(self.hparams.extensions)
-        text_normalizer = eval(f"normalize_{self.hparams.text_normalizer}")
-        ds = ds.map_tuple(identity, text_normalizer)
-        if self.hparams.text_select_re != "":
-            ds = ds.select(partial(good_text, self.hparams.text_select_re))
-        if augment != "":
-            f = eval(f"augment_{augment}")
-            ds = ds.map_tuple(f, identity)
+        sources.append(ds)
+    ds = wds.FluidWrapper(wds.RandomMix(sources, probs))
+    return ds
+
+
+class TextDataLoader(pl.LightningDataModule):
+    """Lightning Data Module for OCR training."""
+
+    val_shards = "http://storage.googleapis.com/nvdata-ocropus-val/val-word-{000000..000007}.tar"
+    extensions = "line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt",
+    shuffle = 5000
+    nepoch = 50000,
+
+    def __init__(
+        self,
+        train_bs: int = 16,
+        val_bs: int = 24,
+        num_workers: int = 8,
+        cache_size: int = -1,
+        cache_dir: str = None,
+        augment: str = "distort",
+        **kw,
+    ):
+        super().__init__()
+        val_shards = val_shards or self.default_val_shards
+        self.save_hyperparameters()
+
+    def train_dataloader(self) -> DataLoader:
+        bs = self.hparams.train_bs
+        ds = make_mixed_loader(eval(fname), self.hparams)
+        ds = ds.shuffle(self.shuffle)
+        ds = ds.decode("torchrgb8").to_tuple(self.extensions)
+        ds = ds.map_tuple(identity, normalize_tex)
+        ds = ds.select(partial(good_text, "[A-Za-z0-9]"))
+        ds = ds.map_tuple(eval(f"augment_{self.hparams.augment}"), identity)
         ds = ds.map_tuple(jittable.standardize_image, identity)
-        ds = ds.select(goodsize)
+        ds = ds.select(partial(goodsize, max_w=1000, max_h=100))
         ds = ds.map_tuple(jittable.auto_resize, identity)
-        ds = ds.select(partial(goodsize, max_w=self.hparams.max_w, max_h=self.hparams.max_h))
+        ds = ds.select(partial(goodsize, max_w=1000, max_h=100))
         dl = wds.WebLoader(
             ds,
             collate_fn=collate4ocr,
-            batch_size=batch_size,
+            batch_size=bs,
             shuffle=False,
             num_workers=self.hparams.num_workers,
-        ).slice(self.hparams.nepoch // batch_size)
+        ).slice(self.nepoch // bs)
         return dl
 
-    def train_dataloader(self) -> DataLoader:
-        """Make a data loader for training.
-
-        Returns:
-            DataLoader: data loader
-        """
-        return self.make_loader(
-            self.hparams.train_shards,
-            self.hparams.train_bs,
-            mode="train",
-        )
-
     def val_dataloader(self) -> DataLoader:
-        """Make a data loader for validation.
-
-        Returns:
-            DataLoader: data loader
-        """
         if self.hparams.val_shards in ["", None]:
             return None
-        return self.make_loader(
-            self.hparams.val_shards,
-            self.hparams.val_bs,
-            mode="val",
-            augment="",
+        ds = wds.WebDataset(
+            self.val_shards,
+            cache_size=float(self.hparams.cache_size),
+            cache_dir=self.hparams.cache_dir,
+            verbose=True,
         )
+        ds = ds.decode("torchrgb8").to_tuple(self.extensions)
+        ds = ds.map_tuple(identity, normalize_simple)
+        ds = ds.select(partial(good_text, "[A-Za-z0-9]"))
+        ds = ds.map_tuple(jittable.standardize_image, identity)
+        ds = ds.select(partial(goodsize, max_w=1000, max_h=100))
+        ds = ds.map_tuple(jittable.auto_resize, identity)
+        ds = ds.select(partial(goodsize, max_w=1000, max_h=100))
+        dl = wds.WebLoader(
+            ds,
+            collate_fn=collate4ocr,
+            batch_size=self.hparams.val_bs,
+            shuffle=False,
+            num_workers=self.hparams.num_workers,
+        )
+        return dl
