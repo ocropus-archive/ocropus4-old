@@ -10,9 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 app = typer.Typer()
 
 
-def add_margin(
-    pil_img: PIL.Image.Image, top: int, right: int, bottom: int, left: int, color: Any
-):
+def add_margin(pil_img: PIL.Image.Image, top: int, right: int, bottom: int, left: int, color: Any):
     """Add a margin to an image.
 
     Args:
@@ -34,7 +32,11 @@ def add_margin(
     return result
 
 
-def generate_text(words: List[str]):
+def generate_simple(words: List[str]) -> str:
+    return random.choice(words)
+
+
+def generate_variants(words: List[str]):
     """Generate text from a list of words."""
     case = random.randint(0, 3)
     specials = "-:/,.$%@&*^`~!?()[]{}_"
@@ -77,17 +79,43 @@ def generate_text(words: List[str]):
         return s
 
 
+def ascii_chars():
+    words = [chr(i) for i in range(33, 127)]
+    return words
+
+
+def ascii_chars2():
+    words = [",", "'", "''", '"', ":", ";", "?", "!", "@", "$"] * 2000
+    for i in range(100):
+        words += [chr(i) for i in range(33, 127)]
+    words += [chr(i) + chr(j) for i in range(33, 127) for j in range(33, 127)]
+    return words
+
+
+def read_dict(wordlist: str) -> List[str]:
+    return [s.strip() for s in open(wordlist).readlines()]
+
+
 @app.command()
 def generate(
     output: str = "generated-%06d.tar",
+    generator: str = "variants",
     fontlist: str = "",
     wordlist: str = "/usr/share/dict/words",
     sizes: str = "10, 80",
-    shardsize: int = 10000,
-    nwords: int = 1000000,
+    shardsize: int = 2000,
+    nwords: int = 100000,
 ):
     """Generate a dataset of printed text."""
-    words = [s.strip() for s in open(wordlist).readlines()]
+    if wordlist == "@ascii":
+        words = ascii_chars()
+        generator = generate_simple
+    if wordlist == "@ascii2":
+        words = ascii_chars2()
+        generator = generate_simple
+    else:
+        words = read_dict(wordlist)
+        generator = generate_variants
     print(f"got {len(words)} words")
     if fontlist != "":
         fonts = [s.strip() for s in open(fontlist).readlines()]
@@ -102,7 +130,7 @@ def generate(
     sink = wds.ShardWriter(output, maxcount=shardsize)
     iw, ih = 1024, 1024
     for i in range(nwords):
-        word = generate_text(words)
+        word = generator(words)
         fontname = random.choice(fonts)
         size = int(np.exp(random.uniform(np.log(sizes[0]), np.log(sizes[1]))))
         try:
@@ -116,7 +144,7 @@ def generate(
             print("error during image generation:", repr(exn)[:200])
             print("parameters:", (iw, ih), fontname, size)
             continue
-        if image.width < 40 or image.height < 10:
+        if image.width < 5 or image.height < 5:
             continue
         if image.width > 400 or image.height > 100:
             continue
