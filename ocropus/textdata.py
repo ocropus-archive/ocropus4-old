@@ -274,6 +274,7 @@ class TextDataLoader(pl.LightningDataModule):
         sources.append(load("cdipsub-{000000..000092}.tar"))
         sources.append(load("bin-gsub-{000000..000167}.tar"))
         sources.append(load("bin-ia1-{000000..000033}.tar"))
+        sources.append(load("ascii-{000000..000422}.tar"))
         ds = wds.FluidWrapper(wds.RandomMix(sources, probs))
         ds = ds.shuffle(self.shuffle)
         ds = ds.decode("torchrgb8").to_tuple(self.extensions)
