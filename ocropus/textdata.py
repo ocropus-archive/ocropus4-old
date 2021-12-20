@@ -211,13 +211,12 @@ def normalize_tex(s: str) -> str:
 
 def good_text(regex: str, sample: dict) -> bool:
     """Check if a string matches a regular expression."""
-    return re.search(regex, sample["txt"].decode("utf-8"))
+    return re.search(regex, sample["txt"])
 
 
 ###
 ### Data Loading
 ###
-
 
 class TextDataLoader(pl.LightningDataModule):
     """Lightning Data Module for OCR training."""
@@ -265,7 +264,7 @@ class TextDataLoader(pl.LightningDataModule):
                 )
                 .rename(txt="txt;gt.txt")
                 .decode()
-                .map(txt=normalize)
+                .map_dict(txt=normalize)
                 .select(partial(good_text, select))
             )
 
