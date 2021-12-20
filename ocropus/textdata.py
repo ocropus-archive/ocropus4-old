@@ -247,7 +247,7 @@ class TextDataLoader(pl.LightningDataModule):
         bs = self.hparams.train_bs
         probs = self.hparams.probs
         bucket = self.hparams.bucket
-        n = 7
+        n = 8
         assert len(probs) <= n
         probs = probs + [probs[-1]] * (n - len(probs))
 

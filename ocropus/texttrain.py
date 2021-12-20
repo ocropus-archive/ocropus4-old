@@ -131,8 +131,8 @@ class TextLightning(pl.LightningModule):
         scheduler2 = ExponentialLR(optimizer, gamma=scale**(1.0/steps), last_epoch=steps)
         return [optimizer], [scheduler2]
 
-    # def schedule(self, epoch: int):  # FIXME
-    #     return 0.5 ** (epoch // self.lr_halflife)
+    def schedule(self, epoch: int):  # FIXME
+        return 0.5 ** (epoch // self.lr_halflife)
 
     def log_results(
         self,
@@ -232,8 +232,9 @@ def train(
     val_bs: int = 16,
     val_shards: Optional[str] = None,
     wandb: str = "",
-    lr_halflife: int = 10,
-    scheduler: str = "ExponentialLR(gamma=1e-3**1e-3, last_epoch=1000)",
+    lr_scale: float = 1e-2,
+    lr_steps: int = 300,
+    lr_halflife: int = 10,  # FIXME
 ):
     config = dict(locals())
 
@@ -269,6 +270,8 @@ def train(
         mopts=mopts,
         charset=charset,
         lr=lr,
+        lr_steps=lr_steps,
+        lr_scale=lr_scale,
         lr_halflife=lr_halflife,
     )
 
