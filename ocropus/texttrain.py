@@ -53,8 +53,8 @@ class TextLightning(pl.LightningModule):
     ):
         super().__init__()
         self.display_freq = display_freq
-        self.lr = lr
-        self.lr_halflife = lr_halflife
+        self.lr = lr  # FIXME
+        self.lr_halflife = lr_halflife  # FIXME
         self.ctc_loss = nn.CTCLoss(zero_infinity=True)
         self.total = 0
         for k, v in mopts.items():
@@ -84,6 +84,8 @@ class TextLightning(pl.LightningModule):
         self.log("train_loss", loss)
         err = self.compute_error(outputs, targets)
         self.log("train_err", err, prog_bar=True)
+        current_lr = self.optimizers().param_groups[0]["lr"]
+        self.log("lr", current_lr, prog_bar=True, logger=False)
         if index % self.display_freq == 0:
             self.log_results(index, inputs, targets, outputs)
         self.total += len(inputs)
@@ -121,11 +123,11 @@ class TextLightning(pl.LightningModule):
         return sum(errs) / float(total)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr)
+        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.hparams.lr)
         scheduler = LambdaLR(optimizer, self.schedule)
         return [optimizer], [scheduler]
 
-    def schedule(self, epoch: int):
+    def schedule(self, epoch: int):  # FIXME
         return 0.5 ** (epoch // self.lr_halflife)
 
     def log_results(
@@ -215,17 +217,19 @@ def train(
     dumpjit: str = "",
     gpus: int = 1,
     lr: float = 1e-3,
-    lr_halflife: int = 10,
     max_epochs: int = 10000,
     mname: str = "ocropus.textmodels.text_model_211217",
     mopts: str = "",
     nepoch: int = 200000,
     resume: Optional[str] = None,
+    load_weights: Optional[str] = None,
     train_bs: int = 16,
     train_shards: Optional[str] = None,
     val_bs: int = 16,
     val_shards: Optional[str] = None,
     wandb: str = "",
+    lr_halflife: int = 10,
+    scheduler: str = "ExponentialLR(gamma=1e-3**1e-3, last_epoch=1000)",
 ):
     config = dict(locals())
 
@@ -293,6 +297,11 @@ def train(
         default_root_dir=default_root_dir,
         **kw,
     )
+
+    if load_weights is not None:
+        ckpt = torch.load(open(load_weights, "rb"), map_location="cpu")
+        state = ckpt["state_dict"] if "state_dict" in ckpt else ckpt
+        lmodel.load_state_dict(state)
 
     print("mcheckpoint.dirpath", mcheckpoint.dirpath)
     trainer.fit(lmodel, data)
