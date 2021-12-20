@@ -19,7 +19,7 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from scipy import ndimage as ndi
 from torch import nn
-from torch.optim.lr_scheduler import LambdaLR
+from torch.optim.lr_scheduler import LambdaLR, ExponentialLR
 import typer
 from torchmore import layers
 
@@ -49,6 +49,8 @@ class TextLightning(pl.LightningModule):
         charset: Optional[str] = None,
         display_freq: int = 1000,
         lr: float = 3e-4,
+        lr_scale: float = 1e-3,
+        lr_steps: int = 1000,
         lr_halflife: int = 10,
     ):
         super().__init__()
@@ -124,11 +126,13 @@ class TextLightning(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.model.parameters(), lr=self.hparams.lr)
-        scheduler = LambdaLR(optimizer, self.schedule)
-        return [optimizer], [scheduler]
+        scheduler = LambdaLR(optimizer, self.schedule)  # FIXME
+        scale, steps = self.hparams.lr_scale, self.hparams.lr_steps
+        scheduler2 = ExponentialLR(optimizer, gamma=scale**(1.0/steps), last_epoch=steps)
+        return [optimizer], [scheduler2]
 
-    def schedule(self, epoch: int):  # FIXME
-        return 0.5 ** (epoch // self.lr_halflife)
+    # def schedule(self, epoch: int):  # FIXME
+    #     return 0.5 ** (epoch // self.lr_halflife)
 
     def log_results(
         self,
