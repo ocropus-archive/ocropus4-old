@@ -242,6 +242,7 @@ class TextDataLoader(pl.LightningDataModule):
     ):
         super().__init__()
         self.save_hyperparameters()
+        self.augment = eval(f"augment_{augment}")
 
     def train_dataloader(self) -> DataLoader:
         bs = self.hparams.train_bs
@@ -263,22 +264,23 @@ class TextDataLoader(pl.LightningDataModule):
                     handler=wds.warn_and_continue,
                 )
                 .rename(txt="txt;gt.txt")
+                .decode()
+                .map(txt=normalize)
                 .select(partial(good_text, select))
             )
 
         sources = []
-        sources.append(load("generated-{000000..000313}.tar"))
-        sources.append(load("uw3-word-{000000..000022}.tar"))
+        sources.append(load("generated-{000000..000313}.tar", select="."))
+        sources.append(load("uw3-word-{000000..000022}.tar", normalize=normalize_tex))
         sources.append(load("ia1-{000000..000033}.tar"))
         sources.append(load("gsub-{000000..000167}.tar"))
         sources.append(load("cdipsub-{000000..000092}.tar"))
         sources.append(load("bin-gsub-{000000..000167}.tar"))
         sources.append(load("bin-ia1-{000000..000033}.tar"))
-        sources.append(load("ascii-{000000..000422}.tar"))
+        sources.append(load("ascii-{000000..000422}.tar", select="."))
         ds = wds.FluidWrapper(wds.RandomMix(sources, probs))
-        ds = ds.shuffle(self.shuffle)
-        ds = ds.decode("torchrgb8").to_tuple(self.extensions)
-        ds = ds.map_tuple(eval(f"augment_{self.hparams.augment}"), identity)
+        ds = ds.shuffle(self.shuffle).decode("torchrgb8", partial=True).to_tuple(self.extensions)
+        ds = ds.map_tuple(self.augment, identity)
         ds = ds.map_tuple(jittable.standardize_image, identity)
         ds = ds.select(partial(goodsize, max_w=1000, max_h=100))
         ds = ds.map_tuple(jittable.auto_resize, identity)
