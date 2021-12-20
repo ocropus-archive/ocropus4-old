@@ -219,38 +219,9 @@ def good_text(regex: str, sample: dict) -> bool:
 ###
 
 
-
-
-def make_mixed_loader(probs, hparams):
-    bucket = "http://storage.googleapis.com/nvdata-ocropus-words/"
-    n = 7
-    assert len(probs) <= n
-    probs = probs + [probs[-1]] * (n - len(probs))
-    def load(url, normalize=normalize_simple, select="[A-Za-z0-9]"):
-        return wds.WebDataset(
-            bucket + url,
-            cache_size=float(hparams.cache_size),
-            cache_dir=hparams.cache_dir,
-            verbose=True,
-            shardshuffle=50,
-            resampled=True,
-        ).rename(txt="txt;gt.txt").select(partial(good_text, select))
-    sources = []
-    sources.append(load("generated-{000000..000313}.tar"))
-    sources.append(load("uw3-word-{000000..000022}.tar"))
-    sources.append(load("ia1-{000000..000033}.tar"))
-    sources.append(load("gsub-{000000..000167}.tar"))
-    sources.append(load("cdipsub-{000000..000092}.tar"))
-    sources.append(load("bin-gsub-{000000..000167}.tar"))
-    sources.append(load("bin-ia1-{000000..000033}.tar"))
-    ds = wds.FluidWrapper(wds.RandomMix(sources, probs))
-    return ds
-
-
 class TextDataLoader(pl.LightningDataModule):
     """Lightning Data Module for OCR training."""
 
-    val_shards = "http://storage.googleapis.com/nvdata-ocropus-val/val-word-{000000..000007}.tar"
     extensions = "line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt"
     shuffle = 5000
     nepoch = 50000
@@ -264,6 +235,9 @@ class TextDataLoader(pl.LightningDataModule):
         cache_size: int = -1,
         cache_dir: str = None,
         augment: str = "distort",
+        bucket: str = "http://storage.googleapis.com/nvdata-ocropus-words/",
+        val_bucket: str = "http://storage.googleapis.com/nvdata-ocropus-val/",
+        val_shards: str = "http://storage.googleapis.com/nvdata-ocropus-val/val-word-{000000..000007}.tar",
         **kw,
     ):
         super().__init__()
@@ -271,7 +245,36 @@ class TextDataLoader(pl.LightningDataModule):
 
     def train_dataloader(self) -> DataLoader:
         bs = self.hparams.train_bs
-        ds = make_mixed_loader(self.hparams.probs, self.hparams)
+        probs = self.hparams.probs
+        bucket = self.hparams.bucket
+        n = 7
+        assert len(probs) <= n
+        probs = probs + [probs[-1]] * (n - len(probs))
+
+        def load(url, normalize=normalize_simple, select="[A-Za-z0-9]"):
+            return (
+                wds.WebDataset(
+                    bucket + url,
+                    cache_size=float(self.hparams.cache_size),
+                    cache_dir=self.hparams.cache_dir,
+                    verbose=True,
+                    shardshuffle=50,
+                    resampled=True,
+                    handler=wds.warn_and_continue,
+                )
+                .rename(txt="txt;gt.txt")
+                .select(partial(good_text, select))
+            )
+
+        sources = []
+        sources.append(load("generated-{000000..000313}.tar"))
+        sources.append(load("uw3-word-{000000..000022}.tar"))
+        sources.append(load("ia1-{000000..000033}.tar"))
+        sources.append(load("gsub-{000000..000167}.tar"))
+        sources.append(load("cdipsub-{000000..000092}.tar"))
+        sources.append(load("bin-gsub-{000000..000167}.tar"))
+        sources.append(load("bin-ia1-{000000..000033}.tar"))
+        ds = wds.FluidWrapper(wds.RandomMix(sources, probs))
         ds = ds.shuffle(self.shuffle)
         ds = ds.decode("torchrgb8").to_tuple(self.extensions)
         ds = ds.map_tuple(eval(f"augment_{self.hparams.augment}"), identity)
@@ -291,12 +294,16 @@ class TextDataLoader(pl.LightningDataModule):
     def val_dataloader(self) -> DataLoader:
         if self.hparams.val_shards in ["", None]:
             return None
-        ds = wds.WebDataset(
-            self.val_shards,
-            cache_size=float(self.hparams.cache_size),
-            cache_dir=self.hparams.cache_dir,
-            verbose=True,
-        ).rename(txt="txt;gt.txt").select(partial(good_text, "[A-Za-z0-9]"))
+        ds = (
+            wds.WebDataset(
+                self.val_shards,
+                cache_size=float(self.hparams.cache_size),
+                cache_dir=self.hparams.cache_dir,
+                verbose=True,
+            )
+            .rename(txt="txt;gt.txt")
+            .select(partial(good_text, "[A-Za-z0-9]"))
+        )
         ds = ds.decode("torchrgb8").to_tuple(self.extensions)
         ds = ds.map_tuple(identity, normalize_simple)
         ds = ds.map_tuple(jittable.standardize_image, identity)
