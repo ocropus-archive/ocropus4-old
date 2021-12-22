@@ -98,7 +98,7 @@ class TextModel(nn.Module):
         assert h >= 12 and h <= 512 and w > 15 and w <= 2048
         result = self.model.forward(images)
         assert result.shape[:2] == (b, len(self.charset))
-        assert result.shape[2] >= w - 32 and result.shape[2] <= w + 16
+        # assert result.shape[2] >= w - 32 and result.shape[2] <= w + 16, (images.shape, result.shape)
         return result
 
     @torch.jit.export
@@ -117,7 +117,7 @@ class TextModel(nn.Module):
 
 
 @utils.model
-def ctext_model_211124(noutput=1024, shape=(1, ninput, 48, 300)):
+def ctext_model_211124(noutput=None, shape=(1, ninput, 48, 300)):
     model = nn.Sequential(
         layers.ModPadded(
             64,
@@ -137,7 +137,7 @@ def ctext_model_211124(noutput=1024, shape=(1, ninput, 48, 300)):
 
 
 @utils.model
-def text_model_210910(noutput=1024, shape=(1, ninput, 48, 300)):
+def text_model_210910(noutput=None, shape=(1, ninput, 48, 300)):
     """Text recognition model using 2D LSTM and convolutions."""
     model = nn.Sequential(
         *combos.conv2d_block(32, 3, mp=(2, 1), repeat=2),
@@ -161,7 +161,7 @@ def text_model_210910(noutput=1024, shape=(1, ninput, 48, 300)):
 
 
 @utils.model
-def text_model_211217(noutput=1024, shape=(1, ninput, 48, 300)):
+def text_model_211217(noutput=None, shape=(1, ninput, 48, 300)):
     """Text recognition model using 2D LSTM and convolutions."""
     model = nn.Sequential(
         *combos.conv2d_block(32, 3, mp=(2, 1), repeat=2),
@@ -186,7 +186,7 @@ def text_model_211217(noutput=1024, shape=(1, ninput, 48, 300)):
 
 @utils.model
 def text_model_211215(
-    noutput=1024,
+    noutput=None,
     shape=(1, ninput, 48, 300),
     depth=4,
     width=32,
@@ -217,6 +217,104 @@ def text_model_211215(
         flex.LSTM(lstm_final, bidirectional=True),
         layers.Reorder("LBD", "BDL"),
         flex.Conv1d(noutput, 1),
+    )
+    flex.shape_inference(model, shape)
+    return model
+
+
+@utils.model
+def text_model_211221(
+    noutput=None,
+    shape=(1, ninput, 48, 300),
+    levels=4,
+    depth=32,
+    height=64,
+    growth=1.414,
+    lstm_initial=0,
+    lstm_2d=100,
+    lstm_final=300,
+):
+    """Text recognition model using 2D LSTM and convolutions."""
+    depths = [int(0.5 + 32 * (1.5 ** i)) for i in range(depth)]
+    model = nn.Sequential(
+        ocrlayers.HeightTo(height),
+        layers.ModPadded(
+            2 ** depth,
+            combos.make_unet(depths, sub=flex.Lstm2d(depths[-1])),
+        ),
+        flex.Lstm2d(lstm_2d),
+        ocrlayers.MaxReduce(2),
+        flex.Conv1d(depth * 4, 3, padding=1),
+        flex.BatchNorm1d(),
+        nn.ReLU(),
+        flex.Lstm1d(lstm_final, bidirectional=True),
+        flex.Conv1d(noutput, 1),
+    )
+    flex.shape_inference(model, shape)
+    return model
+
+
+@utils.model
+def ctext_model_211221(
+    noutput=None,
+    shape=(1, ninput, 48, 300),
+    levels=4,
+    depth=5,
+    height=64,
+    last=256,
+    growth=1.414,
+    lstm_initial=0,
+    lstm_2d=100,
+    lstm_final=300,
+):
+    """Text recognition model using 2D LSTM and convolutions."""
+    depths = [int(0.5 + 32 * (1.5 ** i)) for i in range(depth)]
+    model = nn.Sequential(
+        ocrlayers.HeightTo(height),
+        layers.ModPadded(
+            2 ** depth,
+            combos.make_unet(depths, sub=flex.Conv2d(depths[-1], 3, padding=1)),
+        ),
+        flex.Conv2d(depth * 4, 3, padding=1),
+        ocrlayers.MaxReduce(2),
+        flex.Conv1d(last, 3, padding=1),
+        flex.BatchNorm1d(),
+        nn.ReLU(),
+        flex.Conv1d(last, 3, padding=1),
+        flex.BatchNorm1d(),
+        nn.ReLU(),
+        flex.Conv1d(noutput, 1),
+    )
+    flex.shape_inference(model, shape)
+    return model
+
+
+@utils.model
+def local_text_model_211221(
+    noutput=None,
+    shape=(1, ninput, 48, 300),
+    levels=4,
+    depth=5,
+    height=64,
+    last=256,
+    growth=1.414,
+    lstm_initial=0,
+    lstm_2d=100,
+    lstm_final=300,
+):
+    """Text recognition model using 2D LSTM and convolutions."""
+    depths = [int(0.5 + 32 * (1.5 ** i)) for i in range(depth)]
+    model = nn.Sequential(
+        ocrlayers.HeightTo(height),
+        layers.ModPadded(
+            2 ** depth,
+            combos.make_unet(depths, sub=flex.Conv2d(depths[-1], 3, padding=1)),
+        ),
+        flex.Conv2d(depth * 4, 3, padding=1),
+        flex.BatchNorm1d(),
+        nn.ReLU(),
+        flex.Conv2d(noutput, 1),
+        ocrlayers.MaxReduce(2),
     )
     flex.shape_inference(model, shape)
     return model
