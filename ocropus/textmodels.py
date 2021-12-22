@@ -314,7 +314,9 @@ def local_text_model_211221(
         flex.BatchNorm1d(),
         nn.ReLU(),
         flex.Conv2d(noutput, 1),
+        nn.Softmax(1),
         ocrlayers.MaxReduce(2),
+        ocrlayers.Log(),
     )
     flex.shape_inference(model, shape)
     return model

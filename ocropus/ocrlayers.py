@@ -124,3 +124,13 @@ class MaxReduce(nn.Module):
 
     def forward(self, x):
         return x.max(self.d)[0]
+
+
+@utils.public
+class Log(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return x.log()
