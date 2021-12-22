@@ -7,6 +7,7 @@ from torch.nn.functional import interpolate, pad
 
 @torch.jit.export
 def findbbox1(line: torch.Tensor) -> Tuple[int, int]:
+    assert line.ndim == 1
     nz = line.nonzero()
     if nz.size(0) == 0:
         return -1, -1
@@ -15,6 +16,7 @@ def findbbox1(line: torch.Tensor) -> Tuple[int, int]:
 
 @torch.jit.export
 def findbbox(image: torch.Tensor) -> Tuple[int, int, int, int]:
+    assert image.ndim == 3, image.shape
     y0, y1 = findbbox1(image.sum(0).sum(1))
     x0, x1 = findbbox1(image.sum(0).sum(0))
     return x0, y0, x1, y1
@@ -78,12 +80,17 @@ def resize_word(
 
 
 @torch.jit.export
-def crop_image(image: torch.Tensor, threshold: float = 0.8, padding: int = 4) -> torch.Tensor:
+def crop_image(image: torch.Tensor, threshold: float = 0.5, padding: int = 2, erase:int=2) -> torch.Tensor:
     assert image.min() >= 0 and image.max() <= 1
     c, h, w = image.shape
     if h <= 1 or w <= 1:
         return image
-    x0, y0, x1, y1 = findbbox(image > threshold)
+    guide = (image > threshold).type(torch.int32)
+    guide[:, :erase, :] = 0
+    guide[:, -erase:, :] = 0
+    guide[:, :, :erase] = 0
+    guide[:, :, -erase:] = 0
+    x0, y0, x1, y1 = findbbox(guide)
     if x0 < 0 or y0 < 0:
         return torch.zeros((3, 1, 1))
     d = 5

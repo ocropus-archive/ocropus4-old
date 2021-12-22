@@ -1,5 +1,6 @@
 """Text recognition."""
 
+import warnings
 import random, re
 import os.path
 from functools import partial
@@ -58,6 +59,25 @@ def goodsize(sample: Dict[Any, Any], max_w: int = max_w, max_h: int = max_h) -> 
         print("nearly empty image", image.sum())
         return False
     return True
+
+
+def goodhist(sample):
+    """Check if the image has a good histogram."""
+    image, _ = sample
+    if image.dtype == torch.uint8:
+        image = image.float() / 255.0
+    image = image - image.min()
+    if image.ndim == 3:
+        image = image.mean(0)
+    image /= max(image.max(), 1e-4)
+    hist, _ = torch.histogram(image, bins=5, range=(0, 1))
+    if hist[0] < hist[4]:
+        warnings.warn("inverted image")
+        return True  # FIXME
+    if hist[1:4].sum() > hist[0]:
+        warnings.warn("nonbinary image")
+        return False
+    return False  # FIXME
 
 
 @utils.useopt
@@ -241,6 +261,7 @@ class TextDataLoader(pl.LightningDataModule):
         cache_dir: str = None,
         augment: str = "distort",
         bucket: str = "http://storage.googleapis.com/nvdata-ocropus-words/",
+        height: int = 64,
         val_bucket: str = "http://storage.googleapis.com/nvdata-ocropus-val/",
         val_shards: str = "http://storage.googleapis.com/nvdata-ocropus-val/val-word-{000000..000007}.tar",
         **kw,
@@ -248,6 +269,47 @@ class TextDataLoader(pl.LightningDataModule):
         super().__init__()
         self.save_hyperparameters()
         self.augment = eval(f"augment_{augment}")
+
+    def goodsize(self, image):
+        h, w = image.shape[-2:]
+        if h > 200 or w > 2048:
+            warnings.warn(f"image too large {image.shape}")
+            return False
+        if h < 16 or w < 16:
+            warnings.warn(f"image too small {image.shape}")
+            return False
+        return True
+
+    def goodhist(self, image):
+        hist, _ = torch.histogram(image, bins=5, range=(0, 1))
+        if hist[0] < hist[4]:
+            warnings.warn(f"inverted image {hist}")
+            return False
+        if hist[1:4].sum() > hist[0]:
+            warnings.warn(f"nonbinary image {hist}")
+            return False
+        return True
+
+    def train_preprocess(self, sample: Tuple[torch.Tensor, str]) -> Optional[Tuple[torch.Tensor, str]]:
+        """Preprocess training sample."""
+        image, label = sample
+        if image.dtype == torch.uint8:
+            image = image.float() / 255.0
+        if image.ndim == 3:
+            image = image.mean(0)
+        image = image - image.min()
+        image /= max(float(image.max()), 1e-4)
+        if not self.goodsize(image):
+            return None
+        if not self.goodhist(image):
+            return None
+        image = image.unsqueeze(0)
+        image = jittable.crop_image(image)
+        if not self.goodsize(image):
+            return None
+        zoom = float(self.hparams.height) / image.shape[-2]
+        image = torch.nn.functional.interpolate(image.unsqueeze(0), scale_factor=zoom, mode="bilinear", align_corners=False)[0]
+        return image, label
 
     def train_dataloader(self) -> DataLoader:
         bs = self.hparams.train_bs
@@ -285,11 +347,7 @@ class TextDataLoader(pl.LightningDataModule):
         sources.append(load("ascii-{000000..000422}.tar", select="."))
         ds = wds.FluidWrapper(wds.RandomMix(sources, probs))
         ds = ds.shuffle(self.shuffle).decode("torchrgb8", partial=True).to_tuple(self.extensions)
-        ds = ds.map_tuple(self.augment, identity)
-        ds = ds.map_tuple(jittable.standardize_image, identity)
-        ds = ds.select(partial(goodsize, max_w=1000, max_h=100))
-        ds = ds.map_tuple(jittable.auto_resize, identity)
-        ds = ds.select(partial(goodsize, max_w=1000, max_h=100))
+        ds = ds.map(self.train_preprocess)
         dl = wds.WebLoader(
             ds,
             collate_fn=collate4ocr,
@@ -314,7 +372,9 @@ class TextDataLoader(pl.LightningDataModule):
         )
         ds = ds.decode("torchrgb8").to_tuple(self.extensions)
         ds = ds.map_tuple(identity, normalize_simple)
+        ds = ds.select(goodhist)
         ds = ds.map_tuple(jittable.standardize_image, identity)
+        ds = ds.select(goodhist)
         ds = ds.select(partial(goodsize, max_w=1000, max_h=100))
         ds = ds.map_tuple(jittable.auto_resize, identity)
         ds = ds.select(partial(goodsize, max_w=1000, max_h=100))
@@ -329,18 +389,26 @@ class TextDataLoader(pl.LightningDataModule):
 
 
 @app.command()
-def show():
+def show(rows: int = 12, cols: int = 4, augment: str = "none", bs: int = 1, nw: int = 0):
     """Show a sample of the data."""
+    n = rows * cols
     fig = plt.figure(figsize=(10, 10))
-    for i, sample in enumerate(TextDataLoader().train_dataloader()):
-        if i > 0 and i % 64 == 0:
+    plt.ion()
+    dl = TextDataLoader(augment=augment, train_bs=bs, num_workers=nw).train_dataloader()
+    for i, sample in enumerate(dl):
+        if i > 0 and i % n == 0:
             plt.ginput(1, timeout=0)
+            plt.clf()
         img, txt = sample
-        img = img.permute(1, 2, 0).numpy()
-        fig.add_subplot(8, 8, i + 1)
+        print(i, txt[0])
+        img = img[0].permute(1, 2, 0).numpy()
+        fig.add_subplot(rows, cols, (i % n) + 1)
         plt.xticks([])
         plt.yticks([])
+        img[:, 0, 0] = 1
+        img[:, -1, -1] = 1
         plt.imshow(img)
+        txt = re.sub(r"[\\$]", "~", txt[0])
         plt.title(txt)
 
 
