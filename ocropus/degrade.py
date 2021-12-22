@@ -171,7 +171,7 @@ def make_noise_at_scale(shape, scale):
 
 
 def noisify(
-    image, sigma=(0.0, 2.0), amp1=0.05, sigma1=(0.5, 2.0), amp2=0.2, sigma2=(20.0, 40.0)
+    image, sigma=(0.0, 2.0), amp1=0.05, sigma1=(0.5, 2.0), amp2=0.05, sigma2=(20.0, 40.0)
 ):
     if isinstance(sigma, tuple):
         sigma = random.uniform(*sigma)

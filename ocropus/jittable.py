@@ -28,9 +28,7 @@ def quantscale(s: float, unit: float = math.sqrt(2)):
 
 
 @torch.jit.export
-def standardize_image(
-    im: torch.Tensor, lo: float = 0.05, hi: float = 0.95
-) -> torch.Tensor:
+def standardize_image(im: torch.Tensor, lo: float = 0.05, hi: float = 0.95) -> torch.Tensor:
     if im.ndim == 2:
         im = im.unsqueeze(0).repeat(3, 1, 1)
     if im.dtype == torch.uint8:
@@ -61,9 +59,7 @@ def resize_word(
     if yprof.sum() < 1.0:
         return torch.zeros((3, 1, 1))
     ymean = (torch.linspace(0, h, len(yprof)) * yprof).sum() / yprof.sum()
-    ystd = (
-        torch.abs(torch.linspace(0, h, len(yprof)) - ymean) * yprof
-    ).sum() / yprof.sum()
+    ystd = (torch.abs(torch.linspace(0, h, len(yprof)) - ymean) * yprof).sum() / yprof.sum()
     if ystd < 1.0:
         return torch.zeros((3, 1, 1))
     scale = factor / ystd
@@ -82,14 +78,12 @@ def resize_word(
 
 
 @torch.jit.export
-def crop_image(
-    image: torch.Tensor, threshold: float = 0.8, padding: int = 4
-) -> torch.Tensor:
+def crop_image(image: torch.Tensor, threshold: float = 0.8, padding: int = 4) -> torch.Tensor:
     assert image.min() >= 0 and image.max() <= 1
     c, h, w = image.shape
     if h <= 1 or w <= 1:
         return image
-    x0, y0, x1, y1 = findbbox(image > 0.8)
+    x0, y0, x1, y1 = findbbox(image > threshold)
     if x0 < 0 or y0 < 0:
         return torch.zeros((3, 1, 1))
     d = 5

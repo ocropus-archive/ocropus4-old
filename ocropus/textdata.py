@@ -4,6 +4,7 @@ import random, re
 import os.path
 from functools import partial
 from typing import Any, Dict, List, Optional, Union, Tuple
+import matplotlib.pyplot as plt
 
 import pytorch_lightning as pl
 import torch
@@ -15,6 +16,10 @@ from urllib.parse import urljoin
 from dataclasses import dataclass, field
 
 from . import confparse, degrade, jittable, utils
+
+import typer
+
+app = typer.Typer()
 
 
 def identity(x: Any) -> Any:
@@ -218,6 +223,7 @@ def good_text(regex: str, sample: dict) -> bool:
 ### Data Loading
 ###
 
+
 class TextDataLoader(pl.LightningDataModule):
     """Lightning Data Module for OCR training."""
 
@@ -320,3 +326,23 @@ class TextDataLoader(pl.LightningDataModule):
             num_workers=self.hparams.num_workers,
         )
         return dl
+
+
+@app.command()
+def show():
+    """Show a sample of the data."""
+    fig = plt.figure(figsize=(10, 10))
+    for i, sample in enumerate(TextDataLoader().train_dataloader()):
+        if i > 0 and i % 64 == 0:
+            plt.ginput(1, timeout=0)
+        img, txt = sample
+        img = img.permute(1, 2, 0).numpy()
+        fig.add_subplot(8, 8, i + 1)
+        plt.xticks([])
+        plt.yticks([])
+        plt.imshow(img)
+        plt.title(txt)
+
+
+if __name__ == "__main__":
+    app()
