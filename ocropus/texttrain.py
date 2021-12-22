@@ -19,7 +19,7 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from scipy import ndimage as ndi
 from torch import nn
-from torch.optim.lr_scheduler import LambdaLR
+from torch.optim.lr_scheduler import LambdaLR, ExponentialLR
 import typer
 from torchmore import layers
 
@@ -49,12 +49,14 @@ class TextLightning(pl.LightningModule):
         charset: Optional[str] = None,
         display_freq: int = 1000,
         lr: float = 3e-4,
+        lr_scale: float = 1e-3,
+        lr_steps: int = 1000,
         lr_halflife: int = 10,
     ):
         super().__init__()
         self.display_freq = display_freq
-        self.lr = lr
-        self.lr_halflife = lr_halflife
+        self.lr = lr  # FIXME
+        self.lr_halflife = lr_halflife  # FIXME
         self.ctc_loss = nn.CTCLoss(zero_infinity=True)
         self.total = 0
         for k, v in mopts.items():
@@ -84,6 +86,8 @@ class TextLightning(pl.LightningModule):
         self.log("train_loss", loss)
         err = self.compute_error(outputs, targets)
         self.log("train_err", err, prog_bar=True)
+        current_lr = self.optimizers().param_groups[0]["lr"]
+        self.log("lr", current_lr, prog_bar=True, logger=False)
         if index % self.display_freq == 0:
             self.log_results(index, inputs, targets, outputs)
         self.total += len(inputs)
@@ -121,11 +125,13 @@ class TextLightning(pl.LightningModule):
         return sum(errs) / float(total)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr)
-        scheduler = LambdaLR(optimizer, self.schedule)
-        return [optimizer], [scheduler]
+        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.hparams.lr)
+        scheduler = LambdaLR(optimizer, self.schedule)  # FIXME
+        scale, steps = self.hparams.lr_scale, self.hparams.lr_steps
+        scheduler2 = ExponentialLR(optimizer, gamma=scale**(1.0/steps), last_epoch=steps)
+        return [optimizer], [scheduler2]
 
-    def schedule(self, epoch: int):
+    def schedule(self, epoch: int):  # FIXME
         return 0.5 ** (epoch // self.lr_halflife)
 
     def log_results(
@@ -213,19 +219,22 @@ def train(
     default_root_dir: str = "./_logs",
     display_freq: int = 20,
     dumpjit: str = "",
-    gpus: int = 1,
+    gpus: str = "1",
     lr: float = 1e-3,
-    lr_halflife: int = 10,
     max_epochs: int = 10000,
     mname: str = "ocropus.textmodels.text_model_211217",
     mopts: str = "",
     nepoch: int = 200000,
     resume: Optional[str] = None,
-    train_bs: int = 16,
+    load_weights: Optional[str] = None,
+    train_bs: int = 32,
     train_shards: Optional[str] = None,
-    val_bs: int = 16,
+    val_bs: int = 32,
     val_shards: Optional[str] = None,
     wandb: str = "",
+    lr_scale: float = 1e-2,
+    lr_steps: int = 300,
+    lr_halflife: int = 10,  # FIXME
 ):
     config = dict(locals())
 
@@ -261,6 +270,8 @@ def train(
         mopts=mopts,
         charset=charset,
         lr=lr,
+        lr_steps=lr_steps,
+        lr_scale=lr_scale,
         lr_halflife=lr_halflife,
     )
 
@@ -293,6 +304,11 @@ def train(
         default_root_dir=default_root_dir,
         **kw,
     )
+
+    if load_weights is not None:
+        ckpt = torch.load(open(load_weights, "rb"), map_location="cpu")
+        state = ckpt["state_dict"] if "state_dict" in ckpt else ckpt
+        lmodel.load_state_dict(state)
 
     print("mcheckpoint.dirpath", mcheckpoint.dirpath)
     trainer.fit(lmodel, data)

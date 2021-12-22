@@ -31,6 +31,25 @@ class Zoom(nn.Module):
 
 
 @utils.public
+class HeightTo(nn.Module):
+    def __init__(self, height):
+        super().__init__()
+        self.height = height
+
+    def __repr__(self):
+        return f"HeightTo({self.height})"
+
+    def __str__(self):
+        return repr(self)
+
+    def forward(self, a):
+        assert a.ndim == 4
+        zoom = float(self.height) / float(a.shape[2])
+        result = F.interpolate(a, scale_factor=zoom, recompute_scale_factor=False)
+        return result
+
+
+@utils.public
 class GrayDocument(nn.Module):
     def __init__(self, noise=0.0, autoinvert=True):
         super().__init__()
@@ -105,3 +124,13 @@ class MaxReduce(nn.Module):
 
     def forward(self, x):
         return x.max(self.d)[0]
+
+
+@utils.public
+class Log(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return x.log()
