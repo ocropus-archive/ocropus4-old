@@ -1,11 +1,13 @@
 """Text recognition."""
 
+import time
 import warnings
 import random, re
 import os.path
 from functools import partial
 from typing import Any, Dict, List, Optional, Union, Tuple
 import matplotlib.pyplot as plt
+import signal
 
 import pytorch_lightning as pl
 import torch
@@ -148,7 +150,7 @@ def augment_distort(timage: torch.Tensor, p: float = 0.5, maxh=100.0) -> torch.T
     if random.uniform(0, 1) < p:
         (image,) = degrade.random_transform_all(image, scale=(-0.3, 0))
     if random.uniform(0, 1) < p:
-        (image,) = degrade.distort_all(image)
+        (image,) = degrade.distort_all(image, sigma=(0.5, 4.0), maxdelta=(0.1, 2.5))
     if random.uniform(0, 1) < p:
         image = degrade.noisify(image)
     result = utils.as_torchimage(image)
@@ -262,6 +264,7 @@ class TextDataLoader(pl.LightningDataModule):
         augment: str = "distort",
         bucket: str = "http://storage.googleapis.com/nvdata-ocropus-words/",
         height: int = 64,
+        max_width: int = 512,
         val_bucket: str = "http://storage.googleapis.com/nvdata-ocropus-val/",
         val_shards: str = "http://storage.googleapis.com/nvdata-ocropus-val/val-word-{000000..000007}.tar",
         **kw,
@@ -290,7 +293,30 @@ class TextDataLoader(pl.LightningDataModule):
             return False
         return True
 
-    def train_preprocess(self, sample: Tuple[torch.Tensor, str]) -> Optional[Tuple[torch.Tensor, str]]:
+    def goodcc(self, image, text):
+        l = len(text)
+        h, w = image.shape[-2:]
+        if w / float(l) < 0.3 * h:
+            warnings.warn(f"too narrow for text {image.shape} for {text}")
+            return False
+        if w / float(l) > 3.0 * h:
+            warnings.warn(f"too wide for text {image.shape} for {text}")
+            return False
+        _, n = ndi.label(image > 0.5)
+        if n < 0.7 * len(text):
+            warnings.warn(f"too few cc's {n} for {text}")
+            return False
+        if n > 2.0 * len(text):
+            warnings.warn(f"too many cc's {n} for {text}")
+            return False
+        return True
+
+    def preprocess(
+        self,
+        sample: Tuple[torch.Tensor, str],
+        train: bool = True,
+        max_zoom: float = 4.0,
+    ) -> Optional[Tuple[torch.Tensor, str]]:
         """Preprocess training sample."""
         image, label = sample
         if image.dtype == torch.uint8:
@@ -307,47 +333,71 @@ class TextDataLoader(pl.LightningDataModule):
         image = jittable.crop_image(image)
         if not self.goodsize(image):
             return None
+        if not self.goodcc(image, label):
+            return None
         zoom = float(self.hparams.height) / image.shape[-2]
-        image = torch.nn.functional.interpolate(image.unsqueeze(0), scale_factor=zoom, mode="bilinear", align_corners=False)[0]
+        if zoom > max_zoom:
+            warnings.warn(f"zoom too large {zoom} for {image.shape}")
+            return None
+        if train:
+            zoom *= random.uniform(0.8, 1.0)
+        image = torch.nn.functional.interpolate(
+            image.unsqueeze(0),
+            scale_factor=zoom,
+            mode="bilinear",
+            align_corners=False,
+            recompute_scale_factor=True,
+        )[0]
+        if image.shape[-1] > self.hparams.max_width:
+            warnings.warn(f"image too wide after rescaling {image.shape}")
+            return None
+        if train:
+            image = self.augment(image)
         return image, label
+
+    def val_preprocess(self, *args):
+        return self.preprocess(*args, train=False)
+
+    def make_reader(self, url, normalize=normalize_simple, select="[A-Za-z0-9]"):
+        bucket = self.hparams.bucket
+        return (
+            wds.WebDataset(
+                bucket + url,
+                cache_size=float(self.hparams.cache_size),
+                cache_dir=self.hparams.cache_dir,
+                verbose=True,
+                shardshuffle=50,
+                resampled=True,
+                handler=wds.warn_and_continue,
+            )
+            .rename(txt="txt;gt.txt")
+            .decode()
+            .map_dict(txt=normalize)
+            .select(partial(good_text, select))
+        )
+
+    def make_mix(self):
+        n = 8
+        probs = self.hparams.probs
+        assert len(probs) <= n
+        probs = probs + [probs[-1]] * (n - len(probs))
+        sources = []
+        sources.append(self.make_reader("generated-{000000..000313}.tar", select="."))
+        sources.append(self.make_reader("uw3-word-{000000..000022}.tar", normalize=normalize_tex))
+        sources.append(self.make_reader("ia1-{000000..000033}.tar"))
+        sources.append(self.make_reader("gsub-{000000..000167}.tar"))
+        sources.append(self.make_reader("cdipsub-{000000..000092}.tar"))
+        sources.append(self.make_reader("bin-gsub-{000000..000167}.tar"))
+        sources.append(self.make_reader("bin-ia1-{000000..000033}.tar"))
+        sources.append(self.make_reader("ascii-{000000..000422}.tar", select="."))
+        ds = wds.FluidWrapper(wds.RandomMix(sources, probs))
+        return ds
 
     def train_dataloader(self) -> DataLoader:
         bs = self.hparams.train_bs
-        probs = self.hparams.probs
-        bucket = self.hparams.bucket
-        n = 8
-        assert len(probs) <= n
-        probs = probs + [probs[-1]] * (n - len(probs))
-
-        def load(url, normalize=normalize_simple, select="[A-Za-z0-9]"):
-            return (
-                wds.WebDataset(
-                    bucket + url,
-                    cache_size=float(self.hparams.cache_size),
-                    cache_dir=self.hparams.cache_dir,
-                    verbose=True,
-                    shardshuffle=50,
-                    resampled=True,
-                    handler=wds.warn_and_continue,
-                )
-                .rename(txt="txt;gt.txt")
-                .decode()
-                .map_dict(txt=normalize)
-                .select(partial(good_text, select))
-            )
-
-        sources = []
-        sources.append(load("generated-{000000..000313}.tar", select="."))
-        sources.append(load("uw3-word-{000000..000022}.tar", normalize=normalize_tex))
-        sources.append(load("ia1-{000000..000033}.tar"))
-        sources.append(load("gsub-{000000..000167}.tar"))
-        sources.append(load("cdipsub-{000000..000092}.tar"))
-        sources.append(load("bin-gsub-{000000..000167}.tar"))
-        sources.append(load("bin-ia1-{000000..000033}.tar"))
-        sources.append(load("ascii-{000000..000422}.tar", select="."))
-        ds = wds.FluidWrapper(wds.RandomMix(sources, probs))
+        ds = self.make_mix()
         ds = ds.shuffle(self.shuffle).decode("torchrgb8", partial=True).to_tuple(self.extensions)
-        ds = ds.map(self.train_preprocess)
+        ds = ds.map(self.preprocess)
         dl = wds.WebLoader(
             ds,
             collate_fn=collate4ocr,
@@ -358,58 +408,74 @@ class TextDataLoader(pl.LightningDataModule):
         return dl
 
     def val_dataloader(self) -> DataLoader:
+        bs = self.hparams.val_bs
         if self.hparams.val_shards in ["", None]:
             return None
         ds = (
             wds.WebDataset(
-                self.val_shards,
+                self.hparams.val_shards,
                 cache_size=float(self.hparams.cache_size),
                 cache_dir=self.hparams.cache_dir,
                 verbose=True,
             )
             .rename(txt="txt;gt.txt")
+            .decode()
+            .map_dict(txt=normalize_simple)
             .select(partial(good_text, "[A-Za-z0-9]"))
         )
-        ds = ds.decode("torchrgb8").to_tuple(self.extensions)
-        ds = ds.map_tuple(identity, normalize_simple)
-        ds = ds.select(goodhist)
-        ds = ds.map_tuple(jittable.standardize_image, identity)
-        ds = ds.select(goodhist)
-        ds = ds.select(partial(goodsize, max_w=1000, max_h=100))
-        ds = ds.map_tuple(jittable.auto_resize, identity)
-        ds = ds.select(partial(goodsize, max_w=1000, max_h=100))
+        ds = ds.decode("torchrgb8", partial=True).to_tuple(self.extensions)
+        ds = ds.map(self.preprocess)
         dl = wds.WebLoader(
             ds,
             collate_fn=collate4ocr,
-            batch_size=self.hparams.val_bs,
+            batch_size=bs,
             shuffle=False,
             num_workers=self.hparams.num_workers,
-        )
+        ).slice(self.nepoch // bs)
         return dl
 
 
 @app.command()
-def show(rows: int = 12, cols: int = 4, augment: str = "none", bs: int = 1, nw: int = 0):
+def show(rows: int = 8, cols: int = 4, augment: str = "distort", bs: int = 1, nw: int = 0, val: bool = False):
     """Show a sample of the data."""
     n = rows * cols
     fig = plt.figure(figsize=(10, 10))
     plt.ion()
-    dl = TextDataLoader(augment=augment, train_bs=bs, num_workers=nw).train_dataloader()
+    if val:
+        dl = TextDataLoader(augment="none", val_bs=bs, num_workers=nw).val_dataloader()
+    else:
+        dl = TextDataLoader(augment=augment, train_bs=bs, num_workers=nw).train_dataloader()
     for i, sample in enumerate(dl):
         if i > 0 and i % n == 0:
             plt.ginput(1, timeout=0)
             plt.clf()
         img, txt = sample
-        print(i, txt[0])
+        print(i, txt[0], img.shape)
         img = img[0].permute(1, 2, 0).numpy()
         fig.add_subplot(rows, cols, (i % n) + 1)
         plt.xticks([])
         plt.yticks([])
-        img[:, 0, 0] = 1
-        img[:, -1, -1] = 1
         plt.imshow(img)
         txt = re.sub(r"[\\$]", "~", txt[0])
         plt.title(txt)
+
+
+@app.command()
+def bench(t: float = 60.0, augment: str = "distort", bs: int = 1, nw: int = 0, val: bool = False):
+    """Show a sample of the data."""
+    if val:
+        dl = TextDataLoader(augment="none", val_bs=bs, num_workers=nw).val_dataloader()
+    else:
+        dl = TextDataLoader(augment=augment, train_bs=bs, num_workers=nw).train_dataloader()
+    total = 0
+    start = time.time()
+    for i, sample in enumerate(dl):
+        img, txt = sample
+        total += len(img)
+        now = time.time()
+        if now - start > t:
+            break
+    print("# samples", total, "samples/s", total / (now - start))
 
 
 if __name__ == "__main__":

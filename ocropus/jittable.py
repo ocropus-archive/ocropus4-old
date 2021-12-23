@@ -74,13 +74,16 @@ def resize_word(
         (int(scale * h), int(scale * w)),
         mode="bilinear",
         align_corners=False,
+        recompute_scale_factor=True,
     )[0]
     simage = simage.clamp(0, 1)
     return simage
 
 
 @torch.jit.export
-def crop_image(image: torch.Tensor, threshold: float = 0.5, padding: int = 2, erase:int=2) -> torch.Tensor:
+def crop_image(
+    image: torch.Tensor, threshold: float = 0.5, padding: int = 2, erase: int = 2, test: bool = False
+) -> torch.Tensor:
     assert image.min() >= 0 and image.max() <= 1
     c, h, w = image.shape
     if h <= 1 or w <= 1:
@@ -97,6 +100,17 @@ def crop_image(image: torch.Tensor, threshold: float = 0.5, padding: int = 2, er
     x0, y0, x1, y1 = max(x0 - d, 0), max(y0 - d, 0), min(x1 + d, w), min(y1 + d, h)
     simage = image[:, y0:y1, x0:x1]
     simage = pad(simage, [padding] * 4)
+    if test:
+        from matplotlib.pyplot import clf, subplot, imshow, show, ginput
+
+        clf()
+        subplot(221)
+        imshow(image.permute(1, 2, 0))
+        subplot(222)
+        imshow(guide.permute(1, 2, 0))
+        subplot(223)
+        imshow(simage.permute(1, 2, 0))
+        ginput(1, 0.1)
     return simage
 
 
