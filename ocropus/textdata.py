@@ -30,6 +30,11 @@ def identity(x: Any) -> Any:
     return x
 
 
+def datawarn(*args):
+    # warnings.warn(*args)
+    return
+
+
 min_w, min_h, max_w, max_h = 15, 15, 4000, 200
 
 
@@ -74,10 +79,10 @@ def goodhist(sample):
     image /= max(image.max(), 1e-4)
     hist, _ = torch.histogram(image, bins=5, range=(0, 1))
     if hist[0] < hist[4]:
-        warnings.warn("inverted image")
+        datawarn("inverted image")
         return True  # FIXME
     if hist[1:4].sum() > hist[0]:
-        warnings.warn("nonbinary image")
+        datawarn("nonbinary image")
         return False
     return False  # FIXME
 
@@ -276,20 +281,20 @@ class TextDataLoader(pl.LightningDataModule):
     def goodsize(self, image):
         h, w = image.shape[-2:]
         if h > 200 or w > 2048:
-            warnings.warn(f"image too large {image.shape}")
+            datawarn(f"image too large {image.shape}")
             return False
         if h < 16 or w < 16:
-            warnings.warn(f"image too small {image.shape}")
+            datawarn(f"image too small {image.shape}")
             return False
         return True
 
     def goodhist(self, image):
         hist, _ = torch.histogram(image, bins=5, range=(0, 1))
         if hist[0] < hist[4]:
-            warnings.warn(f"inverted image {hist}")
+            datawarn(f"inverted image {hist}")
             return False
         if hist[1:4].sum() > hist[0]:
-            warnings.warn(f"nonbinary image {hist}")
+            datawarn(f"nonbinary image {hist}")
             return False
         return True
 
@@ -297,17 +302,17 @@ class TextDataLoader(pl.LightningDataModule):
         l = len(text)
         h, w = image.shape[-2:]
         if w / float(l) < 0.3 * h:
-            warnings.warn(f"too narrow for text {image.shape} for {text}")
+            datawarn(f"too narrow for text {image.shape} for {text}")
             return False
         if w / float(l) > 3.0 * h:
-            warnings.warn(f"too wide for text {image.shape} for {text}")
+            datawarn(f"too wide for text {image.shape} for {text}")
             return False
         _, n = ndi.label(image > 0.5)
         if n < 0.7 * len(text):
-            warnings.warn(f"too few cc's {n} for {text}")
+            datawarn(f"too few cc's {n} for {text}")
             return False
         if n > 2.0 * len(text):
-            warnings.warn(f"too many cc's {n} for {text}")
+            datawarn(f"too many cc's {n} for {text}")
             return False
         return True
 
@@ -337,7 +342,7 @@ class TextDataLoader(pl.LightningDataModule):
             return None
         zoom = float(self.hparams.height) / image.shape[-2]
         if zoom > max_zoom:
-            warnings.warn(f"zoom too large {zoom} for {image.shape}")
+            datawarn(f"zoom too large {zoom} for {image.shape}")
             return None
         if train:
             zoom *= random.uniform(0.8, 1.0)
@@ -348,11 +353,15 @@ class TextDataLoader(pl.LightningDataModule):
             align_corners=False,
             recompute_scale_factor=True,
         )[0]
+        if image.shape[-2] < 16:
+            datawarn(f"image too narrow after rescaling {zoom} {image.shape}")
+            return None
         if image.shape[-1] > self.hparams.max_width:
-            warnings.warn(f"image too wide after rescaling {image.shape}")
+            datawarn(f"image too wide after rescaling {zoom} {image.shape}")
             return None
         if train:
             image = self.augment(image)
+        image = image.clip(0, 1)
         return image, label
 
     def val_preprocess(self, *args):

@@ -225,7 +225,7 @@ def text_model_211215(
 @utils.model
 def text_model_211221(
     noutput=None,
-    shape=(1, ninput, 48, 300),
+    shape=(1, ninput, 64, 300),
     levels=4,
     depth=32,
     height=64,
@@ -292,7 +292,7 @@ def ctext_model_211221(
 @utils.model
 def local_text_model_211221(
     noutput=None,
-    shape=(1, ninput, 48, 300),
+    shape=(1, ninput, 64, 300),
     levels=4,
     depth=5,
     height=64,
@@ -320,3 +320,29 @@ def local_text_model_211221(
     )
     flex.shape_inference(model, shape)
     return model
+
+
+@utils.model
+def text_model_211222(noutput=None, height=48, shape=(1, ninput, 48, 300)):
+    """Text recognition model using 2D LSTM and convolutions."""
+    depths = [32, 64, 96, 128]
+    model = nn.Sequential(
+        ocrlayers.HeightTo(height),
+        layers.ModPadded(
+            16,
+            combos.make_unet(depths, sub=flex.Lstm2d(196)),
+        ),
+        flex.Lstm2(100),
+        # layers.Fun("lambda x: x.max(2)[0]"),
+        ocrlayers.MaxReduce(2),
+        flex.ConvTranspose1d(400, 1, stride=2, padding=1),
+        flex.Conv1d(300, 3, padding=1),
+        flex.BatchNorm1d(),
+        nn.ReLU(),
+        flex.Lstm1d(300, bidirectional=True),
+        flex.Conv1d(noutput, 1),
+    )
+    flex.shape_inference(model, shape)
+    return model
+
+
