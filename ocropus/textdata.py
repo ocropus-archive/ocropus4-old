@@ -353,7 +353,7 @@ class TextDataLoader(pl.LightningDataModule):
             align_corners=False,
             recompute_scale_factor=True,
         )[0]
-        if image.shape[-2] < 16:
+        if image.shape[-2] < 16 or image.shape[-1] < 16:
             datawarn(f"image too narrow after rescaling {zoom} {image.shape}")
             return None
         if image.shape[-1] > self.hparams.max_width:
