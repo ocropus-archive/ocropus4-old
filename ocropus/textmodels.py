@@ -311,7 +311,7 @@ def local_text_model_211221(
             combos.make_unet(depths, sub=flex.Conv2d(depths[-1], 3, padding=1)),
         ),
         flex.Conv2d(depth * 4, 3, padding=1),
-        flex.BatchNorm1d(),
+        flex.BatchNorm2d(),
         nn.ReLU(),
         flex.Conv2d(noutput, 1),
         nn.Softmax(1),
