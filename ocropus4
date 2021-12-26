@@ -38,6 +38,9 @@ preinf)  # recognize pages with layout information
 segtrain)  # recognize pages with layout information
     $python3 -m ocropus.segtrain "$@"
     ;;
+textdata)  # recognize pages with layout information
+    $python3 -m ocropus.textdata "$@"
+    ;;
 texttrain)  # recognize pages with layout information
     $python3 -m ocropus.texttrain "$@"
     ;;

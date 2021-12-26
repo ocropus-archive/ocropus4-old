@@ -386,10 +386,6 @@ class TextDataLoader(pl.LightningDataModule):
         )
 
     def make_mix(self):
-        n = 8
-        probs = self.hparams.probs
-        assert len(probs) <= n
-        probs = probs + [probs[-1]] * (n - len(probs))
         sources = []
         sources.append(self.make_reader("generated-{000000..000313}.tar", select="."))
         sources.append(self.make_reader("uw3-word-{000000..000022}.tar", normalize=normalize_tex))
@@ -398,7 +394,12 @@ class TextDataLoader(pl.LightningDataModule):
         sources.append(self.make_reader("cdipsub-{000000..000092}.tar"))
         sources.append(self.make_reader("bin-gsub-{000000..000167}.tar"))
         sources.append(self.make_reader("bin-ia1-{000000..000033}.tar"))
+        sources.append(self.make_reader("italic-{000000..000455}.tar", select="."))
         sources.append(self.make_reader("ascii-{000000..000422}.tar", select="."))
+        n = len(sources)
+        probs = self.hparams.probs
+        assert len(probs) <= n
+        probs = probs + [probs[-1]] * (n - len(probs))
         ds = wds.FluidWrapper(wds.RandomMix(sources, probs))
         return ds
 
