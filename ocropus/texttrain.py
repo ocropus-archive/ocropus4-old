@@ -229,7 +229,7 @@ def train(
     mopts: str = "",
     nepoch: int = 200000,
     resume: Optional[str] = None,
-    load_weights: Optional[str] = None,
+    restart: Optional[str] = None,
     train_shards: Optional[str] = None,
     val_bs: int = 32,
     val_shards: Optional[str] = None,
@@ -307,8 +307,8 @@ def train(
         **kw,
     )
 
-    if load_weights is not None:
-        ckpt = torch.load(open(load_weights, "rb"), map_location="cpu")
+    if restart is not None:
+        ckpt = torch.load(open(restart, "rb"), map_location="cpu")
         state = ckpt["state_dict"] if "state_dict" in ckpt else ckpt
         lmodel.load_state_dict(state)
 
