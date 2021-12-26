@@ -5,6 +5,7 @@ from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import editdistance
+import re
 import matplotlib.pyplot as plt
 import numpy as np
 import PIL
@@ -128,7 +129,7 @@ class TextLightning(pl.LightningModule):
         optimizer = torch.optim.SGD(self.model.parameters(), lr=self.hparams.lr)
         scheduler = LambdaLR(optimizer, self.schedule)  # FIXME
         scale, steps = self.hparams.lr_scale, self.hparams.lr_steps
-        scheduler2 = ExponentialLR(optimizer, gamma=scale**(1.0/steps), last_epoch=steps)
+        scheduler2 = ExponentialLR(optimizer, gamma=scale ** (1.0 / steps), last_epoch=steps)
         return [optimizer], [scheduler2]
 
     def schedule(self, epoch: int):  # FIXME
@@ -166,7 +167,8 @@ class TextLightning(pl.LightningModule):
         gs = gridspec.GridSpec(1, 2)
         ax = fig.add_subplot(gs[0, 0])
         ax.imshow(inputs[0], cmap=plt.cm.gray, interpolation="nearest")
-        ax.set_title(f"'{s}' @{self.total}", size=24)
+        s_safe = re.sub(r"[}{$\\]", "?", s)
+        ax.set_title(f"'{s_safe}' @{self.total}", size=24)
         ax = fig.add_subplot(gs[0, 1])
         for row in outputs:
             ax.plot(row)
