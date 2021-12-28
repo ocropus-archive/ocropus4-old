@@ -35,9 +35,11 @@ class SegLightning(pl.LightningModule):
         lr_halflife=10,
         display_freq=100,
         segmodel: Dict[Any, Any] = {},
+        noutput: int = 4,
     ):
         super().__init__()
         self.save_hyperparameters()
+        segmodel.setdefault("config", {})["noutput"] = noutput
         self.model = segmodels.SegModel(mname, **segmodel)
         self.get_jit_model()
         print("model created and is JIT-able")
@@ -99,6 +101,7 @@ class SegLightning(pl.LightningModule):
         assert outputs.ndim == 4, (inputs.shape, outputs.shape, targets.shape)
         assert targets.ndim == 3, (inputs.shape, outputs.shape, targets.shape)
         assert outputs.shape[0] < 100 and outputs.shape[1] < 10, outputs.shape
+        assert targets.min() >= 0 and targets.max() < self.hparams.noutput
         if outputs.shape != inputs.shape:
             assert outputs.shape[0] == inputs.shape[0]
             assert outputs.ndim == 4
@@ -190,9 +193,9 @@ class SegLightning(pl.LightningModule):
 @app.command()
 def train(
     train_shards: Optional[str] = None,
-    train_bs: int = 4,
+    train_bs: int = -1,
     val_shards: Optional[str] = None,
-    val_bs: int = 4,
+    val_bs: int = -1,
     kind: str = "words",
     augmentation: str = "default",
     num_workers: int = 8,
@@ -215,8 +218,14 @@ def train(
     """
     if kind == "words":
         Loader = segdata.WordSegDataLoader
+        train_bs = train_bs if train_bs > 0 else 4
+        val_bs = val_bs if val_bs > 0 else 4
+        noutput = 4
     elif kind == "page":
         Loader = segdata.PageSegDataLoader
+        train_bs = train_bs if train_bs > 0 else 1
+        val_bs = val_bs if val_bs > 0 else 1
+        noutput = 5
     else:
         raise ValueError(f"Unknown kind: {kind}")
     data = Loader(
@@ -238,6 +247,7 @@ def train(
         lr=lr,
         lr_halflife=lr_halflife,
         display_freq=display_freq,
+        noutput=noutput,
     )
 
     if dumpjit is not None:

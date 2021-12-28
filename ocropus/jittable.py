@@ -130,15 +130,14 @@ def stack_images(images: List[torch.Tensor]) -> torch.Tensor:
         assert im.shape[0] in [1, 3]
         assert im.shape[1] >= 16
         assert im.shape[2] >= 16
-        assert im.min() >= 0 and im.max() <= 1
+        # assert im.min() >= 0 and im.max() <= 1
     maxima = torch.zeros(3, dtype=torch.int)
     for im in images:
         maxima = torch.max(maxima, torch.tensor(im.shape))
     bd, bh, bw = int(maxima[0]), int(maxima[1]), int(maxima[2])
-    result = torch.zeros((len(images), bd, bh, bw), dtype=torch.float)
+    result = torch.zeros((len(images), bd, bh, bw), dtype=images[0].dtype)
     for i, im in enumerate(images):
-        if im.dtype == torch.uint8:
-            im = im.float() / 255.0
+        assert im.dtype == result.dtype
         d, h, w = im.shape
         dy, dx = (bh - h) // 2, (bw - w) // 2
         result[i, :d, dy : dy + h, dx : dx + w] = im
