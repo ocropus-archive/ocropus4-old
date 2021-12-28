@@ -70,6 +70,18 @@ def augmentation_default(sample):
     return sample
 
 
+def filter_size(sample, maxsize=1e9):
+    image, seg = sample
+    if np.prod(image.shape) > maxsize:
+        warnings.warn(f"batch too large {image.shape}, maxsize is {maxsize}")
+        return None
+    return sample
+
+
+def FilterSize(maxsize):
+    return partial(filter_size, maxsize=maxsize)
+
+
 class SegDataLoader(pl.LightningDataModule):
     def __init__(
         self,
@@ -85,6 +97,7 @@ class SegDataLoader(pl.LightningDataModule):
         invert="False",
         remapper=None,
         nepoch=1000000000,
+        maxsize=1e9,
     ):
         super().__init__()
         assert train_shards is not None
@@ -109,7 +122,7 @@ class SegDataLoader(pl.LightningDataModule):
             batch_size=batch_size,
             collate_fn=collate4seg,
             num_workers=self.hparams.num_workers,
-        ).slice(self.hparams.nepoch // batch_size)
+        ).map(FilterSize(maxsize)).slice(self.hparams.nepoch // batch_size)
 
     def train_dataloader(self):
         return self.make_loader(
@@ -171,10 +184,12 @@ def words(bs: int = 1, nw: int = 0, val: bool = False):
         plt.xticks([])
         plt.yticks([])
         plt.imshow(img)
+        plt.title(f"{img.shape} {np.prod(img.shape)}")
         fig.add_subplot(1, 2, 2)
         plt.xticks([])
         plt.yticks([])
-        plt.imshow(seg, vmin=0, vmax=5)
+        plt.imshow(seg, vmin=0, vmax=5, cmap="gist_rainbow")
+        plt.title(f"{seg.shape} {np.prod(seg.shape)}")
         plt.ginput(1, timeout=0)
 
 
@@ -197,10 +212,12 @@ def pages(bs: int = 1, nw: int = 0, val: bool = False):
         plt.xticks([])
         plt.yticks([])
         plt.imshow(img)
+        plt.title(f"{img.shape} {np.prod(img.shape)}")
         fig.add_subplot(1, 2, 2)
         plt.xticks([])
         plt.yticks([])
-        plt.imshow(seg, vmin=0, vmax=5)
+        plt.imshow(seg, vmin=0, vmax=5, cmap="gist_rainbow")
+        plt.title(f"{seg.shape} {np.prod(seg.shape)}")
         plt.ginput(1, timeout=0)
 
 

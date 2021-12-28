@@ -210,6 +210,7 @@ def train(
     default_root_dir: str = "./_logs",
     resume: Optional[str] = None,
     dumpjit: Optional[str] = None,
+    maxsize: float = 1.5e6,
     wandb: str = "",
 ) -> None:
     """Train segmentation model.
@@ -236,6 +237,7 @@ def train(
         augmentation=augmentation,
         num_workers=num_workers,
         nepoch=nepoch,
+        maxsize=maxsize,
     )
     batch = next(iter(data.train_dataloader()))
     print(
