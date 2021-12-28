@@ -122,8 +122,8 @@ class WordSegDataLoader(SegDataLoader):
 
 class PageSegDataLoader(SegDataLoader):
 
-    train_shards = "http://storage.googleapis.com/nvdata-publaynet/publaynet-train-{000000..000340}-mseg2.tar"
-    val_shards = "http://storage.googleapis.com/nvdata-publaynet/publaynet-val-{000000..000011}-mseg2.tar"
+    train_shards = "http://storage.googleapis.com/nvdata-publaynet-seg/publaynet-train-{000000..000340}-mseg2.tar"
+    val_shards = "http://storage.googleapis.com/nvdata-publaynet-seg/publaynet-val-{000000..000011}-mseg2.tar"
 
     def __init__(self, train_shards=None, val_shards=None, **kw):
         train_shards = train_shards or self.train_shards
