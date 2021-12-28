@@ -266,6 +266,11 @@ def train(
         val_shards=val_shards,
     )
 
+    if restart is not None:
+        ckpt = torch.load(open(restart, "rb"), map_location="cpu")
+        mname = ckpt["hyper_parameters"]["mname"]
+        mopts = ckpt["hyper_parameters"]["mopts"]
+
     mopts = eval(f"dict({mopts})")
     lmodel = TextLightning(
         mname=mname,
@@ -308,7 +313,6 @@ def train(
     )
 
     if restart is not None:
-        ckpt = torch.load(open(restart, "rb"), map_location="cpu")
         state = ckpt["state_dict"] if "state_dict" in ckpt else ckpt
         lmodel.load_state_dict(state)
 
