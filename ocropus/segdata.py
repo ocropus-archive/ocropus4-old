@@ -55,9 +55,6 @@ def augmentation_default(sample):
 
 
 class SegDataLoader(pl.LightningDataModule):
-    default_train_shards = "http://storage.googleapis.com/nvdata-ocropus-wseg/uw3-wseg-{000000..000117}.tar"
-    default_val_shards = "http://storage.googleapis.com/nvdata-ocropus-val/val-wseg-000000.tar"
-
     def __init__(
         self,
         train_shards=None,
@@ -74,9 +71,7 @@ class SegDataLoader(pl.LightningDataModule):
         nepoch=1000000000,
     ):
         super().__init__()
-        train_shards = train_shards or self.default_train_shards
-        train_shards = utils.maybe_expand_bucket(train_shards)
-        val_shards = val_shards or self.default_val_shards
+        assert train_shards is not None
         self.save_hyperparameters()
 
     def make_loader(self, urls, batch_size, mode):
@@ -105,8 +100,32 @@ class SegDataLoader(pl.LightningDataModule):
         )
 
     def val_dataloader(self):
+        if self.val_shards is None:
+            return None
         return self.make_loader(
             self.hparams.val_shards,
             self.hparams.val_bs,
             "val",
         )
+
+
+class WordSegDataLoader(SegDataLoader):
+
+    train_shards = "http://storage.googleapis.com/nvdata-ocropus-wseg/uw3-wseg-{000000..000117}.tar"
+    val_shards = "http://storage.googleapis.com/nvdata-ocropus-val/val-wseg-000000.tar"
+
+    def __init__(self, train_shards=None, val_shards=None, **kw):
+        train_shards = train_shards or self.train_shards
+        val_shards = val_shards or self.val_shards
+        super().__init__(train_shards=self.train_shards, val_shards=self.val_shards, **kw)
+
+
+class PageSegDataLoader(SegDataLoader):
+
+    train_shards = "http://storage.googleapis.com/nvdata-publaynet-train-{000000..000340}-mseg2.tar"
+    val_shards = "http://storage.googleapis.com/nvdata-publaynet-val-{000000..000011}-mseg2.tar"
+
+    def __init__(self, train_shards=None, val_shards=None, **kw):
+        train_shards = train_shards or self.train_shards
+        val_shards = val_shards or self.val_shards
+        super().__init__(train_shards=train_shards, val_shards=val_shards, **kw)

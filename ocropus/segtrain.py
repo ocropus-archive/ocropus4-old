@@ -18,7 +18,7 @@ from scipy import ndimage as ndi
 from torch import nn
 from torch.optim.lr_scheduler import LambdaLR
 
-from . import confparse, segmodels, segdata
+from . import confparse, segmodels, segdata, utils
 
 app = typer.Typer()
 
@@ -193,6 +193,7 @@ def train(
     train_bs: int = 4,
     val_shards: Optional[str] = None,
     val_bs: int = 4,
+    kind: str = "words",
     augmentation: str = "default",
     num_workers: int = 8,
     nepoch: int = 200000,
@@ -212,7 +213,13 @@ def train(
 
     NB: trailing / in train_shards indicates bucket to be expanded. Only works for S3-like http.
     """
-    data = segdata.SegDataLoader(
+    if kind == "words":
+        Loader = segdata.WordSegDataLoader
+    elif kind == "page":
+        Loader = segdata.PageSegDataLoader
+    else:
+        raise ValueError(f"Unknown kind: {kind}")
+    data = Loader(
         train_shards=train_shards,
         val_shards=val_shards,
         train_bs=train_bs,
