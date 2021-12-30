@@ -6,6 +6,8 @@ from scipy import ndimage as ndi
 from webdataset.filters import default_collation_fn
 import matplotlib.pyplot as plt
 from typing import Any, Dict, List, Optional, Union, Tuple
+from functools import partial
+import warnings
 
 from . import confparse, utils, jittable
 
@@ -122,7 +124,7 @@ class SegDataLoader(pl.LightningDataModule):
             batch_size=batch_size,
             collate_fn=collate4seg,
             num_workers=self.hparams.num_workers,
-        ).map(FilterSize(maxsize)).slice(self.hparams.nepoch // batch_size)
+        ).map(FilterSize(self.hparams.maxsize)).slice(self.hparams.nepoch // batch_size)
 
     def train_dataloader(self):
         return self.make_loader(

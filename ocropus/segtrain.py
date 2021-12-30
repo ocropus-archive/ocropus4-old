@@ -2,7 +2,10 @@ import io, json, sys
 from io import StringIO
 from typing import Any, Dict, List, Optional
 from click.core import Option
-
+import gc
+import pickle
+import matplotlib.pyplot as plt
+import psutil
 import numpy as np
 import PIL
 import PIL.Image
@@ -21,6 +24,15 @@ from torch.optim.lr_scheduler import LambdaLR
 from . import confparse, segmodels, segdata, utils
 
 app = typer.Typer()
+
+
+def log_mem(logger, step):
+    t = torch.cuda.get_device_properties(0).total_memory
+    r = torch.cuda.memory_reserved(0)
+    a = torch.cuda.memory_allocated(0)
+    logger.add_scalars("gpumem", dict(total=t, reserved=r, allocated=a), step)
+    m = psutil.virtual_memory()
+    logger.add_scalars("cpumem", dict(used=m.used, free=m.free, active=m.active), step)
 
 
 class SegLightning(pl.LightningModule):
@@ -128,7 +140,6 @@ class SegLightning(pl.LightningModule):
         return self.training_step(batch, index, mode="val")
 
     def display_result(self, index, inputs, targets, outputs, mask):
-        import matplotlib.pyplot as plt
 
         cmap = plt.cm.nipy_spectral
 
@@ -168,7 +179,11 @@ class SegLightning(pl.LightningModule):
         else:
             fig_gt.imshow(p.argmax(1)[0], vmin=0, vmax=p.shape[1], cmap=cmap)
         self.log_matplotlib_figure(fig, self.global_step, size=(1000, 1000))
-        plt.close(fig)
+        fig.clear()
+        del fig_img, fig_out, fig_slice, fig_gt
+        plt.close("all")
+        del fig
+        gc.collect()
 
     def log_matplotlib_figure(self, fig, index, key="image", size=(600, 600)):
         """Log the given matplotlib figure to tensorboard logger tb."""
@@ -188,6 +203,8 @@ class SegLightning(pl.LightningModule):
             import wandb
 
             exp.log({key: [wandb.Image(image, caption=key)]})
+        del buf
+        del image
 
 
 @app.command()
@@ -212,6 +229,7 @@ def train(
     dumpjit: Optional[str] = None,
     maxsize: float = 1.5e6,
     wandb: str = "",
+    traced: bool = False,
 ) -> None:
     """Train segmentation model.
 
@@ -278,7 +296,7 @@ def train(
 
     kw = {}
     if wandb != "":
-        wconfig = eval("{" + wandb + "}")
+        wconfig = eval("dict(" + wandb + ")")
         print(f"# logging to {wconfig}")
         from pytorch_lightning.loggers import WandbLogger
 
@@ -295,7 +313,19 @@ def train(
         **kw,
     )
 
+    if traced:
+        import tracemalloc
+        tracemalloc.start(20)
+        before = tracemalloc.take_snapshot()
+
     trainer.fit(smodel, data)
+
+    if traced:
+        import tracemalloc
+        after = tracemalloc.take_snapshot()
+        stats = after.compare_to(before, key_type="filename")
+        with open("memstats.pyd", "wb") as stream:
+            pickle.dump(stats, stream)
 
 
 if __name__ == "__main__":
