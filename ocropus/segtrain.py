@@ -20,10 +20,20 @@ from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from scipy import ndimage as ndi
 from torch import nn
 from torch.optim.lr_scheduler import LambdaLR
+import torchvision
+import PIL
+
 
 from . import confparse, segmodels, segdata, utils
 
 app = typer.Typer()
+
+
+def bit_reverse_table():
+    result = torch.zeros((256,), dtype=torch.uint8)
+    for i in range(256):
+        result[i] = int("{:08b}".format(i)[::-1], 2)
+    return result
 
 
 def log_mem(logger, step):
@@ -33,6 +43,28 @@ def log_mem(logger, step):
     logger.add_scalars("gpumem", dict(total=t, reserved=r, allocated=a), step)
     m = psutil.virtual_memory()
     logger.add_scalars("cpumem", dict(used=m.used, free=m.free, active=m.active), step)
+
+
+def pil_image_grid(images: list, rows: int, columns: int, title: str = None):
+    """
+    Create a grid of images from a list of PIL images.
+    """
+
+    # compute total width and height
+    width = max(image.size[0] for image in images)
+    height = max(image.size[1] for image in images)
+
+    # create a new image with the correct size
+    grid = PIL.Image.new(mode="RGB", size=(width * columns, height * rows), color=(255, 255, 255))
+
+    # paste each image into the grid
+    for row in range(rows):
+        for column in range(columns):
+            image = images[row * columns + column]
+            grid.paste(image, (column * width, row * height))
+
+    # return the grid
+    return grid
 
 
 class SegLightning(pl.LightningModule):
@@ -133,13 +165,37 @@ class SegLightning(pl.LightningModule):
             err = float(errors) / float(targets.nelement())
             self.log(f"{mode}_err", err, prog_bar=True)
         if mode == "train" and index % self.hparams.display_freq == 0:
+            print("displaying")
             self.display_result(index, inputs, targets, outputs, mask)
         return loss
 
     def validation_step(self, batch, index):
         return self.training_step(batch, index, mode="val")
 
-    def display_result(self, index, inputs, targets, outputs, mask):
+    def display_result(self, index, inputs, targets, outputs, mask, key="segmentation"):
+        inputs, targets, outputs = inputs[0], targets[0], outputs[0]
+        outputs = outputs.softmax(0)
+        assert inputs.ndim == 3 and inputs.shape[0] == 3
+        assert outputs.ndim == 3 and outputs.shape[0] >= 3
+        inputs = (inputs.clip(0, 1) * 255.0).type(torch.uint8)
+        outputs = (outputs.clip(0, 1) * 255.0).type(torch.uint8)
+        pred = outputs.argmax(0)
+        pred = bit_reverse_table()[pred]
+        pred_rgb = torch.stack([36 * (pred % 7), 61 * (pred % 5), 85 * (pred % 3)]).type(torch.uint8)
+        il = [inputs, pred_rgb]
+        il = [torchvision.transforms.ToPILImage()(im).convert("RGB") for im in il]
+        grid = pil_image_grid(il, 1, len(il), str(index))
+        grid = torchvision.transforms.ToTensor()(grid)
+        exp = self.logger.experiment
+        if hasattr(exp, "add_image"):
+            exp.add_image(key, grid, index)
+        else:
+            import wandb
+
+            exp.log({key: [wandb.Image(grid, caption=key)]})
+
+    def display_result0(self, index, inputs, targets, outputs, mask):
+        # better display, but leaking memory
 
         cmap = plt.cm.nipy_spectral
 
@@ -180,9 +236,7 @@ class SegLightning(pl.LightningModule):
             fig_gt.imshow(p.argmax(1)[0], vmin=0, vmax=p.shape[1], cmap=cmap)
         self.log_matplotlib_figure(fig, self.global_step, size=(1000, 1000))
         fig.clear()
-        del fig_img, fig_out, fig_slice, fig_gt
-        plt.close("all")
-        del fig
+        plt.close(fig)
         gc.collect()
 
     def log_matplotlib_figure(self, fig, index, key="image", size=(600, 600)):
@@ -230,23 +284,33 @@ def train(
     maxsize: float = 1.5e6,
     wandb: str = "",
     traced: bool = False,
+    masked: Optional[bool] = None,
+    restart: Optional[str] = None,
 ) -> None:
     """Train segmentation model.
 
     NB: trailing / in train_shards indicates bucket to be expanded. Only works for S3-like http.
     """
+
     if kind == "words":
         Loader = segdata.WordSegDataLoader
         train_bs = train_bs if train_bs > 0 else 4
         val_bs = val_bs if val_bs > 0 else 4
         noutput = 4
+        margin = 0  # was: margin= 16
+        weightmask = 0
+        bordermask = 16
     elif kind == "page":
         Loader = segdata.PageSegDataLoader
         train_bs = train_bs if train_bs > 0 else 1
         val_bs = val_bs if val_bs > 0 else 1
         noutput = 5
+        margin = -1
+        weightmask = -1
+        bordermask = -1
     else:
         raise ValueError(f"Unknown kind: {kind}")
+
     data = Loader(
         train_shards=train_shards,
         val_shards=val_shards,
@@ -262,12 +326,19 @@ def train(
         f"# checking training batch size {batch[0].size()} {batch[1].size()}",
     )
 
+    if restart is not None:
+        ckpt = torch.load(open(restart, "rb"), map_location="cpu")
+        mname = ckpt["hyper_parameters"]["mname"]
+
     smodel = SegLightning(
         mname=mname,
         lr=lr,
         lr_halflife=lr_halflife,
         display_freq=display_freq,
         noutput=noutput,
+        margin=margin,
+        weightmask=weightmask,
+        bordermask=bordermask,
     )
 
     if dumpjit is not None:
@@ -315,6 +386,7 @@ def train(
 
     if traced:
         import tracemalloc
+
         tracemalloc.start(20)
         before = tracemalloc.take_snapshot()
 
@@ -322,6 +394,7 @@ def train(
 
     if traced:
         import tracemalloc
+
         after = tracemalloc.take_snapshot()
         stats = after.compare_to(before, key_type="filename")
         with open("memstats.pyd", "wb") as stream:
