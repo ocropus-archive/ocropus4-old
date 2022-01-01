@@ -52,41 +52,6 @@ def collate4ocr(samples: List[Tuple[torch.Tensor, str]]) -> Tuple[torch.Tensor, 
     return images, seqs
 
 
-def goodsize(sample: Dict[Any, Any], max_w: int = max_w, max_h: int = max_h) -> bool:
-    """Determine whether the given sample has a good size."""
-    image, _ = sample
-    h, w = image.shape[-2:]
-    good = h > min_h and h < max_h and w > min_w and w < max_w
-    if not good:
-        print("bad sized image", image.shape)
-        return False
-    if image.ndim == 3:
-        image = image.mean(0)
-    if (image > 0.5).sum() < 10.0:
-        print("nearly empty image", image.sum())
-        return False
-    return True
-
-
-def goodhist(sample):
-    """Check if the image has a good histogram."""
-    image, _ = sample
-    if image.dtype == torch.uint8:
-        image = image.float() / 255.0
-    image = image - image.min()
-    if image.ndim == 3:
-        image = image.mean(0)
-    image /= max(image.max(), 1e-4)
-    hist, _ = torch.histogram(image, bins=5, range=(0, 1))
-    if hist[0] < hist[4]:
-        datawarn("inverted image")
-        return True  # FIXME
-    if hist[1:4].sum() > hist[0]:
-        datawarn("nonbinary image")
-        return False
-    return False  # FIXME
-
-
 @utils.useopt
 def augment_none(image: torch.Tensor) -> torch.Tensor:
     """Perform no augmentation.
@@ -247,36 +212,15 @@ def good_text(regex: str, sample: dict) -> bool:
 
 
 ###
-### Data Loading
+# Data Loading
 ###
 
 
-class TextDataLoader(pl.LightningDataModule):
-    """Lightning Data Module for OCR training."""
-
-    extensions = "line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt"
-    shuffle = 5000
-    nepoch = 50000
-
-    def __init__(
-        self,
-        probs: List[float] = [1.0, 1.0, 0.2],
-        train_bs: int = 16,
-        val_bs: int = 24,
-        num_workers: int = 8,
-        cache_size: int = -1,
-        cache_dir: str = None,
-        augment: str = "distort",
-        bucket: str = "http://storage.googleapis.com/nvdata-ocropus-words/",
-        height: int = 64,
-        max_width: int = 512,
-        val_bucket: str = "http://storage.googleapis.com/nvdata-ocropus-val/",
-        val_shards: str = "http://storage.googleapis.com/nvdata-ocropus-val/val-word-{000000..000007}.tar",
-        **kw,
-    ):
-        super().__init__()
-        self.save_hyperparameters()
-        self.augment = eval(f"augment_{augment}")
+class WordPreprocessor:
+    def __init__(self, height=64, max_width=512, augment=augment_distort, max_zoom=4.0):
+        self.height = height
+        self.max_width = max_width
+        self.augment = augment
 
     def goodsize(self, image):
         h, w = image.shape[-2:]
@@ -320,7 +264,6 @@ class TextDataLoader(pl.LightningDataModule):
         self,
         sample: Tuple[torch.Tensor, str],
         train: bool = True,
-        max_zoom: float = 4.0,
     ) -> Optional[Tuple[torch.Tensor, str]]:
         """Preprocess training sample."""
         image, label = sample
@@ -340,8 +283,8 @@ class TextDataLoader(pl.LightningDataModule):
             return None
         if not self.goodcc(image, label):
             return None
-        zoom = float(self.hparams.height) / image.shape[-2]
-        if zoom > max_zoom:
+        zoom = float(self.height) / image.shape[-2]
+        if zoom > self.max_zoom:
             datawarn(f"zoom too large {zoom} for {image.shape}")
             return None
         if train:
@@ -356,7 +299,7 @@ class TextDataLoader(pl.LightningDataModule):
         if image.shape[-2] < 16 or image.shape[-1] < 16:
             datawarn(f"image too narrow after rescaling {zoom} {image.shape}")
             return None
-        if image.shape[-1] > self.hparams.max_width:
+        if image.shape[-1] > self.max_width:
             datawarn(f"image too wide after rescaling {zoom} {image.shape}")
             return None
         if train:
@@ -364,8 +307,34 @@ class TextDataLoader(pl.LightningDataModule):
         image = image.clip(0, 1)
         return image, label
 
-    def val_preprocess(self, *args):
-        return self.preprocess(*args, train=False)
+
+class TextDataLoader(pl.LightningDataModule):
+    """Lightning Data Module for OCR training."""
+
+    extensions = "line.png;line.jpg;word.png;word.jpg;jpg;jpeg;ppm;png txt;gt.txt"
+    shuffle = 5000
+    nepoch = 50000
+
+    def __init__(
+        self,
+        probs: List[float] = [1.0, 1.0, 0.2],
+        train_bs: int = 16,
+        val_bs: int = 24,
+        num_workers: int = 8,
+        cache_size: int = -1,
+        cache_dir: str = None,
+        augment: str = "distort",
+        bucket: str = "http://storage.googleapis.com/nvdata-ocropus-words/",
+        height: int = 64,
+        max_width: int = 512,
+        val_bucket: str = "http://storage.googleapis.com/nvdata-ocropus-val/",
+        val_shards: str = "http://storage.googleapis.com/nvdata-ocropus-val/val-word-{000000..000007}.tar",
+        **kw,
+    ):
+        super().__init__()
+        self.save_hyperparameters()
+        self.augment = eval(f"augment_{augment}")
+        self.preprocessor = WordPreprocessor(height=height, max_width=max_width, augment=self.augment)
 
     def make_reader(self, url, normalize=normalize_simple, select="[A-Za-z0-9]"):
         bucket = self.hparams.bucket
@@ -407,7 +376,7 @@ class TextDataLoader(pl.LightningDataModule):
         bs = self.hparams.train_bs
         ds = self.make_mix()
         ds = ds.shuffle(self.shuffle).decode("torchrgb8", partial=True).to_tuple(self.extensions)
-        ds = ds.map(self.preprocess)
+        ds = ds.map(self.preprocessor.preprocess)
         dl = wds.WebLoader(
             ds,
             collate_fn=collate4ocr,
@@ -434,7 +403,7 @@ class TextDataLoader(pl.LightningDataModule):
             .select(partial(good_text, "[A-Za-z0-9]"))
         )
         ds = ds.decode("torchrgb8", partial=True).to_tuple(self.extensions)
-        ds = ds.map(self.preprocess)
+        ds = ds.map(partial(self.preprocessor.preprocess, train=False))
         dl = wds.WebLoader(
             ds,
             collate_fn=collate4ocr,
