@@ -35,10 +35,13 @@ seginf)  # recognize pages with layout information
 preinf)  # recognize pages with layout information
     $python3 -m ocropus.preinf "$@"
     ;;
+segdata)  # display segmentation data for debugging
+    $python3 -m ocropus.segdata "$@"
+    ;;
 segtrain)  # recognize pages with layout information
     $python3 -m ocropus.segtrain "$@"
     ;;
-textdata)  # recognize pages with layout information
+textdata)  # display text training data for debugging
     $python3 -m ocropus.textdata "$@"
     ;;
 texttrain)  # recognize pages with layout information

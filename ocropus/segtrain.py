@@ -2,7 +2,10 @@ import io, json, sys
 from io import StringIO
 from typing import Any, Dict, List, Optional
 from click.core import Option
-
+import gc
+import pickle
+import matplotlib.pyplot as plt
+import psutil
 import numpy as np
 import PIL
 import PIL.Image
@@ -16,11 +19,52 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from scipy import ndimage as ndi
 from torch import nn
-from torch.optim.lr_scheduler import LambdaLR
+from torch.optim.lr_scheduler import LambdaLR, ExponentialLR
+import torchvision
+import PIL
 
-from . import confparse, segmodels, segdata
+
+from . import confparse, segmodels, segdata, utils
 
 app = typer.Typer()
+
+
+def bit_reverse_table():
+    result = torch.zeros((256,), dtype=torch.uint8)
+    for i in range(256):
+        result[i] = int("{:08b}".format(i)[::-1], 2)
+    return result
+
+
+def log_mem(logger, step):
+    t = torch.cuda.get_device_properties(0).total_memory
+    r = torch.cuda.memory_reserved(0)
+    a = torch.cuda.memory_allocated(0)
+    logger.add_scalars("gpumem", dict(total=t, reserved=r, allocated=a), step)
+    m = psutil.virtual_memory()
+    logger.add_scalars("cpumem", dict(used=m.used, free=m.free, active=m.active), step)
+
+
+def pil_image_grid(images: list, rows: int, columns: int, title: str = None):
+    """
+    Create a grid of images from a list of PIL images.
+    """
+
+    # compute total width and height
+    width = max(image.size[0] for image in images)
+    height = max(image.size[1] for image in images)
+
+    # create a new image with the correct size
+    grid = PIL.Image.new(mode="RGB", size=(width * columns, height * rows), color=(255, 255, 255))
+
+    # paste each image into the grid
+    for row in range(rows):
+        for column in range(columns):
+            image = images[row * columns + column]
+            grid.paste(image, (column * width, row * height))
+
+    # return the grid
+    return grid
 
 
 class SegLightning(pl.LightningModule):
@@ -32,12 +76,16 @@ class SegLightning(pl.LightningModule):
         weightmask=0,
         bordermask=16,
         lr=0.01,
-        lr_halflife=10,
+        # lr_halflife=10,
+        lr_scale=1e-3,
+        lr_steps=100,
         display_freq=100,
         segmodel: Dict[Any, Any] = {},
+        noutput: int = 4,
     ):
         super().__init__()
         self.save_hyperparameters()
+        segmodel.setdefault("config", {})["noutput"] = noutput
         self.model = segmodels.SegModel(mname, **segmodel)
         self.get_jit_model()
         print("model created and is JIT-able")
@@ -48,11 +96,20 @@ class SegLightning(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.model.parameters(), lr=self.hparams.lr)
+        print(f"# optimizer {optimizer}")
+        scheduler = LambdaLR(optimizer, self.schedule)  # FIXME
+        scale, steps = self.hparams.lr_scale, self.hparams.lr_steps
+        scheduler = ExponentialLR(optimizer, gamma=scale ** (1.0 / steps), last_epoch=steps)
+        print(f"# scheduler {scheduler}")
+        return [optimizer], [scheduler]
+
+    def OLD_configure_optimizers(self):
+        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.hparams.lr)
         scheduler = LambdaLR(optimizer, self.schedule)
         return [optimizer], [scheduler]
 
     def schedule(self, epoch: int):
-        return 0.5 ** (epoch // self.hparams.lr_halflife)
+        return 0.5 ** (epoch // 20)
 
     def make_weight_mask(self, targets, w, d):
         mask = targets.detach().cpu().numpy()
@@ -99,6 +156,7 @@ class SegLightning(pl.LightningModule):
         assert outputs.ndim == 4, (inputs.shape, outputs.shape, targets.shape)
         assert targets.ndim == 3, (inputs.shape, outputs.shape, targets.shape)
         assert outputs.shape[0] < 100 and outputs.shape[1] < 10, outputs.shape
+        assert targets.min() >= 0 and targets.max() < self.hparams.noutput
         if outputs.shape != inputs.shape:
             assert outputs.shape[0] == inputs.shape[0]
             assert outputs.ndim == 4
@@ -118,14 +176,37 @@ class SegLightning(pl.LightningModule):
             err = float(errors) / float(targets.nelement())
             self.log(f"{mode}_err", err, prog_bar=True)
         if mode == "train" and index % self.hparams.display_freq == 0:
+            print("displaying")
             self.display_result(index, inputs, targets, outputs, mask)
         return loss
 
     def validation_step(self, batch, index):
         return self.training_step(batch, index, mode="val")
 
-    def display_result(self, index, inputs, targets, outputs, mask):
-        import matplotlib.pyplot as plt
+    def display_result(self, index, inputs, targets, outputs, mask, key="segmentation"):
+        inputs, targets, outputs = inputs[0], targets[0], outputs[0]
+        outputs = outputs.softmax(0)
+        assert inputs.ndim == 3 and inputs.shape[0] == 3
+        assert outputs.ndim == 3 and outputs.shape[0] >= 3
+        inputs = (inputs.clip(0, 1) * 255.0).type(torch.uint8)
+        outputs = (outputs.clip(0, 1) * 255.0).type(torch.uint8)
+        pred = outputs.argmax(0)
+        pred = bit_reverse_table()[pred]
+        pred_rgb = torch.stack([36 * (pred % 7), 61 * (pred % 5), 85 * (pred % 3)]).type(torch.uint8)
+        il = [inputs, pred_rgb]
+        il = [torchvision.transforms.ToPILImage()(im).convert("RGB") for im in il]
+        grid = pil_image_grid(il, 1, len(il), str(index))
+        grid = torchvision.transforms.ToTensor()(grid)
+        exp = self.logger.experiment
+        if hasattr(exp, "add_image"):
+            exp.add_image(key, grid, index)
+        else:
+            import wandb
+
+            exp.log({key: [wandb.Image(grid, caption=key)]})
+
+    def OLD_display_result(self, index, inputs, targets, outputs, mask):
+        # better display, but leaking memory
 
         cmap = plt.cm.nipy_spectral
 
@@ -165,9 +246,11 @@ class SegLightning(pl.LightningModule):
         else:
             fig_gt.imshow(p.argmax(1)[0], vmin=0, vmax=p.shape[1], cmap=cmap)
         self.log_matplotlib_figure(fig, self.global_step, size=(1000, 1000))
+        fig.clear()
         plt.close(fig)
+        gc.collect()
 
-    def log_matplotlib_figure(self, fig, index, key="image", size=(600, 600)):
+    def OLD_log_matplotlib_figure(self, fig, index, key="image", size=(600, 600)):
         """Log the given matplotlib figure to tensorboard logger tb."""
         buf = io.BytesIO()
         fig.savefig(buf, format="jpeg")
@@ -185,34 +268,63 @@ class SegLightning(pl.LightningModule):
             import wandb
 
             exp.log({key: [wandb.Image(image, caption=key)]})
+        del buf
+        del image
 
 
 @app.command()
 def train(
     train_shards: Optional[str] = None,
-    train_bs: int = 4,
+    train_bs: int = -1,
     val_shards: Optional[str] = None,
-    val_bs: int = 4,
+    val_bs: int = -1,
+    kind: str = "words",
     augmentation: str = "default",
     num_workers: int = 8,
     nepoch: int = 200000,
     checkpoint: int = 1,
     mname: str = "ocropus.segmodels.segmentation_model_210910",
     lr: float = 0.01,
-    lr_halflife: int = 500000,
+    lr_steps: int = 100,
+    lr_scale: float = 1e-3,
+    # lr_halflife: int = 500000,
     display_freq: int = 50,
     max_epochs: int = 10000,
     gpus: str = "0,",
     default_root_dir: str = "./_logs",
-    resume: Optional[str] = None,
     dumpjit: Optional[str] = None,
+    maxsize: float = 1.5e6,
     wandb: str = "",
+    traced: bool = False,
+    masked: Optional[bool] = None,
+    resume: Optional[str] = None,
+    restart: Optional[str] = None,
 ) -> None:
     """Train segmentation model.
 
     NB: trailing / in train_shards indicates bucket to be expanded. Only works for S3-like http.
     """
-    data = segdata.SegDataLoader(
+
+    if kind == "words":
+        Loader = segdata.WordSegDataLoader
+        train_bs = train_bs if train_bs > 0 else 4
+        val_bs = val_bs if val_bs > 0 else 4
+        noutput = 4
+        margin = 0  # was: margin= 16
+        weightmask = 0
+        bordermask = 16
+    elif kind == "page":
+        Loader = segdata.PageSegDataLoader
+        train_bs = train_bs if train_bs > 0 else 1
+        val_bs = val_bs if val_bs > 0 else 1
+        noutput = 5
+        margin = -1
+        weightmask = -1
+        bordermask = -1
+    else:
+        raise ValueError(f"Unknown kind: {kind}")
+
+    data = Loader(
         train_shards=train_shards,
         val_shards=val_shards,
         train_bs=train_bs,
@@ -220,17 +332,28 @@ def train(
         augmentation=augmentation,
         num_workers=num_workers,
         nepoch=nepoch,
+        maxsize=maxsize,
     )
     batch = next(iter(data.train_dataloader()))
     print(
         f"# checking training batch size {batch[0].size()} {batch[1].size()}",
     )
 
+    if restart is not None:
+        ckpt = torch.load(open(restart, "rb"), map_location="cpu")
+        mname = ckpt["hyper_parameters"]["mname"]
+
     smodel = SegLightning(
         mname=mname,
         lr=lr,
-        lr_halflife=lr_halflife,
+        # lr_halflife=lr_halflife,
+        lr_steps=lr_steps,
+        lr_scale=lr_scale,
         display_freq=display_freq,
+        noutput=noutput,
+        margin=margin,
+        weightmask=weightmask,
+        bordermask=bordermask,
     )
 
     if dumpjit is not None:
@@ -259,7 +382,7 @@ def train(
 
     kw = {}
     if wandb != "":
-        wconfig = eval("{" + wandb + "}")
+        wconfig = eval("dict(" + wandb + ")")
         print(f"# logging to {wconfig}")
         from pytorch_lightning.loggers import WandbLogger
 
@@ -276,7 +399,21 @@ def train(
         **kw,
     )
 
+    if traced:
+        import tracemalloc
+
+        tracemalloc.start(20)
+        before = tracemalloc.take_snapshot()
+
     trainer.fit(smodel, data)
+
+    if traced:
+        import tracemalloc
+
+        after = tracemalloc.take_snapshot()
+        stats = after.compare_to(before, key_type="filename")
+        with open("memstats.pyd", "wb") as stream:
+            pickle.dump(stats, stream)
 
 
 if __name__ == "__main__":
