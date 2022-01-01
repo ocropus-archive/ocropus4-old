@@ -19,7 +19,7 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from scipy import ndimage as ndi
 from torch import nn
-from torch.optim.lr_scheduler import LambdaLR
+from torch.optim.lr_scheduler import LambdaLR, ExponentialLR
 import torchvision
 import PIL
 
@@ -76,7 +76,9 @@ class SegLightning(pl.LightningModule):
         weightmask=0,
         bordermask=16,
         lr=0.01,
-        lr_halflife=10,
+        # lr_halflife=10,
+        lr_scale=1e-3,
+        lr_steps=100,
         display_freq=100,
         segmodel: Dict[Any, Any] = {},
         noutput: int = 4,
@@ -94,11 +96,20 @@ class SegLightning(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.model.parameters(), lr=self.hparams.lr)
+        print(f"# optimizer {optimizer}")
+        scheduler = LambdaLR(optimizer, self.schedule)  # FIXME
+        scale, steps = self.hparams.lr_scale, self.hparams.lr_steps
+        scheduler = ExponentialLR(optimizer, gamma=scale ** (1.0 / steps), last_epoch=steps)
+        print(f"# scheduler {scheduler}")
+        return [optimizer], [scheduler]
+
+    def OLD_configure_optimizers(self):
+        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.hparams.lr)
         scheduler = LambdaLR(optimizer, self.schedule)
         return [optimizer], [scheduler]
 
     def schedule(self, epoch: int):
-        return 0.5 ** (epoch // self.hparams.lr_halflife)
+        return 0.5 ** (epoch // 20)
 
     def make_weight_mask(self, targets, w, d):
         mask = targets.detach().cpu().numpy()
@@ -194,7 +205,7 @@ class SegLightning(pl.LightningModule):
 
             exp.log({key: [wandb.Image(grid, caption=key)]})
 
-    def display_result0(self, index, inputs, targets, outputs, mask):
+    def OLD_display_result(self, index, inputs, targets, outputs, mask):
         # better display, but leaking memory
 
         cmap = plt.cm.nipy_spectral
@@ -239,7 +250,7 @@ class SegLightning(pl.LightningModule):
         plt.close(fig)
         gc.collect()
 
-    def log_matplotlib_figure(self, fig, index, key="image", size=(600, 600)):
+    def OLD_log_matplotlib_figure(self, fig, index, key="image", size=(600, 600)):
         """Log the given matplotlib figure to tensorboard logger tb."""
         buf = io.BytesIO()
         fig.savefig(buf, format="jpeg")
@@ -274,17 +285,19 @@ def train(
     checkpoint: int = 1,
     mname: str = "ocropus.segmodels.segmentation_model_210910",
     lr: float = 0.01,
-    lr_halflife: int = 500000,
+    lr_steps: int = 100,
+    lr_scale: float = 1e-3,
+    # lr_halflife: int = 500000,
     display_freq: int = 50,
     max_epochs: int = 10000,
     gpus: str = "0,",
     default_root_dir: str = "./_logs",
-    resume: Optional[str] = None,
     dumpjit: Optional[str] = None,
     maxsize: float = 1.5e6,
     wandb: str = "",
     traced: bool = False,
     masked: Optional[bool] = None,
+    resume: Optional[str] = None,
     restart: Optional[str] = None,
 ) -> None:
     """Train segmentation model.
@@ -333,7 +346,9 @@ def train(
     smodel = SegLightning(
         mname=mname,
         lr=lr,
-        lr_halflife=lr_halflife,
+        # lr_halflife=lr_halflife,
+        lr_steps=lr_steps,
+        lr_scale=lr_scale,
         display_freq=display_freq,
         noutput=noutput,
         margin=margin,
