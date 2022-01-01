@@ -31,7 +31,7 @@ def identity(x: Any) -> Any:
 
 
 def datawarn(*args):
-    # warnings.warn(*args)
+    warnings.warn(*args)
     return
 
 
@@ -221,6 +221,7 @@ class WordPreprocessor:
         self.height = height
         self.max_width = max_width
         self.augment = augment
+        self.max_zoom = max_zoom
 
     def goodsize(self, image):
         h, w = image.shape[-2:]
@@ -243,6 +244,8 @@ class WordPreprocessor:
         return True
 
     def goodcc(self, image, text):
+        if text is None:
+            return True
         l = len(text)
         h, w = image.shape[-2:]
         if w / float(l) < 0.3 * h:
@@ -304,7 +307,7 @@ class WordPreprocessor:
             return None
         if train:
             image = self.augment(image)
-        image = image.clip(0, 1)
+        image = image.clip(0, 1).type(torch.float32)
         return image, label
 
 
