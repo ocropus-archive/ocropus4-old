@@ -31,7 +31,8 @@ def identity(x: Any) -> Any:
 
 
 def datawarn(*args):
-    warnings.warn(*args)
+    if int(os.environ.get("OCROPUS_DATA_WARNINGS", "0")):
+        warnings.warn(*args)
     return
 
 
