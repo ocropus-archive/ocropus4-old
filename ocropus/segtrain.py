@@ -293,7 +293,7 @@ def train(
     gpus: str = "0,",
     default_root_dir: str = "./_logs",
     dumpjit: Optional[str] = None,
-    maxsize: float = 1.5e6,
+    maxsize: float = 3e6,
     wandb: str = "",
     traced: bool = False,
     masked: Optional[bool] = None,
@@ -307,7 +307,7 @@ def train(
 
     if kind == "words":
         Loader = segdata.WordSegDataLoader
-        train_bs = train_bs if train_bs > 0 else 4
+        train_bs = train_bs if train_bs > 0 else 3
         val_bs = val_bs if val_bs > 0 else 4
         noutput = 4
         margin = 0  # was: margin= 16

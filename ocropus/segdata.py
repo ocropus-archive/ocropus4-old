@@ -8,11 +8,12 @@ import matplotlib.pyplot as plt
 from typing import Any, Dict, List, Optional, Union, Tuple
 from functools import partial
 import warnings
-
-from . import confparse, utils, jittable
-
-
+import random
 import typer
+
+
+from . import confparse, utils, jittable, degrade
+
 
 app = typer.Typer()
 
@@ -63,13 +64,50 @@ def masked_norm(image, target):
 
 
 @utils.useopt
-def augmentation_default(sample):
+def augmentation_default(sample, p=0.5, a=2.0):
     image, target = sample
-    assert isinstance(image, torch.Tensor) and isinstance(target, torch.Tensor)
+    assert isinstance(image, torch.Tensor), type(image)
+    assert isinstance(target, torch.Tensor), type(target)
     assert image.ndim == 3 and image.shape[0] == 3, image.shape
     assert image.dtype == torch.float32 and image.max() <= 1.0
     assert target.ndim == 2 and target.dtype == torch.long
-    return sample
+    if random.random() < p:
+        assert image.shape[-2:] == target.shape[-2:]
+        h, w = image.shape[-2:]
+        image = image.mean(0).numpy()
+        scale = random.uniform(0.9, 1.1)
+        assert image.ndim == 2 and image.dtype == np.float32
+        image = ndi.zoom(image, scale, order=1)
+        image = torch.tensor(image).unsqueeze(0).repeat(3, 1, 1)
+        assert image.ndim == 3 and image.shape[0] == 3, image.shape
+        assert target.ndim == 2 and target.dtype == torch.long
+        target = target.numpy()
+        target = ndi.zoom(target, scale, order=0)
+        target = torch.tensor(target)
+    if random.random() < p:
+        # Randomly rotate the image
+        image = image.mean(0).numpy()
+        alpha = random.uniform(-a, a)
+        assert image.ndim == 2 and image.dtype == np.float32
+        image = ndi.rotate(image, alpha, order=1, mode="mirror")
+        image = torch.tensor(image).unsqueeze(0).repeat(3, 1, 1)
+        assert image.ndim == 3 and image.shape[0] == 3, image.shape
+        assert target.ndim == 2 and target.dtype == torch.long
+        target = target.numpy()
+        target = ndi.rotate(target, alpha, order=0, mode="mirror")
+        target = torch.tensor(target)
+    if random.random() < p:
+        # Blur the image
+        image = image.mean(0).numpy()
+        sigma = random.uniform(0.5, 1.5)
+        image = ndi.gaussian_filter(image, sigma=sigma)
+        image = torch.tensor(image).unsqueeze(0).repeat(3, 1, 1)
+    if random.random() < p:
+        # Add noise
+        image = image.mean(0).numpy()
+        image = degrade.noisify(image, amp1=0.2, amp2=0.2)
+        image = torch.tensor(image).unsqueeze(0).repeat(3, 1, 1)
+    return image, target
 
 
 def filter_size(sample, maxsize=1e9):
@@ -93,17 +131,33 @@ class SegDataLoader(pl.LightningDataModule):
         val_bs=2,
         extensions="image.png;framed.png;ipatch.png;png target.png;lines.png;spatch.png;seg.png",
         scale=0.5,
-        augmentation="none",
+        augmentation="default",
         shuffle=0,
         num_workers=8,
         invert="False",
         remapper=None,
         nepoch=1000000000,
         maxsize=1e9,
+        maxshape=(800, 800),
     ):
         super().__init__()
         assert train_shards is not None
         self.save_hyperparameters()
+
+    def limit_size(self, sample):
+        image, seg = sample
+        if image.shape[-2:] > self.hparams.maxshape:
+            scale = min(self.hparams.maxshape[0] / image.shape[-2], self.hparams.maxshape[1] / image.shape[-1])
+            assert isinstance(image, torch.Tensor) and isinstance(seg, torch.Tensor)
+            assert image.ndim == 3 and image.shape[0] == 3, image.shape
+            assert seg.ndim == 2 and seg.dtype == torch.long, seg.shape
+            image = image.mean(0).numpy()
+            image = ndi.zoom(image, scale, order=1)
+            image = torch.tensor(image).unsqueeze(0).repeat(3, 1, 1)
+            seg = seg.numpy()
+            seg = ndi.zoom(seg, scale, order=0)
+            seg = torch.tensor(seg)
+        return image, seg
 
     def make_loader(self, urls, batch_size, mode):
         training = wds.WebDataset(urls, handler=wds.warn_and_continue)
@@ -116,15 +170,20 @@ class SegDataLoader(pl.LightningDataModule):
         training = training.map(convert_image_target)
         if self.hparams.remapper is not None:
             training = training.map_tuple(None, self.hparams.remapper)
+        training = training.map(self.limit_size)
         if mode == "train":
             augmentation = eval(f"augmentation_{self.hparams.augmentation}")
             training = training.map(augmentation)
-        return wds.WebLoader(
-            training,
-            batch_size=batch_size,
-            collate_fn=collate4seg,
-            num_workers=self.hparams.num_workers,
-        ).map(FilterSize(self.hparams.maxsize)).slice(self.hparams.nepoch // batch_size)
+        return (
+            wds.WebLoader(
+                training,
+                batch_size=batch_size,
+                collate_fn=collate4seg,
+                num_workers=self.hparams.num_workers,
+            )
+            .map(FilterSize(self.hparams.maxsize))
+            .slice(self.hparams.nepoch // batch_size)
+        )
 
     def train_dataloader(self):
         return self.make_loader(
@@ -213,7 +272,7 @@ def pages(bs: int = 1, nw: int = 0, val: bool = False):
         fig.add_subplot(1, 2, 1)
         plt.xticks([])
         plt.yticks([])
-        plt.imshow(img)
+        plt.imshow(1 - img)
         plt.title(f"{img.shape} {np.prod(img.shape)}")
         fig.add_subplot(1, 2, 2)
         plt.xticks([])
