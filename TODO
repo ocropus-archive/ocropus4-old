@@ -1,0 +1,8 @@
+- publaynet augmentation
+- seg mask refactoring
+- seg mask end-to-end
+- language model
+- baseline model, EM
+- word segmentation with negative examples
+- part selection into hocr2words
+- cyclegan for binarization
