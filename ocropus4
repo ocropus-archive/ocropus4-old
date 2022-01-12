@@ -29,6 +29,9 @@ case $library in
 ocr)  # recognize pages with layout information
     $python3 -m ocropus.ocr "$@"
     ;;
+segeximages)  # recognize pages with layout information
+    $python3 -m ocropus.segeximages "$@"
+    ;;
 seginf)  # recognize pages with layout information
     $python3 -m ocropus.seginf "$@"
     ;;
