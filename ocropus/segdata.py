@@ -18,6 +18,11 @@ from . import confparse, utils, jittable, degrade
 app = typer.Typer()
 
 
+def printkv(d):
+    for k, v in d.items():
+        print(f"{k}: {repr(v)[:60]}")
+
+
 def collate4seg(samples: List[Tuple[torch.Tensor, torch.Tensor]]) -> Tuple[torch.Tensor, torch.Tensor]:
     images, segs = zip(*samples)
     images = jittable.stack_images(images)
@@ -125,11 +130,9 @@ def FilterSize(maxsize):
 class SegDataLoader(pl.LightningDataModule):
     def __init__(
         self,
-        train_shards=None,
         train_bs=2,
-        val_shards=None,
         val_bs=2,
-        extensions="image.png;framed.png;ipatch.png;png target.png;lines.png;spatch.png;seg.png",
+        extensions="image.png;framed.png;ipatch.png;png;jpg;jpeg target.png;lines.png;spatch.png;seg.png",
         scale=0.5,
         augmentation="default",
         shuffle=0,
@@ -141,7 +144,6 @@ class SegDataLoader(pl.LightningDataModule):
         maxshape=(800, 800),
     ):
         super().__init__()
-        assert train_shards is not None
         self.save_hyperparameters()
 
     def limit_size(self, sample):
@@ -159,13 +161,23 @@ class SegDataLoader(pl.LightningDataModule):
             seg = torch.tensor(seg)
         return image, seg
 
-    def make_loader(self, urls, batch_size, mode):
-        training = wds.WebDataset(urls, handler=wds.warn_and_continue)
+    def make_sources(self, mode="train"):
+        raise NotImplementedError
+
+    def fixup(self, sample):
+        return sample
+
+    def make_loader(self, batch_size, mode):
+        training = self.make_sources(mode=mode)
         training = training.shuffle(
             self.hparams.shuffle,
             handler=wds.warn_and_continue,
         )
         training = training.decode("torchrgb8")
+        training = training.map(
+            self.fixup,
+            handler=wds.warn_and_continue,
+        )
         training = training.to_tuple(self.hparams.extensions, handler=wds.warn_and_continue)
         training = training.map(convert_image_target)
         if self.hparams.remapper is not None:
@@ -186,31 +198,38 @@ class SegDataLoader(pl.LightningDataModule):
         )
 
     def train_dataloader(self):
-        return self.make_loader(
-            self.hparams.train_shards,
-            self.hparams.train_bs,
-            "train",
-        )
+        return self.make_loader(self.hparams.train_bs, mode="train")
 
     def val_dataloader(self):
-        if self.val_shards is None:
-            return None
-        return self.make_loader(
-            self.hparams.val_shards,
-            self.hparams.val_bs,
-            "val",
-        )
+        return self.make_loader(self.hparams.val_bs, mode="val")
 
 
 class WordSegDataLoader(SegDataLoader):
 
     train_shards = "http://storage.googleapis.com/nvdata-ocropus-wseg/uw3-wseg-{000000..000117}.tar"
     val_shards = "http://storage.googleapis.com/nvdata-ocropus-val/val-wseg-000000.tar"
+    synthfigs = "http://storage.googleapis.com/nvdata-synthfigs/openimages-train-{000000..000143}.tar"
 
-    def __init__(self, train_shards=None, val_shards=None, **kw):
-        train_shards = train_shards or self.train_shards
-        val_shards = val_shards or self.val_shards
-        super().__init__(train_shards=self.train_shards, val_shards=self.val_shards, **kw)
+    def fixup(self, sample):
+        if "jpg" in sample and "@" not in sample["__key__"]:
+            sample["seg.png"][:, :, :] = 0
+        return sample
+
+
+    def make_sources(self, mode="train"):
+        if mode == "train":
+            main = wds.WebDataset(self.train_shards, handler=wds.warn_and_continue)
+            imgs = wds.WebDataset(self.synthfigs, handler=wds.warn_and_continue)
+            sources = [main, imgs]
+            probs = [0.8, 0.2]
+            return wds.FluidWrapper(wds.RandomMix(sources, probs))
+        elif mode == "val":
+            return wds.WebDataset(self.val_shards, handler=wds.warn_and_continue)
+        else:
+            raise ValueError(mode)
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
 
 
 class PageSegDataLoader(SegDataLoader):
@@ -220,10 +239,16 @@ class PageSegDataLoader(SegDataLoader):
     )
     val_shards = "http://storage.googleapis.com/nvdata-publaynet-seg/publaynet-val-{000000..000011}-mseg2.tar"
 
-    def __init__(self, train_shards=None, val_shards=None, **kw):
-        train_shards = train_shards or self.train_shards
-        val_shards = val_shards or self.val_shards
-        super().__init__(train_shards=train_shards, val_shards=val_shards, **kw)
+    def make_sources(self, mode="train"):
+        if mode == "train":
+            return wds.WebDataset(self.train_shards, handler=wds.warn_and_continue)
+        elif mode == "val":
+            return wds.WebDataset(self.val_shards, handler=wds.warn_and_continue)
+        else:
+            raise ValueError(mode)
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
 
 
 @app.command()

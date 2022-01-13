@@ -16,6 +16,9 @@ import sys
 from . import confparse, utils, jittable, degrade
 
 
+tmpdir = "./_tmp"
+
+
 import typer
 
 app = typer.Typer()
@@ -108,17 +111,22 @@ def extract(
 
 @ray.remote
 def gsextract(fname, srcbucket="gs://nvdata-openimages", destbucket="gs://nvdata-synthfigs"):
+    os.system(f"mkdir -p {tmpdir}")
     print(f"extracting {fname}", file=sys.stderr)
-    os.system(f"gsutil cp {srcbucket}/{fname}  /tmp/{fname}")
-    extract("/tmp/{fname}", "/tmp/{fname}-extracted")
-    os.system(f"gsutil cp /tmp/{fname}-extracted {destbucket}/{fname}")
-    os.system(f"rm /tmp/{fname}")
-    os.system(f"rm /tmp/{fname}-extracted")
+    os.system(f"gsutil cp {srcbucket}/{fname}  {tmpdir}/{fname}")
+    print(f"{tmpdir}/{fname}", "-->", f"{tmpdir}/{fname}-extracted")
+    extract(f"{tmpdir}/{fname}", f"{tmpdir}/{fname}-extracted")
+    os.system(f"gsutil cp {tmpdir}/{fname}-extracted {destbucket}/{fname}")
+    os.system(f"rm {tmpdir}/{fname}")
+    os.system(f"rm {tmpdir}/{fname}-extracted")
 
 
 @app.command()
 def openimages():
-    sources = [x.strip() for x in os.popen("gsutil gs://nvdata-openimages/openimages-train*.tar").readlines()]
+    sources = [x.strip() for x in os.popen("gsutil ls gs://nvdata-openimages/openimages-train*.tar").readlines()]
+    sources = [os.path.basename(x) for x in sources]
+    print(f"found {len(sources)} sources, {sources[:10]}...")
+    assert len(sources) > 0, sources
     os.system("gsutil mb gs://nvdata-synthfigs")
     os.system("gsutil rm gs://nvdata-synthfigs/*.tar")
     result = ray.get([gsextract.remote(fname) for fname in sources])

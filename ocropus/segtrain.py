@@ -274,9 +274,7 @@ class SegLightning(pl.LightningModule):
 
 @app.command()
 def train(
-    train_shards: Optional[str] = None,
     train_bs: int = -1,
-    val_shards: Optional[str] = None,
     val_bs: int = -1,
     kind: str = "words",
     augmentation: str = "default",
@@ -305,6 +303,7 @@ def train(
     NB: trailing / in train_shards indicates bucket to be expanded. Only works for S3-like http.
     """
 
+    assert kind in ["words", "page"]
     if kind == "words":
         Loader = segdata.WordSegDataLoader
         train_bs = train_bs if train_bs > 0 else 3
@@ -325,8 +324,6 @@ def train(
         raise ValueError(f"Unknown kind: {kind}")
 
     data = Loader(
-        train_shards=train_shards,
-        val_shards=val_shards,
         train_bs=train_bs,
         val_bs=val_bs,
         augmentation=augmentation,
