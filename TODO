@@ -1,5 +1,7 @@
 - publaynet augmentation DONE
 - seg mask refactoring
+- redo seg extraction
+- incorporate figures into seg mask extraction and mask
 - seg mask end-to-end
 - language model
 - baseline model, EM

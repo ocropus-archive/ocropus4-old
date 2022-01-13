@@ -74,6 +74,23 @@ def segmentation_model_210910(noutput=4, shape=(1, ninput, 512, 512)):
 
 
 @model
+def segmentation_model_220113(noutput=4, shape=(1, ninput, 512, 512), size=32):
+    """Page segmentation using U-net and LSTM combos."""
+    sizes = [1.0, 2.0, 4.0, 6.0, 8.0, 12.0]
+    sizes = [int(size * s) for s in sizes]
+    model = nn.Sequential(
+        layers.ModPadded(
+            64,
+            combos.make_unet(sizes, sub=nn.Sequential(*combos.conv2d_block(sizes[-1], 3, repeat=2))),
+        ),
+        *combos.conv2d_block(48, 3, repeat=2),
+        flex.Conv2d(noutput, 3, padding=1),
+    )
+    flex.shape_inference(model, shape)
+    return model
+
+
+@model
 def publaynet_model_210910(noutput=4, shape=(1, ninput, 512, 512)):
     """Layout model tuned for PubLayNet."""
     model = nn.Sequential(

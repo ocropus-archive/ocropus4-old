@@ -281,7 +281,8 @@ def train(
     num_workers: int = 8,
     nepoch: int = 200000,
     checkpoint: int = 1,
-    mname: str = "ocropus.segmodels.segmentation_model_210910",
+    # mname: str = "ocropus.segmodels.segmentation_model_210910",
+    mname: str = "ocropus.segmodels.segmentation_model_220113",
     lr: float = 0.01,
     lr_steps: int = 100,
     lr_scale: float = 1e-3,
@@ -291,7 +292,7 @@ def train(
     gpus: str = "0,",
     default_root_dir: str = "./_logs",
     dumpjit: Optional[str] = None,
-    maxsize: float = 3e6,
+    maxsize: float = 4e6,
     wandb: str = "",
     traced: bool = False,
     masked: Optional[bool] = None,
@@ -306,8 +307,8 @@ def train(
     assert kind in ["words", "page"]
     if kind == "words":
         Loader = segdata.WordSegDataLoader
-        train_bs = train_bs if train_bs > 0 else 3
-        val_bs = val_bs if val_bs > 0 else 4
+        train_bs = train_bs if train_bs > 0 else 2
+        val_bs = val_bs if val_bs > 0 else 2
         noutput = 4
         margin = 0  # was: margin= 16
         weightmask = 0

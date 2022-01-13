@@ -94,12 +94,12 @@ def augmentation_default(sample, p=0.5, a=2.0):
         image = image.mean(0).numpy()
         alpha = random.uniform(-a, a)
         assert image.ndim == 2 and image.dtype == np.float32
-        image = ndi.rotate(image, alpha, order=1, mode="mirror")
+        image = ndi.rotate(image, alpha, order=1, mode="constant", cval=0)
         image = torch.tensor(image).unsqueeze(0).repeat(3, 1, 1)
         assert image.ndim == 3 and image.shape[0] == 3, image.shape
         assert target.ndim == 2 and target.dtype == torch.long
         target = target.numpy()
-        target = ndi.rotate(target, alpha, order=0, mode="mirror")
+        target = ndi.rotate(target, alpha, order=0, mode="constant", cval=0)
         target = torch.tensor(target)
     if random.random() < p:
         # Blur the image
@@ -213,6 +213,8 @@ class WordSegDataLoader(SegDataLoader):
     def fixup(self, sample):
         if "jpg" in sample and "@" not in sample["__key__"]:
             sample["seg.png"][:, :, :] = 0
+            sample["jpg"] = sample["jpg"][:512, :512, ...]
+            sample["seg.png"] = sample["seg.png"][:512, :512, ...]
         return sample
 
 
