@@ -18,18 +18,49 @@ from . import confparse, utils, jittable, degrade
 app = typer.Typer()
 
 
+def isimage(im):
+    assert isinstance(im, torch.Tensor)
+    assert im.ndim == 3, im.shape
+    assert im.shape[0] == 3, im.shape
+    assert im.dtype in [torch.uint8, torch.float32], im.dtype
+    return True
+
+def ismask(im):
+    assert isinstance(im, torch.Tensor)
+    assert im.ndim == 2, im.shape
+    return True
+
+
+def samedims(*args):
+    for arg in args[1:]:
+        assert arg.shape[-2:] == args[0].shape[-2:], [arg.shape for arg in args]
+    return True
+
+
 def printkv(d):
     for k, v in d.items():
         print(f"{k}: {repr(v)[:60]}")
 
 
+def decode_image(data):
+    return torch.tensor(imread(BytesIO(data))).permute(2, 0, 1)
+
+
+def decode_mask(data):
+    image = decode_image(data)
+    return image[0]
+
+
 def collate4seg(samples: List[Tuple[torch.Tensor, torch.Tensor]]) -> Tuple[torch.Tensor, torch.Tensor]:
-    images, segs = zip(*samples)
+    images, segs, masks = zip(*samples)
     images = jittable.stack_images(images)
     segs = [s.unsqueeze(0) for s in segs]
     segs = jittable.stack_images(segs)
     segs = segs[:, 0]
-    return images, segs
+    masks = [m.unsqueeze(0) for m in masks]
+    masks = jittable.stack_images(masks)
+    masks = masks[:, 0]
+    return images, segs, masks
 
 
 def simple_bg_fg(binimage, amplitude=0.3, imsigma=1.0, sigma=3.0):
@@ -43,22 +74,37 @@ def simple_bg_fg(binimage, amplitude=0.3, imsigma=1.0, sigma=3.0):
 
 
 def convert_image_target(sample):
-    image, target = sample
-    assert image.shape[0] == 3, image.shape
-    assert target.shape[0] == 3, target.shape
-    image = image.type(torch.float32) / 255.0
+    image, target, mask = sample
+    assert isimage(image) and isimage(target)
     target = target[0].long()
     assert target.max() <= 15, target.max()
-    return image, target
+    return image, target, mask
+
+
+def make_weight_mask(targets, weightmask=1, bordermask=0):
+    assert ismask(targets)
+    if weightmask < 0 and bordermask < 0:
+        return targets
+    mask = targets.detach().cpu().numpy()
+    mask = (mask >= 0.5).astype(float)
+    if weightmask > 0:
+        mask = ndi.maximum_filter(mask, (weightmask, weightmask), mode="constant")
+    if bordermask > 0:
+        d = bordermask
+        mask[:d, :] = 0
+        mask[-d:, :] = 0
+        mask[:, :d] = 0
+        mask[:, -d:] = 0
+    mask = torch.tensor(mask, device=targets.device)
+    assert ismask(mask)
+    return mask
 
 
 @utils.useopt
 def augmentation_none(sample):
-    image, target = sample
-    assert isinstance(image, torch.Tensor) and isinstance(target, torch.Tensor)
-    assert image.ndim == 3 and image.shape[0] == 3, image.shape
-    assert image.dtype == torch.float32 and image.max() <= 1.0
-    assert target.ndim == 2 and target.dtype == torch.long
+    image, target, mask = sample
+    assert isimage(image) and ismask(target) and ismask(mask)
+    assert samedims(image, target, mask)
     return sample
 
 
@@ -70,12 +116,11 @@ def masked_norm(image, target):
 
 @utils.useopt
 def augmentation_default(sample, p=0.5, a=2.0):
-    image, target = sample
-    assert isinstance(image, torch.Tensor), type(image)
-    assert isinstance(target, torch.Tensor), type(target)
-    assert image.ndim == 3 and image.shape[0] == 3, image.shape
-    assert image.dtype == torch.float32 and image.max() <= 1.0
-    assert target.ndim == 2 and target.dtype == torch.long
+    image, target, mask = sample
+    assert isimage(image) 
+    assert ismask(target) 
+    assert ismask(mask)
+    assert samedims(image, target, mask)
     if random.random() < p:
         assert image.shape[-2:] == target.shape[-2:]
         h, w = image.shape[-2:]
@@ -89,6 +134,9 @@ def augmentation_default(sample, p=0.5, a=2.0):
         target = target.numpy()
         target = ndi.zoom(target, scale, order=0)
         target = torch.tensor(target)
+        mask = mask.numpy()
+        mask = ndi.zoom(mask, scale, order=0)
+        mask = torch.tensor(mask)
     if random.random() < p:
         # Randomly rotate the image
         image = image.mean(0).numpy()
@@ -101,6 +149,9 @@ def augmentation_default(sample, p=0.5, a=2.0):
         target = target.numpy()
         target = ndi.rotate(target, alpha, order=0, mode="constant", cval=0)
         target = torch.tensor(target)
+        mask = mask.numpy()
+        mask = ndi.rotate(mask, alpha, order=0, mode="constant", cval=0)
+        mask = torch.tensor(mask)
     if random.random() < p:
         # Blur the image
         image = image.mean(0).numpy()
@@ -112,11 +163,13 @@ def augmentation_default(sample, p=0.5, a=2.0):
         image = image.mean(0).numpy()
         image = degrade.noisify(image, amp1=0.2, amp2=0.2)
         image = torch.tensor(image).unsqueeze(0).repeat(3, 1, 1)
-    return image, target
+    assert isimage(image) and ismask(target) and ismask(mask)
+    assert samedims(image, target, mask)
+    return image, target, mask
 
 
 def filter_size(sample, maxsize=1e9):
-    image, seg = sample
+    image = sample[0]
     if np.prod(image.shape) > maxsize:
         warnings.warn(f"batch too large {image.shape}, maxsize is {maxsize}")
         return None
@@ -127,12 +180,16 @@ def FilterSize(maxsize):
     return partial(filter_size, maxsize=maxsize)
 
 
+image_extensions = "image.png;framed.png;ipatch.png;png;jpg;jpeg"
+seg_extensions = "target.png;lines.png;spatch.png;seg.png"
+mask_extensions = "mask.png;mask.jpg;mask.jpeg"
+
+
 class SegDataLoader(pl.LightningDataModule):
     def __init__(
         self,
         train_bs=2,
         val_bs=2,
-        extensions="image.png;framed.png;ipatch.png;png;jpg;jpeg target.png;lines.png;spatch.png;seg.png",
         scale=0.5,
         augmentation="default",
         shuffle=0,
@@ -142,14 +199,17 @@ class SegDataLoader(pl.LightningDataModule):
         nepoch=1000000000,
         maxsize=1e9,
         maxshape=(800, 800),
+        synthval=-1,
     ):
         super().__init__()
         self.save_hyperparameters()
 
     def limit_size(self, sample):
-        image, seg = sample
+        image, seg, mask = sample
         if image.shape[-2:] > self.hparams.maxshape:
-            scale = min(self.hparams.maxshape[0] / image.shape[-2], self.hparams.maxshape[1] / image.shape[-1])
+            scale = min(
+                self.hparams.maxshape[0] / image.shape[-2], self.hparams.maxshape[1] / image.shape[-1]
+            )
             assert isinstance(image, torch.Tensor) and isinstance(seg, torch.Tensor)
             assert image.ndim == 3 and image.shape[0] == 3, image.shape
             assert seg.ndim == 2 and seg.dtype == torch.long, seg.shape
@@ -159,7 +219,10 @@ class SegDataLoader(pl.LightningDataModule):
             seg = seg.numpy()
             seg = ndi.zoom(seg, scale, order=0)
             seg = torch.tensor(seg)
-        return image, seg
+            mask = mask .numpy()
+            mask = ndi.zoom(mask, scale, order=0)
+            mask = torch.tensor(mask)
+        return image, seg, mask
 
     def make_sources(self, mode="train"):
         raise NotImplementedError
@@ -167,22 +230,34 @@ class SegDataLoader(pl.LightningDataModule):
     def fixup(self, sample):
         return sample
 
+    def process(self, sample):
+        image, seg = sample["image"], sample["seg"]
+        assert image.dtype == torch.uint8, image.dtype
+        assert isimage(image)
+        assert samedims(image, seg)
+        sample["image"] = image.float() / 255.0
+        sample["seg"] = seg = seg[0].long()
+        if "synthfigs" in sample["__url__"]:
+            if self.hparams.synthval != -1:
+                seg[...] = self.hparams.synthval
+            mask = torch.ones_like(seg, dtype=torch.float32)
+        else:
+            mask = make_weight_mask(seg).type(torch.float32)
+        sample["mask"] = mask
+        self.fixup(sample)
+        return sample
+
     def make_loader(self, batch_size, mode):
+        extensions = image_extensions + " " + seg_extensions
         training = self.make_sources(mode=mode)
         training = training.shuffle(
             self.hparams.shuffle,
             handler=wds.warn_and_continue,
         )
         training = training.decode("torchrgb8")
-        training = training.map(
-            self.fixup,
-            handler=wds.warn_and_continue,
-        )
-        training = training.to_tuple(self.hparams.extensions, handler=wds.warn_and_continue)
-        training = training.map(convert_image_target)
-        if self.hparams.remapper is not None:
-            training = training.map_tuple(None, self.hparams.remapper)
-        training = training.map(self.limit_size)
+        training = training.rename(image=image_extensions, seg=seg_extensions)
+        training = training.map(self.process)
+        training = training.to_tuple("image", "seg", "mask")
         if mode == "train":
             augmentation = eval(f"augmentation_{self.hparams.augmentation}")
             training = training.map(augmentation)
@@ -211,19 +286,23 @@ class WordSegDataLoader(SegDataLoader):
     synthfigs = "http://storage.googleapis.com/nvdata-synthfigs/openimages-train-{000000..000143}.tar"
 
     def fixup(self, sample):
-        if "jpg" in sample and "@" not in sample["__key__"]:
-            sample["seg.png"][:, :, :] = 0
-            sample["jpg"] = sample["jpg"][:512, :512, ...]
-            sample["seg.png"] = sample["seg.png"][:512, :512, ...]
+        image = sample["image"]
+        seg = sample["seg"]
+        mask = sample["mask"]
+        assert isimage(image) and ismask(mask) and ismask(seg)
+        h, w = image.shape[-2:]
+        if h > 512 or w > 512:
+            sample["image"] = image[:, :512, :512]
+            sample["seg"] = seg[:512, :512]
+            sample["mask"] = mask[:512, :512]
         return sample
-
 
     def make_sources(self, mode="train"):
         if mode == "train":
             main = wds.WebDataset(self.train_shards, handler=wds.warn_and_continue)
             imgs = wds.WebDataset(self.synthfigs, handler=wds.warn_and_continue)
             sources = [main, imgs]
-            probs = [0.8, 0.2]
+            probs = [0.7, 0.3]
             return wds.FluidWrapper(wds.RandomMix(sources, probs))
         elif mode == "val":
             return wds.WebDataset(self.val_shards, handler=wds.warn_and_continue)
@@ -265,19 +344,24 @@ def words(bs: int = 1, nw: int = 0, val: bool = False):
     plt.ion()
     for i, sample in enumerate(dl):
         plt.clf()
-        img, seg = sample
+        img, seg, mask = sample
         img = img[0].permute(1, 2, 0).numpy()
         seg = seg[0].numpy()
-        fig.add_subplot(1, 2, 1)
+        mask = mask[0].numpy()
+        fig.add_subplot(2, 2, 1)
         plt.xticks([])
         plt.yticks([])
         plt.imshow(img)
         plt.title(f"{img.shape} {np.prod(img.shape)}")
-        fig.add_subplot(1, 2, 2)
+        fig.add_subplot(2, 2, 2)
         plt.xticks([])
         plt.yticks([])
         plt.imshow(seg, vmin=0, vmax=5, cmap="gist_rainbow")
         plt.title(f"{seg.shape} {np.prod(seg.shape)}")
+        fig.add_subplot(2, 2, 3)
+        plt.xticks([])
+        plt.yticks([])
+        plt.imshow(mask, vmin=0.0, vmax=1.0, cmap="gray")
         plt.ginput(1, timeout=0)
 
 

@@ -126,10 +126,10 @@ def auto_resize(im: torch.Tensor) -> torch.Tensor:
 @torch.jit.export
 def stack_images(images: List[torch.Tensor]) -> torch.Tensor:
     for im in images:
-        assert im.ndim == 3, im.ndim
-        assert im.shape[0] in [1, 3]
-        assert im.shape[1] >= 16
-        assert im.shape[2] >= 16
+        assert im.ndim == 3, im.shape
+        assert im.shape[0] in [1, 3], im.shape
+        assert im.shape[1] >= 16, im.shape
+        assert im.shape[2] >= 16, im.shape
         # assert im.min() >= 0 and im.max() <= 1
     maxima = torch.zeros(3, dtype=torch.int)
     for im in images:
@@ -137,7 +137,7 @@ def stack_images(images: List[torch.Tensor]) -> torch.Tensor:
     bd, bh, bw = int(maxima[0]), int(maxima[1]), int(maxima[2])
     result = torch.zeros((len(images), bd, bh, bw), dtype=images[0].dtype)
     for i, im in enumerate(images):
-        assert im.dtype == result.dtype
+        assert im.dtype == result.dtype, [im.dtype for im in images]
         d, h, w = im.shape
         dy, dx = (bh - h) // 2, (bw - w) // 2
         result[i, :d, dy : dy + h, dx : dx + w] = im

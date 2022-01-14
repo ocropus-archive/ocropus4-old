@@ -73,8 +73,6 @@ class SegLightning(pl.LightningModule):
         *,
         mname="seg",
         margin=16,
-        weightmask=0,
-        bordermask=16,
         lr=0.01,
         # lr_halflife=10,
         lr_scale=1e-3,
@@ -111,20 +109,6 @@ class SegLightning(pl.LightningModule):
     def schedule(self, epoch: int):
         return 0.5 ** (epoch // 20)
 
-    def make_weight_mask(self, targets, w, d):
-        mask = targets.detach().cpu().numpy()
-        assert mask.ndim == 3
-        mask = (mask >= 0.5).astype(float)
-        if w > 0:
-            mask = ndi.maximum_filter(mask, (0, w, w), mode="constant")
-        if d > 0:
-            mask[:, :d, :] = 0
-            mask[:, -d:, :] = 0
-            mask[:, :, :d] = 0
-            mask[:, :, -d:] = 0
-        mask = torch.tensor(mask, device=targets.device)
-        return mask
-
     def compute_loss(self, outputs, targets, mask=None):
         """Compute loss taking a margin into account."""
         b, d, h, w = outputs.shape
@@ -149,7 +133,7 @@ class SegLightning(pl.LightningModule):
         return loss
 
     def training_step(self, batch, index, mode="train"):
-        inputs, targets = batch
+        inputs, targets, mask = batch
         assert inputs.ndim == 4, inputs.shape
         assert inputs.shape[1] == 3, inputs.shape
         outputs = self.model.forward(inputs)
@@ -162,11 +146,7 @@ class SegLightning(pl.LightningModule):
             assert outputs.ndim == 4
             bs, h, w = targets.shape
             outputs = outputs[:, :, :h, :w]
-        if self.hparams.weightmask >= 0 or self.hparams.bordermask >= 0:
-            mask = self.make_weight_mask(targets, self.hparams.weightmask, self.hparams.bordermask)
-            self.last_mask = mask
-        else:
-            mask = None
+        self.last_mask = mask
         assert inputs.size(0) == outputs.size(0)
         loss = self.compute_loss(outputs, targets, mask=mask)
         self.log(f"{mode}_loss", loss)
@@ -183,6 +163,17 @@ class SegLightning(pl.LightningModule):
     def validation_step(self, batch, index):
         return self.training_step(batch, index, mode="val")
 
+    colors = torch.tensor([
+        [0, 0, 0],
+        [255, 0, 0],
+        [0, 255, 0],
+        [0, 0, 255],
+        [255, 255, 0],
+        [255, 0, 255],
+        [0, 255, 255],
+        [255, 255, 255],
+    ], dtype=torch.uint8)
+
     def display_result(self, index, inputs, targets, outputs, mask, key="segmentation"):
         inputs, targets, outputs = inputs[0], targets[0], outputs[0]
         outputs = outputs.softmax(0)
@@ -191,8 +182,8 @@ class SegLightning(pl.LightningModule):
         inputs = (inputs.clip(0, 1) * 255.0).type(torch.uint8)
         outputs = (outputs.clip(0, 1) * 255.0).type(torch.uint8)
         pred = outputs.argmax(0)
-        pred = bit_reverse_table()[pred]
-        pred_rgb = torch.stack([36 * (pred % 7), 61 * (pred % 5), 85 * (pred % 3)]).type(torch.uint8)
+        pred_rgb = self.colors[pred].permute(2, 0, 1)
+        assert pred_rgb.ndim == 3 and pred_rgb.shape[0] == 3, pred_rgb.shape
         il = [inputs, pred_rgb]
         il = [torchvision.transforms.ToPILImage()(im).convert("RGB") for im in il]
         grid = pil_image_grid(il, 1, len(il), str(index))
@@ -311,16 +302,12 @@ def train(
         val_bs = val_bs if val_bs > 0 else 2
         noutput = 4
         margin = 0  # was: margin= 16
-        weightmask = 0
-        bordermask = 16
     elif kind == "page":
         Loader = segdata.PageSegDataLoader
         train_bs = train_bs if train_bs > 0 else 1
         val_bs = val_bs if val_bs > 0 else 1
         noutput = 5
         margin = -1
-        weightmask = -1
-        bordermask = -1
     else:
         raise ValueError(f"Unknown kind: {kind}")
 
@@ -350,8 +337,6 @@ def train(
         display_freq=display_freq,
         noutput=noutput,
         margin=margin,
-        weightmask=weightmask,
-        bordermask=bordermask,
     )
 
     if dumpjit is not None:
