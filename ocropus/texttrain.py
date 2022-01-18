@@ -127,13 +127,14 @@ class TextLightning(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.model.parameters(), lr=self.hparams.lr)
-        scheduler = LambdaLR(optimizer, self.schedule)  # FIXME
-        scale, steps = self.hparams.lr_scale, self.hparams.lr_steps
-        scheduler2 = ExponentialLR(optimizer, gamma=scale ** (1.0 / steps), last_epoch=steps)
-        return [optimizer], [scheduler2]
+        scheduler = LambdaLR(optimizer, self.schedule)
+        #scale, steps = self.hparams.lr_scale, self.hparams.lr_steps
+        #scheduler2 = ExponentialLR(optimizer, gamma=scale ** (1.0 / steps), last_epoch=steps)
+        return [optimizer], [scheduler]
 
-    def schedule(self, epoch: int):  # FIXME
-        return 0.5 ** (epoch // self.lr_halflife)
+    def schedule(self, epoch: int):
+        gamma = self.hparams.lr_scale ** (1.0 / self.hparams.lr_steps)
+        return gamma ** min(epoch, self.hparams.lr_steps)
 
     def log_results(
         self,
@@ -237,6 +238,7 @@ def train(
     lr_scale: float = 1e-2,
     lr_steps: int = 300,
     lr_halflife: int = 10,  # FIXME
+    num_workers: int = 8,
 ):
     config = dict(locals())
 
@@ -264,6 +266,7 @@ def train(
         train_shards=train_shards,
         val_bs=val_bs,
         val_shards=val_shards,
+        num_workers=num_workers,
     )
 
     if restart is not None:

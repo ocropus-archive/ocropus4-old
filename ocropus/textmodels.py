@@ -5,6 +5,7 @@ from typing import List, Tuple, Union
 import scipy.ndimage as ndi
 import numpy as np
 from numpy import amax, arange, newaxis, tile
+import sys
 
 from . import ocrlayers, utils
 
@@ -302,7 +303,7 @@ def local_text_model_211221(
     lstm_2d=100,
     lstm_final=300,
 ):
-    """Text recognition model using 2D LSTM and convolutions."""
+    """Text recognition model with localization."""
     depths = [int(0.5 + 32 * (1.5 ** i)) for i in range(depth)]
     model = nn.Sequential(
         ocrlayers.HeightTo(height),
@@ -340,6 +341,33 @@ def text_model_211222(noutput=None, height=48, shape=(1, ninput, 48, 300)):
         flex.BatchNorm1d(),
         nn.ReLU(),
         flex.Lstm1d(300, bidirectional=True),
+        flex.Conv1d(noutput, 1),
+    )
+    flex.shape_inference(model, shape)
+    return model
+
+
+@utils.model
+def ctext_model_220117(noutput=None, height=48, lsize=128, shape=(1, ninput, 48, 300)):
+    """Text recognition model using only convolutions."""
+    depths = [lsize * s for s in [1, 2, 3, 4, 6]]
+    fdepth = max(512, noutput//2, depths[-1]*2)
+    print(f"# depths {depths}", file=sys.stderr)
+    model = nn.Sequential(
+        ocrlayers.HeightTo(height),
+        layers.ModPadded(
+            32,
+            combos.make_unet(depths, sub=flex.Conv2d(depths[-1], 3, padding=1)),
+        ),
+        *combos.conv2d_block(noutput//4, 3, repeat=2),
+        ocrlayers.MaxReduce(2),
+        flex.ConvTranspose1d(fdepth, 1, stride=2, padding=1),
+        flex.Conv1d(fdepth, 3, padding=1),
+        flex.BatchNorm1d(),
+        nn.ReLU(),
+        flex.Conv1d(fdepth, 3, padding=1),
+        flex.BatchNorm1d(),
+        nn.ReLU(),
         flex.Conv1d(noutput, 1),
     )
     flex.shape_inference(model, shape)
