@@ -255,9 +255,9 @@ class SegDataLoader(pl.LightningDataModule):
             handler=wds.warn_and_continue,
         )
         training = training.decode("torchrgb8")
-        training = training.rename(image=image_extensions, seg=seg_extensions)
+        training = training.rename(image=image_extensions, seg=seg_extensions, handler=wds.warn_and_continue)
         training = training.map(self.process)
-        training = training.to_tuple("image", "seg", "mask")
+        training = training.to_tuple("image", "seg", "mask", handler=wds.warn_and_continue)
         if mode == "train":
             augmentation = eval(f"augmentation_{self.hparams.augmentation}")
             training = training.map(augmentation)

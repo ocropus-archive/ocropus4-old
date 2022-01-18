@@ -95,19 +95,13 @@ class SegLightning(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.model.parameters(), lr=self.hparams.lr)
         print(f"# optimizer {optimizer}")
-        scheduler = LambdaLR(optimizer, self.schedule)  # FIXME
-        scale, steps = self.hparams.lr_scale, self.hparams.lr_steps
-        scheduler = ExponentialLR(optimizer, gamma=scale ** (1.0 / steps), last_epoch=steps)
+        scheduler = LambdaLR(optimizer, self.schedule)
         print(f"# scheduler {scheduler}")
         return [optimizer], [scheduler]
 
-    def OLD_configure_optimizers(self):
-        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.hparams.lr)
-        scheduler = LambdaLR(optimizer, self.schedule)
-        return [optimizer], [scheduler]
-
     def schedule(self, epoch: int):
-        return 0.5 ** (epoch // 20)
+        gamma = self.hparams.lr_scale ** (1.0 / self.hparams.lr_steps)
+        return gamma ** min(epoch, self.hparams.lr_steps)
 
     def compute_loss(self, outputs, targets, mask=None):
         """Compute loss taking a margin into account."""
@@ -283,7 +277,7 @@ def train(
     gpus: str = "0,",
     default_root_dir: str = "./_logs",
     dumpjit: Optional[str] = None,
-    maxsize: float = 4e6,
+    maxsize: float = 8e6,
     wandb: str = "",
     traced: bool = False,
     masked: Optional[bool] = None,
@@ -298,8 +292,8 @@ def train(
     assert kind in ["words", "page"]
     if kind == "words":
         Loader = segdata.WordSegDataLoader
-        train_bs = train_bs if train_bs > 0 else 2
-        val_bs = val_bs if val_bs > 0 else 2
+        train_bs = train_bs if train_bs > 0 else 8
+        val_bs = val_bs if val_bs > 0 else 8
         noutput = 4
         margin = 0  # was: margin= 16
     elif kind == "page":
