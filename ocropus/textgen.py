@@ -225,10 +225,10 @@ def generate_(*args, **kw):
     return generate(*args, **kw)
 
 @app.command()
-def all():
+def all(num_cpus: int=4):
     nw = 50000
     nshards = 100
-    ray.init()
+    ray.init(num_cpus=num_cpus)
     ray.get([generate_.remote(output=f"_core-words-{i:06d}.tar", nwords=nw, fontlist="core", generator="words") for i in range(nshards)])
     ray.get([generate_.remote(output=f"_core-text-{i:06d}.tar", nwords=nw, fontlist="core") for i in range(nshards)])
     ray.get([generate_.remote(output=f"_core-numbers-{i:06d}.tar", nwords=nw, fontlist="core", generator="numbers") for i in range(nshards)])
