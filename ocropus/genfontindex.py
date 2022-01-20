@@ -8,8 +8,14 @@ print("""
 <table>
 """)
 
+last = ""
+
 for i, fname in enumerate(os.popen("find . -name '*.ttf' | sort").readlines()):
     fname = fname.strip()
+    d, s = os.path.split(fname)
+    if d != last:
+        print("<tr><td colspan=2 align='left'><hr />%s</td></tr>" % d)
+        last = d
     print("""
         <tr>
         <td align='right'>
