@@ -225,17 +225,17 @@ def generate_(*args, **kw):
     return generate(*args, **kw)
 
 @app.command()
-def all(num_cpus: int=4):
+def all(num_cpus: int=4, prefix="./_"):
     nw = 50000
     nshards = 100
     ray.init(num_cpus=num_cpus)
-    ray.get([generate_.remote(output=f"_core-words-{i:06d}.tar", nwords=nw, fontlist="core", generator="words") for i in range(nshards)])
-    ray.get([generate_.remote(output=f"_core-text-{i:06d}.tar", nwords=nw, fontlist="core") for i in range(nshards)])
-    ray.get([generate_.remote(output=f"_core-numbers-{i:06d}.tar", nwords=nw, fontlist="core", generator="numbers") for i in range(nshards)])
-    ray.get([generate_.remote(output=f"_core-ascii-{i:06d}.tar", nwords=nw, fontlist="core", generator="ascii") for i in range(nshards)])
-    ray.get([generate_.remote(output=f"_google-numbers-{i:06d}.tar", nwords=nw, fontlist="google", generator="numbers") for i in range(nshards)])
-    ray.get([generate_.remote(output=f"_google-text-{i:06d}.tar", nwords=nw, fontlist="google") for i in range(nshards)])
-    ray.get([generate_.remote(output=f"_italics-text-{i:06d}.tar", nwords=nw, fontlist="italics") for i in range(nshards)])
+    ray.get([generate_.remote(output=f"{prefix}core-words-{i:06d}.tar", nwords=nw, fontlist="core", generator="words") for i in range(nshards)])
+    ray.get([generate_.remote(output=f"{prefix}core-text-{i:06d}.tar", nwords=nw, fontlist="core") for i in range(nshards)])
+    ray.get([generate_.remote(output=f"{prefix}core-numbers-{i:06d}.tar", nwords=nw, fontlist="core", generator="numbers") for i in range(nshards)])
+    ray.get([generate_.remote(output=f"{prefix}core-ascii-{i:06d}.tar", nwords=nw, fontlist="core", generator="ascii") for i in range(nshards)])
+    ray.get([generate_.remote(output=f"{prefix}google-numbers-{i:06d}.tar", nwords=nw, fontlist="google", generator="numbers") for i in range(nshards)])
+    ray.get([generate_.remote(output=f"{prefix}google-text-{i:06d}.tar", nwords=nw, fontlist="google") for i in range(nshards)])
+    ray.get([generate_.remote(output=f"{prefix}italics-text-{i:06d}.tar", nwords=nw, fontlist="italics") for i in range(nshards)])
 
 if __name__ == "__main__":
     app()
