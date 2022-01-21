@@ -2,6 +2,8 @@ FROM pytorch/pytorch:1.10.0-cuda11.3-cudnn8-devel
 # FROM ubuntu:20.04
 ENV DEBIAN_FRONTEND=noninteractive
 
+RUN conda install python=3.9 -y
+
 RUN apt-get -qqy update
 
 RUN apt-get install -qqy curl gcc openssh-client git
