@@ -1,6 +1,6 @@
 FROM ocropus4-base
 
-RUN pip3 install -e git+git://github.com/tmbdev/webdataset.git#egg=webdataset
+RUN pip3 install -e git+git://github.com/tmbdev/webdataset.git@v2#egg=webdataset
 RUN pip3 install -e git+git://github.com/NVlabs/ocrodeg.git#egg=ocrodeg
 RUN pip3 install -e git+git://github.com/NVlabs/tensorcom.git#egg=tensorcom
 RUN pip3 install -e git+git://github.com/tmbdev/tarproc.git#egg=tarproc
