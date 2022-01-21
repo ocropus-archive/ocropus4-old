@@ -1,7 +1,8 @@
 # FROM pytorch/pytorch:1.10.0-cuda11.3-cudnn8-devel
 # RUN conda update conda
 # RUN conda install python=3.9 -y
-FROM ubuntu:20.04
+# FROM ubuntu:20.04
+FROM nvidia/cuda:11.4.2-cudnn8-devel-ubuntu20.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get -qqy update
