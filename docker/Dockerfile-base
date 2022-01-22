@@ -33,7 +33,8 @@ RUN pip3 install setuptools
 RUN pip3 install braceexpand bs4 click editdistance future lxml typer
 RUN pip3 install matplotlib scikit-image scipy
 # RUN pip3 install torch torchvision
-RUN pip3 install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cu102/torch_nightly.html
+# RUN pip3 install --pre torch torchvision -f https://download.pytorch.org/whl/nightly/cu102/torch_nightly.html
+RUN pip3 install torch==1.10.1+cu113 torchvision==0.11.2+cu113 torchaudio==0.10.1+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
 RUN pip3 install tensorboard
 RUN apt-get install -qqy wamerican-large
 RUN apt-get install -qqy tesseract-ocr-all
