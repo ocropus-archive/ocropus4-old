@@ -26,7 +26,7 @@ tasker
 typer
 tabulate
 torchmore@git+git://github.com/tmbdev/torchmore.git
-webdataset@git+git://github.com/tmbdev/webdataset.git
+webdataset@git+git://github.com/tmbdev/webdataset.git@v2
 """.split()
 
 print(PREREQS)
