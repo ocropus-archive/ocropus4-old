@@ -1,5 +1,5 @@
-- publaynet augmentation DONE
-- seg mask refactoring
+- train with old text normalizations
+- cyclegan for binarization
 - redo seg extraction
 - incorporate figures into seg mask extraction and mask
 - seg mask end-to-end
@@ -7,4 +7,3 @@
 - baseline model, EM
 - word segmentation with negative examples
 - part selection into hocr2words
-- cyclegan for binarization

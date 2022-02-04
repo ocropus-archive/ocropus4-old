@@ -324,22 +324,24 @@ def local_text_model_211221(
 
 
 @utils.model
-def text_model_211222(noutput=None, height=48, shape=(1, ninput, 48, 300)):
+def text_model_211222(noutput=None, height=48, shape=(1, ninput, 48, 300), dropout=0.0):
     """Text recognition model using 2D LSTM and convolutions."""
     depths = [32, 64, 96, 128]
     model = nn.Sequential(
         ocrlayers.HeightTo(height),
         layers.ModPadded(
             16,
-            combos.make_unet(depths, sub=flex.Lstm2d(196)),
+            combos.make_unet(depths, sub=flex.Lstm2d(196), dropout=dropout),
         ),
         flex.Lstm2(100),
+        *([nn.Dropout(dropout)] if dropout > 0.0 else []),
         # layers.Fun("lambda x: x.max(2)[0]"),
         ocrlayers.MaxReduce(2),
         flex.ConvTranspose1d(400, 1, stride=2, padding=1),
         flex.Conv1d(300, 3, padding=1),
         flex.BatchNorm1d(),
         nn.ReLU(),
+        *([nn.Dropout(dropout)] if dropout > 0.0 else []),
         flex.Lstm1d(300, bidirectional=True),
         flex.Conv1d(noutput, 1),
     )
@@ -348,23 +350,25 @@ def text_model_211222(noutput=None, height=48, shape=(1, ninput, 48, 300)):
 
 
 @utils.model
-def ctext_model_220117(noutput=None, height=48, lsize=128, shape=(1, ninput, 48, 300)):
+def ctext_model_220117(noutput=None, height=48, lsize=128, shape=(1, ninput, 48, 300), dropout=0.0):
     """Text recognition model using only convolutions."""
     depths = [lsize * s for s in [1, 2, 3, 4, 6]]
-    fdepth = max(512, noutput//2, depths[-1]*2)
+    fdepth = max(512, noutput // 2, depths[-1] * 2)
     print(f"# depths {depths}", file=sys.stderr)
     model = nn.Sequential(
         ocrlayers.HeightTo(height),
         layers.ModPadded(
             32,
-            combos.make_unet(depths, sub=flex.Conv2d(depths[-1], 3, padding=1)),
+            combos.make_unet(depths, sub=flex.Conv2d(depths[-1], 3, padding=1), dropout=dropout),
         ),
-        *combos.conv2d_block(noutput//4, 3, repeat=2),
+        *combos.conv2d_block(noutput // 4, 3, repeat=2),
+        *([nn.Dropout(dropout)] if dropout > 0.0 else []),
         ocrlayers.MaxReduce(2),
         flex.ConvTranspose1d(fdepth, 1, stride=2, padding=1),
         flex.Conv1d(fdepth, 3, padding=1),
         flex.BatchNorm1d(),
         nn.ReLU(),
+        *([nn.Dropout(dropout)] if dropout > 0.0 else []),
         flex.Conv1d(fdepth, 3, padding=1),
         flex.BatchNorm1d(),
         nn.ReLU(),
@@ -372,5 +376,3 @@ def ctext_model_220117(noutput=None, height=48, lsize=128, shape=(1, ninput, 48,
     )
     flex.shape_inference(model, shape)
     return model
-
-

@@ -63,7 +63,10 @@ def augment_none(image: torch.Tensor) -> torch.Tensor:
     Returns:
         torch.Tensor: unaugmented output
     """
-    return utils.as_torchimage(image)
+    result = utils.as_torchimage(image)
+    if result.shape[0] == 1:
+        result = result.expand(3, -1, -1)
+    return result
 
 
 @utils.useopt
