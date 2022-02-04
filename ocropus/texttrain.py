@@ -225,7 +225,7 @@ def train(
     gpus: str = "1",
     lr: float = 1e-3,
     max_epochs: int = 10000,
-    mname: str = "ocropus.textmodels.text_model_211222",
+    mname: str = "ocropus.textmodels.text_model_220204",
     mopts: str = "",
     train_bs: int = 12,
     nepoch: int = 200000,
