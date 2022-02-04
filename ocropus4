@@ -65,6 +65,12 @@ pdfproc)  # render and process PDF files
 misc)  # miscellaneous functions
     $python3 -m ocropus.misc "$@"
     ;;
+ckpt)  # miscellaneous functions
+    $python3 -m ocropus.misc ckpt "$@"
+    ;;
+showjit)  # miscellaneous functions
+    $python3 -m ocropus.misc showjit "$@"
+    ;;
 
 # help
 
