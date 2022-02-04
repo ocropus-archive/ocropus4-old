@@ -135,7 +135,7 @@ def generate(
     nwords: int = 100000,
 ):
     words = read_dict(wordlist)
-    print(f"got {len(words)} words")
+    # print(f"got {len(words)} words")
 
     # factory = globals()["generate_" + generator]
     if generator == "text":
@@ -150,6 +150,7 @@ def generate(
         raise ValueError(f"unknown generator {generator}")
 
     if fontlist == "google":
+        assert os.path.exists("./google-fonts")
         fonts = get_google_fonts()
         print(f"got {len(fonts)} fonts from ./google-fonts")
     elif fontlist == "italics":
@@ -157,6 +158,7 @@ def generate(
         fonts = [f for f in fonts if "italic" in f.lower()]
         print(f"got {len(fonts)} italic fonts from ./google-fonts")
     elif fontlist == "core":
+        assert os.path.exists("./google-fonts")
         fonts = glob.glob("/usr/share/fonts/truetype/msttcorefonts/[A-Z]*.ttf")
         fonts += glob.glob("./google-fonts/ofl/ebgaramond/*.ttf")
         fonts += glob.glob("./google-fonts/ofl/cormorantgaramond/*.ttf")
@@ -166,6 +168,7 @@ def generate(
         assert len(fonts) > 0
         print(f"got {len(fonts)} core fonts")
     elif fontlist == "ms":
+        assert os.path.exists("/usr/share/fonts/truetype/msttcorefonts")
         fonts = glob.glob("/usr/share/fonts/truetype/msttcorefonts/[A-Z]*.ttf")
         fonts = [s for s in fonts if "webdings" not in s.lower()]
         print(f"got {len(fonts)} ms fonts")
@@ -182,8 +185,11 @@ def generate(
     if "%" in output:
         sink = wds.ShardWriter(output, maxcount=shardsize)
     else:
-        sink = wds.TarWriter(output)
-        print(f"writing to {output}")
+        if os.path.exists(output):
+            print("output file exists, stopping")
+            return
+        sink = wds.TarWriter(output+".temp")
+        print(f"writing to {output}.temp")
     iw, ih = 1024, 1024
     for i in range(nwords):
         word = generator()
@@ -217,6 +223,8 @@ def generate(
         if i % 100 == 0:
             print(i, end=" ", flush=True, file=sys.stderr)
     sink.close()
+    if "%" not in output:
+        os.rename(output+".temp", output)
     return 0
 
 
@@ -229,12 +237,19 @@ def all(num_cpus: int=4, prefix="./_"):
     nw = 50000
     nshards = 100
     ray.init(num_cpus=num_cpus)
+    print("core words")
     ray.get([generate_.remote(output=f"{prefix}core-words-{i:06d}.tar", nwords=nw, fontlist="core", generator="words") for i in range(nshards)])
+    print("core text")
     ray.get([generate_.remote(output=f"{prefix}core-text-{i:06d}.tar", nwords=nw, fontlist="core") for i in range(nshards)])
+    print("core numbers")
     ray.get([generate_.remote(output=f"{prefix}core-numbers-{i:06d}.tar", nwords=nw, fontlist="core", generator="numbers") for i in range(nshards)])
+    print("core ascii")
     ray.get([generate_.remote(output=f"{prefix}core-ascii-{i:06d}.tar", nwords=nw, fontlist="core", generator="ascii") for i in range(nshards)])
+    print("google numbers")
     ray.get([generate_.remote(output=f"{prefix}google-numbers-{i:06d}.tar", nwords=nw, fontlist="google", generator="numbers") for i in range(nshards)])
+    print("google text")
     ray.get([generate_.remote(output=f"{prefix}google-text-{i:06d}.tar", nwords=nw, fontlist="google") for i in range(nshards)])
+    print("italics text")
     ray.get([generate_.remote(output=f"{prefix}italics-text-{i:06d}.tar", nwords=nw, fontlist="italics") for i in range(nshards)])
 
 if __name__ == "__main__":
