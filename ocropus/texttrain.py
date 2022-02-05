@@ -227,6 +227,7 @@ def train(
     max_epochs: int = 10000,
     mname: str = "ocropus.textmodels.text_model_220204",
     mopts: str = "",
+    datamode: str = "default",
     train_bs: int = 12,
     nepoch: int = 200000,
     resume: Optional[str] = None,
@@ -267,6 +268,7 @@ def train(
         val_bs=val_bs,
         val_shards=val_shards,
         num_workers=num_workers,
+        datamode=datamode,
     )
 
     if restart is not None:

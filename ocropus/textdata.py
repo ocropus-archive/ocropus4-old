@@ -336,6 +336,7 @@ class TextDataLoader(pl.LightningDataModule):
         max_width: int = 512,
         val_bucket: str = "http://storage.googleapis.com/nvdata-ocropus-val/",
         val_shards: str = "http://storage.googleapis.com/nvdata-ocropus-val/val-word-{000000..000007}.tar",
+        datamode: str = "default",
         **kw,
     ):
         super().__init__()
@@ -363,17 +364,21 @@ class TextDataLoader(pl.LightningDataModule):
 
     def make_mix(self):
         sources = []
-        sources.append(self.make_reader("generated-{000000..000313}.tar", select="."))
-        sources.append(self.make_reader("uw3-word-{000000..000022}.tar", normalize=normalize_tex))
-        sources.append(self.make_reader("ia1-{000000..000033}.tar"))
-        sources.append(self.make_reader("gsub-{000000..000167}.tar"))
-        sources.append(self.make_reader("cdipsub-{000000..000092}.tar"))
-        sources.append(self.make_reader("bin-gsub-{000000..000167}.tar"))
-        sources.append(self.make_reader("bin-ia1-{000000..000033}.tar"))
-        sources.append(self.make_reader("italic-{000000..000455}.tar", select="."))
-        sources.append(self.make_reader("ascii-{000000..000422}.tar", select="."))
+        if self.hparams.datamode == "uw3":
+            sources.append(self.make_reader("uw3-word-{000000..000021}.tar", select="."))
+            probs = [1.0]
+        else:
+            sources.append(self.make_reader("generated-{000000..000313}.tar", select="."))
+            sources.append(self.make_reader("uw3-word-{000000..000022}.tar", normalize=normalize_tex))
+            sources.append(self.make_reader("ia1-{000000..000033}.tar"))
+            sources.append(self.make_reader("gsub-{000000..000167}.tar"))
+            sources.append(self.make_reader("cdipsub-{000000..000092}.tar"))
+            sources.append(self.make_reader("bin-gsub-{000000..000167}.tar"))
+            sources.append(self.make_reader("bin-ia1-{000000..000033}.tar"))
+            sources.append(self.make_reader("italic-{000000..000455}.tar", select="."))
+            sources.append(self.make_reader("ascii-{000000..000422}.tar", select="."))
+            probs = self.hparams.probs
         n = len(sources)
-        probs = self.hparams.probs
         assert len(probs) <= n
         probs = probs + [probs[-1]] * (n - len(probs))
         ds = wds.FluidWrapper(wds.RandomMix(sources, probs))
