@@ -23,6 +23,8 @@ from torch import nn
 from torch.optim.lr_scheduler import LambdaLR, ExponentialLR
 import typer
 from torchmore import layers
+from pytorch_lightning.utilities import rank_zero_only
+import wandb
 
 from . import confparse, jittable, textdata, textmodels
 
@@ -305,12 +307,15 @@ def train(
     callbacks.append(mcheckpoint)
 
     kw = {}
-    if wandb != "":
+    rank = rank_zero_only.rank
+    if wandb != "" and rank == 0:
         from pytorch_lightning.loggers import WandbLogger
 
-        wconfig = eval(f"{wandb}")
+        conf = f"dict({wandb})"
+        print("# WandbLogger", conf)
+        wconfig = eval(conf)
         kw["logger"] = WandbLogger(**wconfig)
-        print(f"# using wandb logger with config {wconfig}")
+        print(f"# using wandb logger with config {wconfig} at {rank}")
     else:
         print("# logging locally")
 
