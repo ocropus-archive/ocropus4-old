@@ -1,5 +1,7 @@
 """Text recognition."""
 
+import os
+import sys
 import time
 import warnings
 import random, re
@@ -334,7 +336,6 @@ class TextDataLoader(pl.LightningDataModule):
         bucket: str = "http://storage.googleapis.com/nvdata-ocropus-words/",
         height: int = 64,
         max_width: int = 512,
-        val_bucket: str = "http://storage.googleapis.com/nvdata-ocropus-val/",
         val_shards: str = "http://storage.googleapis.com/nvdata-ocropus-val/val-word-{000000..000007}.tar",
         datamode: str = "default",
         **kw,
@@ -400,11 +401,14 @@ class TextDataLoader(pl.LightningDataModule):
 
     def val_dataloader(self) -> DataLoader:
         bs = self.hparams.val_bs
-        if self.hparams.val_shards in ["", None]:
+        shards = self.hparams.val_shards
+        if False and self.hparams.datamode == "uw3":
+            shards = self.hparams.bucket + "uw3-word-000022.tar"
+        if shards in ["", None]:
             return None
         ds = (
             wds.WebDataset(
-                self.hparams.val_shards,
+                shards,
                 cache_size=float(self.hparams.cache_size),
                 cache_dir=self.hparams.cache_dir,
                 verbose=True,
