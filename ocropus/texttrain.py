@@ -128,8 +128,8 @@ class TextLightning(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.model.parameters(), lr=self.hparams.lr)
         scheduler = LambdaLR(optimizer, self.schedule)
-        #scale, steps = self.hparams.lr_scale, self.hparams.lr_steps
-        #scheduler2 = ExponentialLR(optimizer, gamma=scale ** (1.0 / steps), last_epoch=steps)
+        # scale, steps = self.hparams.lr_scale, self.hparams.lr_steps
+        # scheduler2 = ExponentialLR(optimizer, gamma=scale ** (1.0 / steps), last_epoch=steps)
         return [optimizer], [scheduler]
 
     def schedule(self, epoch: int):
@@ -229,6 +229,7 @@ def train(
     mopts: str = "",
     datamode: str = "default",
     train_bs: int = 12,
+    train_bsm: int = 6,
     nepoch: int = 200000,
     resume: Optional[str] = None,
     restart: Optional[str] = None,
@@ -260,10 +261,15 @@ def train(
         print(f"# saved model to {dumpjit}")
         sys.exit(0)
 
+    ngpus = len(gpus.split(","))
+    assert ngpus >= 1
+    bs = train_bs + (ngpus - 1) * train_bsm
+    print(f"ngpus {ngpus} batch_size/multiplier {train_bs}/{train_bsm} actual {bs}")
+
     data = textdata.TextDataLoader(
         augment=augment,
         nepoch=nepoch,
-        train_bs=train_bs,
+        train_bs=bs,
         train_shards=train_shards,
         val_bs=val_bs,
         val_shards=val_shards,
