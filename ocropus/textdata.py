@@ -408,7 +408,7 @@ class TextDataLoader(pl.LightningDataModule):
         bs = self.hparams.val_bs
         shards = self.hparams.val_shards
         if self.hparams.datamode == "uw3":
-            shards = self.hparams.bucket + "/uw3-word-000022.tar"
+            shards = self.hparams.bucket.rstrip("/") + "/uw3-word-000022.tar"
         if shards in ["", None]:
             return None
         ds = (

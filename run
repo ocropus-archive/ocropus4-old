@@ -33,6 +33,10 @@ cmd_build() {
     (cd docker && $docker build --no-cache . -t ocropus4)
 }
 
+cmd_docker() {
+    $docker run --rm -it -v "$PWD":/ocropus4 -w /ocropus4 ocropus4 "$@"
+}
+
 cmd_download_uw3() {
     mkdir -p uw3
     gsutil -m rsync -r gs://lpr-uw3/* uw3/.
