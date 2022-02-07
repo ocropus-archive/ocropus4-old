@@ -25,6 +25,8 @@ import typer
 from torchmore import layers
 from pytorch_lightning.utilities import rank_zero_only
 import wandb
+from pytorch_lightning.loggers import WandbLogger
+
 
 from . import confparse, jittable, textdata, textmodels
 
@@ -86,6 +88,7 @@ class TextLightning(pl.LightningModule):
         targets = [self.model.encode_str(s) for s in text_targets]
         assert inputs.size(0) == outputs.size(0)
         loss = self.compute_loss(outputs, targets)
+        # import os; print("DEBUG "*10); os.system("sleep 3600")
         self.log("train_loss", loss)
         err = self.compute_error(outputs, targets)
         self.log("train_err", err, prog_bar=True)
@@ -193,8 +196,6 @@ class TextLightning(pl.LightningModule):
         if hasattr(exp, "add_image"):
             exp.add_image(key, image, index)
         else:
-            import wandb
-
             exp.log({key: [wandb.Image(image, caption=key)]})
 
     def probs_batch(self, inputs: torch.Tensor) -> torch.Tensor:
@@ -309,8 +310,6 @@ def train(
     kw = {}
     rank = rank_zero_only.rank
     if wandb != "" and rank == 0:
-        from pytorch_lightning.loggers import WandbLogger
-
         conf = f"dict({wandb})"
         print("# WandbLogger", conf)
         wconfig = eval(conf)

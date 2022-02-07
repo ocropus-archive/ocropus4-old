@@ -314,6 +314,11 @@ class WordPreprocessor:
         if train:
             image = self.augment(image)
         image = image.clip(0, 1).type(torch.float32)
+        c, h, w = image.shape
+        if c == 1:
+            image = image.repeat(3, 1, 1)
+        c, h, w = image.shape
+        assert c == 3
         return image, label
 
 
@@ -402,8 +407,8 @@ class TextDataLoader(pl.LightningDataModule):
     def val_dataloader(self) -> DataLoader:
         bs = self.hparams.val_bs
         shards = self.hparams.val_shards
-        if False and self.hparams.datamode == "uw3":
-            shards = self.hparams.bucket + "uw3-word-000022.tar"
+        if self.hparams.datamode == "uw3":
+            shards = self.hparams.bucket + "/uw3-word-000022.tar"
         if shards in ["", None]:
             return None
         ds = (
