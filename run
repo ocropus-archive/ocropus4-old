@@ -2,6 +2,8 @@
 
 set -e
 
+docker=podman
+
 export OMP_NUM_THREADS=1
 
 image=ocropus4
@@ -26,9 +28,9 @@ cmd_cleanlogs() { # clean up log files
 
 cmd_build() {
     git commit -a || true
-    (cd docker && docker build - -t ocropus4-base "$@" < Dockerfile-base)
+    (cd $docker && $docker build - -t ocropus4-base "$@" < Dockerfile-base)
     git archive --format=tar -o docker/ocropus4.tar HEAD
-    (cd docker && docker build --no-cache . -t ocropus4)
+    (cd $docker && $docker build --no-cache . -t ocropus4)
 }
 
 cmd_download_uw3() {
