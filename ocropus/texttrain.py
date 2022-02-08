@@ -310,9 +310,7 @@ def train(
     kw = {}
     rank = rank_zero_only.rank
     if wandb != "" and rank == 0:
-        conf = f"dict({wandb})"
-        print("# WandbLogger", conf)
-        wconfig = eval(conf)
+        wconfig = dict(project=wandb)
         kw["logger"] = WandbLogger(**wconfig)
         print(f"# using wandb logger with config {wconfig} at {rank}")
     else:
