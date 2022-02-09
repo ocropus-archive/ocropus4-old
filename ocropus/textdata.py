@@ -1,5 +1,7 @@
 """Text recognition."""
 
+import os
+import sys
 import time
 import warnings
 import random, re
@@ -312,6 +314,11 @@ class WordPreprocessor:
         if train:
             image = self.augment(image)
         image = image.clip(0, 1).type(torch.float32)
+        c, h, w = image.shape
+        if c == 1:
+            image = image.repeat(3, 1, 1)
+        c, h, w = image.shape
+        assert c == 3
         return image, label
 
 
@@ -334,8 +341,8 @@ class TextDataLoader(pl.LightningDataModule):
         bucket: str = "http://storage.googleapis.com/nvdata-ocropus-words/",
         height: int = 64,
         max_width: int = 512,
-        val_bucket: str = "http://storage.googleapis.com/nvdata-ocropus-val/",
         val_shards: str = "http://storage.googleapis.com/nvdata-ocropus-val/val-word-{000000..000007}.tar",
+        datamode: str = "default",
         **kw,
     ):
         super().__init__()
@@ -363,17 +370,21 @@ class TextDataLoader(pl.LightningDataModule):
 
     def make_mix(self):
         sources = []
-        sources.append(self.make_reader("generated-{000000..000313}.tar", select="."))
-        sources.append(self.make_reader("uw3-word-{000000..000022}.tar", normalize=normalize_tex))
-        sources.append(self.make_reader("ia1-{000000..000033}.tar"))
-        sources.append(self.make_reader("gsub-{000000..000167}.tar"))
-        sources.append(self.make_reader("cdipsub-{000000..000092}.tar"))
-        sources.append(self.make_reader("bin-gsub-{000000..000167}.tar"))
-        sources.append(self.make_reader("bin-ia1-{000000..000033}.tar"))
-        sources.append(self.make_reader("italic-{000000..000455}.tar", select="."))
-        sources.append(self.make_reader("ascii-{000000..000422}.tar", select="."))
+        if self.hparams.datamode == "uw3":
+            sources.append(self.make_reader("uw3-word-{000000..000021}.tar", select="."))
+            probs = [1.0]
+        else:
+            sources.append(self.make_reader("generated-{000000..000313}.tar", select="."))
+            sources.append(self.make_reader("uw3-word-{000000..000022}.tar", normalize=normalize_tex))
+            sources.append(self.make_reader("ia1-{000000..000033}.tar"))
+            sources.append(self.make_reader("gsub-{000000..000167}.tar"))
+            sources.append(self.make_reader("cdipsub-{000000..000092}.tar"))
+            sources.append(self.make_reader("bin-gsub-{000000..000167}.tar"))
+            sources.append(self.make_reader("bin-ia1-{000000..000033}.tar"))
+            sources.append(self.make_reader("italic-{000000..000455}.tar", select="."))
+            sources.append(self.make_reader("ascii-{000000..000422}.tar", select="."))
+            probs = self.hparams.probs
         n = len(sources)
-        probs = self.hparams.probs
         assert len(probs) <= n
         probs = probs + [probs[-1]] * (n - len(probs))
         ds = wds.FluidWrapper(wds.RandomMix(sources, probs))
@@ -395,11 +406,14 @@ class TextDataLoader(pl.LightningDataModule):
 
     def val_dataloader(self) -> DataLoader:
         bs = self.hparams.val_bs
-        if self.hparams.val_shards in ["", None]:
+        shards = self.hparams.val_shards
+        if self.hparams.datamode == "uw3":
+            shards = self.hparams.bucket.rstrip("/") + "/uw3-word-000022.tar"
+        if shards in ["", None]:
             return None
         ds = (
             wds.WebDataset(
-                self.hparams.val_shards,
+                shards,
                 cache_size=float(self.hparams.cache_size),
                 cache_dir=self.hparams.cache_dir,
                 verbose=True,

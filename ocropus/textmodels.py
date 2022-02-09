@@ -376,3 +376,30 @@ def ctext_model_220117(noutput=None, height=48, lsize=128, shape=(1, ninput, 48,
     )
     flex.shape_inference(model, shape)
     return model
+
+
+@utils.model
+def text_model_220204(noutput=None, height=48, shape=(1, ninput, 48, 300), complexity=1.0, dropout=0.5):
+    """Text recognition model using 2D LSTM and convolutions."""
+    depths = [32, 64, 96, 128]
+    depths = [int(x*complexity) for x in depths]
+    model = nn.Sequential(
+        ocrlayers.HeightTo(height),
+        layers.ModPadded(
+            16,
+            combos.make_unet(depths, sub=flex.Lstm2d(196), dropout=dropout),
+        ),
+        flex.Lstm2(100),
+        *([nn.Dropout(dropout)] if dropout > 0.0 else []),
+        # layers.Fun("lambda x: x.max(2)[0]"),
+        ocrlayers.MaxReduce(2),
+        flex.ConvTranspose1d(400, 1, stride=2, padding=1),
+        flex.Conv1d(300, 3, padding=1),
+        flex.BatchNorm1d(),
+        nn.ReLU(),
+        *([nn.Dropout(dropout)] if dropout > 0.0 else []),
+        flex.Lstm1d(300, bidirectional=True),
+        flex.Conv1d(noutput, 1),
+    )
+    flex.shape_inference(model, shape)
+    return model

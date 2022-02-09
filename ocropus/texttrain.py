@@ -23,6 +23,10 @@ from torch import nn
 from torch.optim.lr_scheduler import LambdaLR, ExponentialLR
 import typer
 from torchmore import layers
+from pytorch_lightning.utilities import rank_zero_only
+import wandb
+from pytorch_lightning.loggers import WandbLogger
+
 
 from . import confparse, jittable, textdata, textmodels
 
@@ -84,6 +88,7 @@ class TextLightning(pl.LightningModule):
         targets = [self.model.encode_str(s) for s in text_targets]
         assert inputs.size(0) == outputs.size(0)
         loss = self.compute_loss(outputs, targets)
+        # import os; print("DEBUG "*10); os.system("sleep 3600")
         self.log("train_loss", loss)
         err = self.compute_error(outputs, targets)
         self.log("train_err", err, prog_bar=True)
@@ -128,8 +133,8 @@ class TextLightning(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.model.parameters(), lr=self.hparams.lr)
         scheduler = LambdaLR(optimizer, self.schedule)
-        #scale, steps = self.hparams.lr_scale, self.hparams.lr_steps
-        #scheduler2 = ExponentialLR(optimizer, gamma=scale ** (1.0 / steps), last_epoch=steps)
+        # scale, steps = self.hparams.lr_scale, self.hparams.lr_steps
+        # scheduler2 = ExponentialLR(optimizer, gamma=scale ** (1.0 / steps), last_epoch=steps)
         return [optimizer], [scheduler]
 
     def schedule(self, epoch: int):
@@ -191,8 +196,6 @@ class TextLightning(pl.LightningModule):
         if hasattr(exp, "add_image"):
             exp.add_image(key, image, index)
         else:
-            import wandb
-
             exp.log({key: [wandb.Image(image, caption=key)]})
 
     def probs_batch(self, inputs: torch.Tensor) -> torch.Tensor:
@@ -225,9 +228,11 @@ def train(
     gpus: str = "1",
     lr: float = 1e-3,
     max_epochs: int = 10000,
-    mname: str = "ocropus.textmodels.text_model_211222",
+    mname: str = "ocropus.textmodels.text_model_220204",
     mopts: str = "",
+    datamode: str = "default",
     train_bs: int = 12,
+    train_bsm: int = 6,
     nepoch: int = 200000,
     resume: Optional[str] = None,
     restart: Optional[str] = None,
@@ -260,14 +265,20 @@ def train(
         print(f"# saved model to {dumpjit}")
         sys.exit(0)
 
+    ngpus = len(gpus.split(","))
+    assert ngpus >= 1
+    bs = train_bs + (ngpus - 1) * train_bsm
+    print(f"ngpus {ngpus} batch_size/multiplier {train_bs}/{train_bsm} actual {bs}")
+
     data = textdata.TextDataLoader(
         augment=augment,
         nepoch=nepoch,
-        train_bs=train_bs,
+        train_bs=bs,
         train_shards=train_shards,
         val_bs=val_bs,
         val_shards=val_shards,
         num_workers=num_workers,
+        datamode=datamode,
     )
 
     if restart is not None:
@@ -298,12 +309,11 @@ def train(
     callbacks.append(mcheckpoint)
 
     kw = {}
-    if wandb != "":
-        from pytorch_lightning.loggers import WandbLogger
-
-        wconfig = eval(f"{wandb}")
+    rank = rank_zero_only.rank
+    if wandb != "" and rank == 0:
+        wconfig = dict(project=wandb)
         kw["logger"] = WandbLogger(**wconfig)
-        print(f"# using wandb logger with config {wconfig}")
+        print(f"# using wandb logger with config {wconfig} at {rank}")
     else:
         print("# logging locally")
 
