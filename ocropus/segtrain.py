@@ -340,6 +340,7 @@ def train(
         print("# setting state dict")
         smodel.cpu()
         smodel.load_state_dict(ckpt["state_dict"])
+        print(smodel)
         print("# compiling jit model")
         script = smodel.get_jit_model()
         print(f"# saving {dumpjit}")

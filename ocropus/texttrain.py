@@ -252,6 +252,7 @@ def train(
         print("# setting state dict")
         lmodel.cpu()
         lmodel.load_state_dict(ckpt["state_dict"])
+        print(lmodel)
         print("# compiling jit model")
         script = lmodel.get_jit_model()
         print(f"# saving {dumpjit}")
