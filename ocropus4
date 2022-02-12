@@ -47,6 +47,9 @@ segtrain)  # recognize pages with layout information
 textdata)  # display text training data for debugging
     $python3 -m ocropus.textdata "$@"
     ;;
+textmodels)  # display text models
+    $python3 -m ocropus.textmodels "$@"
+    ;;
 texttrain)  # recognize pages with layout information
     $python3 -m ocropus.texttrain "$@"
     ;;

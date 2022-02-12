@@ -6,10 +6,13 @@ import scipy.ndimage as ndi
 import numpy as np
 from numpy import amax, arange, newaxis, tile
 import sys
+import typer
 
 from . import ocrlayers, utils
 
 ninput = 3
+
+app = typer.Typer()
 
 
 def ctc_decode(
@@ -70,7 +73,8 @@ class TextModel(nn.Module):
         super().__init__()
         self.charset = utils.load_symbol(charset)()
         noutput = len(self.charset)
-        self.model = utils.load_symbol(mname)(noutput=noutput, **config)
+        factory = utils.load_symbol(mname, default_module="ocropus.textmodels")
+        self.model = factory(noutput=noutput, **config)
         self.unknown_char = unknown_char
 
     @torch.jit.export
@@ -403,3 +407,21 @@ def text_model_220204(noutput=None, height=48, shape=(1, ninput, 48, 300), compl
     )
     flex.shape_inference(model, shape)
     return model
+
+
+@app.command()
+def list():
+    for name, model in sorted(globals().items()):
+        if "model" in name and callable(model):
+            print(name)
+
+@app.command()
+def show(name: str):
+    model = globals()[name]
+    if not callable(model):
+        raise ValueError(f"{name} is not a model")
+    model = model(noutput=128)
+    print(model)
+
+if __name__ == "__main__":
+    app()

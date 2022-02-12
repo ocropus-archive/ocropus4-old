@@ -449,8 +449,11 @@ def load_module(filename):
     return module
 
 
-def load_symbol(name):
-    assert "." in name, f"{name}: symbol name must be fully qualified"
+def load_symbol(name, default_module=None):
+    if default_module is None:
+        assert "." in name, f"{name}: symbol name must be fully qualified"
+    elif "." not in name:
+        name = default_module + "." + name
     mname, sname = name.rsplit(".", 1)
     module = importlib.import_module(mname)
     assert hasattr(module, sname), f"module {mname} has no attribute {sname}"
