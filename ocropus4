@@ -53,6 +53,9 @@ textmodels)  # display text models
 texttrain)  # recognize pages with layout information
     $python3 -m ocropus.texttrain "$@"
     ;;
+textinf)  # recognize pages with layout information
+    $python3 -m ocropus.textinf "$@"
+    ;;
 textgen)  # recognize pages with layout information
     $python3 -m ocropus.textgen "$@"
     ;;
