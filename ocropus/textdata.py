@@ -72,7 +72,12 @@ def augment_none(image: torch.Tensor) -> torch.Tensor:
 
 
 @utils.useopt
-def augment_transform(timage: torch.Tensor, p: float = 0.5) -> torch.Tensor:
+def augment_transform(
+    timage: torch.Tensor,
+    p: float = 0.5,
+    pthresh: float = 0.1,
+    pnoise: float = 0.1,
+) -> torch.Tensor:
     """Augment image using geometric transformations and noise.
 
     Also binarizes some images.
@@ -87,21 +92,28 @@ def augment_transform(timage: torch.Tensor, p: float = 0.5) -> torch.Tensor:
     image = utils.as_npimage(timage)
     if image.mean() > 0.5:
         image = 1.0 - image
-    if random.uniform(0, 1) < p:
+    if random.uniform(0, 1) < pthresh:
         image = degrade.normalize(image)
         image = 1.0 * (image > 0.5)
     if image.shape[0] > 80.0:
         image = ndi.zoom(image, 80.0 / image.shape[0], order=1)
     if random.uniform(0, 1) < p:
         (image,) = degrade.random_transform_all(image, scale=(-0.3, 0))
-    if random.uniform(0, 1) < p:
+    if random.uniform(0, 1) < pnoise:
         image = degrade.noisify(image)
     result = utils.as_torchimage(image)
     return result
 
 
 @utils.useopt
-def augment_distort(timage: torch.Tensor, p: float = 0.5, maxh=100.0) -> torch.Tensor:
+def augment_distort(
+    timage: torch.Tensor,
+    p: float = 0.5,
+    maxh=100.0,
+    pthresh: float = 0.1,
+    pnoise: float = 0.1,
+    pdistort: float = 0.1,
+) -> torch.Tensor:
     """Augment image using distortions and noise.
 
     Also binarizes some images.
@@ -118,16 +130,16 @@ def augment_distort(timage: torch.Tensor, p: float = 0.5, maxh=100.0) -> torch.T
     image = image.mean(axis=2)
     if image.mean() > 0.5:
         image = 1.0 - image
-    if random.uniform(0, 1) < p:
+    if random.uniform(0, 1) < pthresh:
         image = degrade.normalize(image)
         image = 1.0 * (image > 0.5)
     if image.shape[0] > maxh:
         image = ndi.zoom(image, float(maxh) / image.shape[0], order=1)
     if random.uniform(0, 1) < p:
-        (image,) = degrade.random_transform_all(image, scale=(-0.3, 0))
-    if random.uniform(0, 1) < p:
+        (image,) = degrade.random_transform_all(image, scale=(-0.3, 0), aniso=(-0.2, 0.2))
+    if random.uniform(0, 1) < pdistort:
         (image,) = degrade.distort_all(image, sigma=(0.5, 4.0), maxdelta=(0.1, 2.5))
-    if random.uniform(0, 1) < p:
+    if random.uniform(0, 1) < pnoise:
         image = degrade.noisify(image)
     result = utils.as_torchimage(image)
     return result
@@ -435,16 +447,46 @@ class TextDataLoader(pl.LightningDataModule):
         return dl
 
 
+class SwordTextDataLoader(TextDataLoader):
+    def make_mix(self):
+        print("### SwordTextDataLoader.make_mix")
+        sources = []
+        sources.append(self.make_reader("bin-gsub-{000000..000080}-swords.tar"))
+        sources.append(self.make_reader("bin-ia1-{000000..000159}-swords.tar"))
+        sources.append(self.make_reader("cdipsub-{000000..000085}-swords.tar"))
+        probs = [0.2, 0.5, 0.3]
+        ds = wds.FluidWrapper(wds.RandomMix(sources, probs))
+        return ds
+
+
+def make_dataloader(**kw) -> TextDataLoader:
+    if kw["datamode"] == "sword":
+        kw["bucket"] = "/home/tmb/gs/nvdata-ocropus-swords/"
+        return SwordTextDataLoader(**kw)
+    else:
+        return TextDataLoader(**kw)
+
+
 @app.command()
-def show(rows: int = 8, cols: int = 4, augment: str = "distort", bs: int = 1, nw: int = 0, val: bool = False):
+def show(
+    rows: int = 8,
+    cols: int = 4,
+    augment: str = "distort",
+    bs: int = 1,
+    nw: int = 0,
+    val: bool = False,
+    datamode: str = "default",
+):
     """Show a sample of the data."""
     n = rows * cols
     fig = plt.figure(figsize=(10, 10))
     plt.ion()
     if val:
-        dl = TextDataLoader(augment="none", val_bs=bs, num_workers=nw).val_dataloader()
+        dl = make_dataloader(augment="none", val_bs=bs, num_workers=nw, datamode=datamode).val_dataloader()
     else:
-        dl = TextDataLoader(augment=augment, train_bs=bs, num_workers=nw).train_dataloader()
+        dl = make_dataloader(
+            augment=augment, train_bs=bs, num_workers=nw, datamode=datamode
+        ).train_dataloader()
     for i, sample in enumerate(dl):
         if i > 0 and i % n == 0:
             plt.ginput(1, timeout=0)
@@ -464,9 +506,9 @@ def show(rows: int = 8, cols: int = 4, augment: str = "distort", bs: int = 1, nw
 def bench(t: float = 60.0, augment: str = "distort", bs: int = 1, nw: int = 0, val: bool = False):
     """Show a sample of the data."""
     if val:
-        dl = TextDataLoader(augment="none", val_bs=bs, num_workers=nw).val_dataloader()
+        dl = make_dataloader(augment="none", val_bs=bs, num_workers=nw).val_dataloader()
     else:
-        dl = TextDataLoader(augment=augment, train_bs=bs, num_workers=nw).train_dataloader()
+        dl = make_dataloader(augment=augment, train_bs=bs, num_workers=nw).train_dataloader()
     total = 0
     start = time.time()
     for i, sample in enumerate(dl):

@@ -5,14 +5,14 @@
 #
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-from torch import nn
 
 from . import utils
 
-
 @utils.public
 class Zoom(nn.Module):
+    """Zoom layer."""
     def __init__(self, zoom=1.0):
         super().__init__()
         self.zoom = zoom
@@ -32,6 +32,7 @@ class Zoom(nn.Module):
 
 @utils.public
 class HeightTo(nn.Module):
+    """Ensure that the input height is equal to the given height."""
     def __init__(self, height):
         super().__init__()
         self.height = height
@@ -51,6 +52,10 @@ class HeightTo(nn.Module):
 
 @utils.public
 class GrayDocument(nn.Module):
+    """Ensure that the output is a single channel image.
+
+    Images are normalized and a small amount of noise is added."""
+
     def __init__(self, noise=0.0, autoinvert=True):
         super().__init__()
         self.noise = noise
@@ -85,6 +90,7 @@ class GrayDocument(nn.Module):
 
 @utils.public
 class Spectrum(nn.Module):
+    """Generate a spectrum from an image."""
     def __init__(self, nonlin="logplus1"):
         nn.Module.__init__(self)
         self.nonlin = nonlin
@@ -107,6 +113,7 @@ class Spectrum(nn.Module):
 
 @utils.public
 class GlobalAvgPool2d(nn.Module):
+    """Adaptive 2D global average pooling."""
     def __init__(self):
         super().__init__()
 
@@ -116,6 +123,7 @@ class GlobalAvgPool2d(nn.Module):
 
 @utils.public
 class MaxReduce(nn.Module):
+    """Max Reduce Layer."""
     d: int
 
     def __init__(self, d: int):
@@ -128,9 +136,114 @@ class MaxReduce(nn.Module):
 
 @utils.public
 class Log(nn.Module):
-
+    """Simple logarithm layer."""
     def __init__(self):
         super().__init__()
 
     def forward(self, x):
         return x.log()
+
+
+class Nonlin(nn.Module):
+    """Generic nonlinearity."""
+    def __init__(self, kind="relu", label="default", inplace=False, slope=0.2):
+        super().__init__()
+        self.inplace = inplace
+        self.kind = kind
+        self.label = label
+        self.slope = slope
+
+    def forward(self, x):
+        kind = self.kind
+        if kind == "relu":
+            return F.relu(x, inplace=self.inplace)
+        elif kind == "leaky_relu":
+            return F.leaky_relu(x, negative_slope=self.slope, inplace=self.inplace)
+        elif kind == "elu":
+            return F.elu(x, inplace=self.inplace)
+        elif kind == "selu":
+            return F.selu(x, inplace=self.inplace)
+        elif kind == "prelu":
+            return F.prelu(x, inplace=self.inplace)
+        elif kind == "softplus":
+            return F.softplus(x, inplace=self.inplace)
+        elif kind == "softshrink":
+            return F.softshrink(x, inplace=self.inplace)
+        elif kind == "tanh":
+            return F.tanh(x, inplace=self.inplace)
+        elif kind == "sigmoid":
+            return F.sigmoid(x, inplace=self.inplace)
+        elif kind == "softmax":
+            return F.softmax(x, dim=-1)
+        elif kind == "log_softmax":
+            return F.log_softmax(x, dim=-1)
+        elif kind == "none":
+            return x
+        else:
+            raise ValueError("Unknown nonlinearity: {}".format(kind))
+
+    def __repr__(self):
+        return self.kind
+
+
+class Norm2d(nn.Module):
+    """Generic 2D normalization module."""
+    def __init__(self, kind="batch", label="default"):
+        super().__init__()
+        self.kind = kind
+        self.norm = None
+        self.label = label
+
+    def forward(self, x):
+        if self.norm is None:
+            if self.kind == "batch":
+                self.norm = nn.BatchNorm2d(x.shape[1]).to(x.device)
+            elif self.kind == "instance":
+                self.norm = nn.InstanceNorm2d(x.shape[1]).to(x.device)
+            elif self.kind == "layer":
+                self.norm = nn.LayerNorm(x.shape[1]).to(x.device)
+            else:
+                raise ValueError("Unknown normalization: {}".format(self.kind))
+        return self.norm(x)
+
+    def __repr__(self):
+        return f"Norm2d({self.kind}, {self.label})"
+
+
+class ResnetBypass(nn.Module):
+    """Resnet bypass layer."""
+    def __init__(self, *args, weight=1.0):
+        super(ResnetBypass, self).__init__()
+        if len(args) > 1:
+            self.block = nn.Sequential(*args)
+        else:
+            self.block = args[0]
+        self.weight = weight
+
+    def forward(self, x):
+        return self.block(x) + x * self.weight
+
+
+def init_weights(net, type:str="normal", gain:float=0.02):
+    """Initialize network weights."""
+
+    weight_init = dict(
+        normal=lambda x: nn.init.normal_(x, 0, gain),
+        xavier=lambda x: nn.init.xavier_normal_(x, gain=gain),
+        kaiming=lambda x: nn.init.kaiming_normal_(x, a=0, mode="fan_in"),
+        orthogonal=lambda x: nn.init.orthogonal_(x, gain=gain),
+    )
+
+    def init_func(m):  # define the initialization function
+        classname = m.__class__.__name__
+        if hasattr(m, "weight") and ("Conv" in classname or "Linear" in classname):
+            weight_init[type](m.weight.data)
+            if hasattr(m, "bias") and m.bias is not None:
+                init.constant_(m.bias.data, 0.0)
+        elif (
+            classname.find("BatchNorm2d") != -1
+        ):  # BatchNorm Layer's weight is not a matrix; only normal distribution applies.
+            init.normal_(m.weight.data, 1.0, gain)
+            init.constant_(m.bias.data, 0.0)
+
+    net.apply(init_func)

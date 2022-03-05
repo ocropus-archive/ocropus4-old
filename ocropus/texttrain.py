@@ -245,6 +245,10 @@ def train(
     lr_halflife: int = 10,  # FIXME
     num_workers: int = 8,
 ):
+    if wandb != "":
+        import wandb as wandb_lib
+        wandb_lib.require("service")
+        wandb_lib.setup()
     config = dict(locals())
 
     if dumpjit != "":
@@ -270,7 +274,7 @@ def train(
     bs = train_bs + (ngpus - 1) * train_bsm
     print(f"ngpus {ngpus} batch_size/multiplier {train_bs}/{train_bsm} actual {bs}")
 
-    data = textdata.TextDataLoader(
+    data = textdata.make_dataloader(
         augment=augment,
         nepoch=nepoch,
         train_bs=bs,
