@@ -12,5 +12,6 @@ kornia
 editdistance
 pytorch_lightning
 wandb
+-e git+https://github.com/PytorchLightning/pytorch-lightning.git@master#egg=pytorch_lightning
 -e git+git://github.com/tmbdev/torchmore.git#egg=torchmore
 -e git+git://github.com/tmbdev/webdataset.git@v2#egg=webdataset

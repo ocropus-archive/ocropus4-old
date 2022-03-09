@@ -44,12 +44,13 @@ def random_transform(
     return dict(angle=angle, scale=scale, aniso=aniso, translation=(dx, dy))
 
 
-def transform_image(
+def transform_image0(
     image, angle=0.0, scale=1.0, aniso=1.0, translation=(0, 0), order=1
 ):
     """Transform an image with a random set of transformations.
 
-    Output is same size as input."""
+    Output is same size as input.
+    NB: for significant anisotropies, this may clip the input."""
     dx, dy = translation
     scale = 1.0 / scale
     c = np.cos(angle)
@@ -64,6 +65,28 @@ def transform_image(
         image, m, offset=d, order=order, mode="constant", output=image.dtype
     )
 
+
+def transform_image(
+    image, angle=0.0, scale=1.0, aniso=1.0, translation=(0, 0), order=1
+):
+    """Transform an image with a random set of transformations."""
+    # print(locals())
+    dx, dy = translation
+    scale = 1.0 / scale
+    c = np.cos(angle)
+    s = np.sin(angle)
+    maxscale = max(scale / aniso, scale * aniso)
+    oh, ow = int(maxscale * image.shape[0]), int(maxscale * image.shape[1])
+    sm = np.array([[scale / aniso, 0], [0, scale * aniso]], "f")
+    m = np.array([[c, -s], [s, c]], "f")
+    m = np.dot(sm, m)
+    w, h = image.shape
+    c = np.array([w, h]) / 2.0
+    c2 = np.array([oh, ow]) / 2.0
+    d = c - np.dot(m, c2) + np.array([dx * w, dy * h])
+    return ndi.affine_transform(
+        image, m, offset=d, order=order, mode="constant", output=image.dtype, output_shape=(oh, ow)
+    )
 
 def random_transform_all(*args, order=1, **kw):
     """Perform the same random transformation to all images.

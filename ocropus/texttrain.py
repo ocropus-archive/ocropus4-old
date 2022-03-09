@@ -194,8 +194,10 @@ class TextLightning(pl.LightningModule):
         image = image.permute(2, 0, 1)
         exp = self.logger.experiment
         if hasattr(exp, "add_image"):
+            print("*** tensorflow image log")
             exp.add_image(key, image, index)
         else:
+            print("*** WANDB IMAGE LOG")
             exp.log({key: [wandb.Image(image, caption=key)]})
 
     def probs_batch(self, inputs: torch.Tensor) -> torch.Tensor:
@@ -315,7 +317,7 @@ def train(
     kw = {}
     rank = rank_zero_only.rank
     if wandb != "" and rank == 0:
-        wconfig = dict(project=wandb)
+        wconfig = dict(project=wandb, log_model="all")
         kw["logger"] = WandbLogger(**wconfig)
         print(f"# using wandb logger with config {wconfig} at {rank}")
     else:

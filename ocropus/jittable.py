@@ -84,6 +84,11 @@ def resize_word(
 def crop_image(
     image: torch.Tensor, threshold: float = 0.5, padding: int = 2, erase: int = 2, test: bool = False
 ) -> torch.Tensor:
+    assert isinstance(image, torch.Tensor)
+    if image.ndim == 2:
+        image = image.unsqueeze(0).repeat(3, 1, 1)
+        image = crop_image(image, threshold, padding, erase, test)
+        return image[0]
     assert image.min() >= 0 and image.max() <= 1
     c, h, w = image.shape
     if h <= 1 or w <= 1:

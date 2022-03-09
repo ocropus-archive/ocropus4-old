@@ -99,6 +99,9 @@ def augment_transform(
         image = ndi.zoom(image, 80.0 / image.shape[0], order=1)
     if random.uniform(0, 1) < p:
         (image,) = degrade.random_transform_all(image, scale=(-0.3, 0))
+        image = torch.tensor(image, dtype=torch.float32)
+        image = jittable.crop_image(image)
+        image = image.numpy()
     if random.uniform(0, 1) < pnoise:
         image = degrade.noisify(image)
     result = utils.as_torchimage(image)
@@ -137,6 +140,9 @@ def augment_distort(
         image = ndi.zoom(image, float(maxh) / image.shape[0], order=1)
     if random.uniform(0, 1) < p:
         (image,) = degrade.random_transform_all(image, scale=(-0.3, 0), aniso=(-0.2, 0.2))
+        image = torch.tensor(image, dtype=torch.float32)
+        image = jittable.crop_image(image)
+        image = image.numpy()
     if random.uniform(0, 1) < pdistort:
         (image,) = degrade.distort_all(image, sigma=(0.5, 4.0), maxdelta=(0.1, 2.5))
     if random.uniform(0, 1) < pnoise:
@@ -325,6 +331,8 @@ class WordPreprocessor:
             return None
         if train:
             image = self.augment(image)
+            if not self.goodsize(image):
+                return None
         image = image.clip(0, 1).type(torch.float32)
         c, h, w = image.shape
         if c == 1:
@@ -362,8 +370,8 @@ class TextDataLoader(pl.LightningDataModule):
         self.augment = eval(f"augment_{augment}")
         self.preprocessor = WordPreprocessor(height=height, max_width=max_width, augment=self.augment)
 
-    def make_reader(self, url, normalize=normalize_simple, select="[A-Za-z0-9]"):
-        bucket = self.hparams.bucket
+    def make_reader(self, url, normalize=normalize_simple, select="[A-Za-z0-9]", bucket=None):
+        bucket = self.hparams.bucket if bucket is None else bucket
         return (
             wds.WebDataset(
                 bucket + url,
@@ -449,19 +457,22 @@ class TextDataLoader(pl.LightningDataModule):
 
 class SwordTextDataLoader(TextDataLoader):
     def make_mix(self):
-        print("### SwordTextDataLoader.make_mix")
         sources = []
-        sources.append(self.make_reader("bin-gsub-{000000..000080}-swords.tar"))
-        sources.append(self.make_reader("bin-ia1-{000000..000159}-swords.tar"))
-        sources.append(self.make_reader("cdipsub-{000000..000085}-swords.tar"))
-        probs = [0.2, 0.5, 0.3]
+        bb = "/home/tmb/gs/nvdata-ocropus-swords/"
+        sources.append(self.make_reader("bin-ia1-{000000..000159}-swords.tar", bucket=bb))
+        sources.append(self.make_reader("bin-gsub-{000000..000080}-swords.tar", bucket=bb))
+        sources.append(self.make_reader("cdipsub-{000000..000085}-swords.tar", bucket=bb))
+        sources.append(self.make_reader("generated-{000000..000313}.tar", select="."))
+        sources.append(self.make_reader("italic-{000000..000455}.tar", select="."))
+        sources.append(self.make_reader("ascii-{000000..000422}.tar", select="."))
+        probs = [0.5, 0.1, 0.1, 0.1, 0.1, 0.1]
+        assert len(sources) == len(probs)
         ds = wds.FluidWrapper(wds.RandomMix(sources, probs))
         return ds
 
 
 def make_dataloader(**kw) -> TextDataLoader:
     if kw["datamode"] == "sword":
-        kw["bucket"] = "/home/tmb/gs/nvdata-ocropus-swords/"
         return SwordTextDataLoader(**kw)
     else:
         return TextDataLoader(**kw)
