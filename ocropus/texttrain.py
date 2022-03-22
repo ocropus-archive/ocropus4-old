@@ -112,6 +112,18 @@ class TextLightning(pl.LightningModule):
         return loss
 
     def compute_loss(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> torch.Tensor:
+        if hasattr(self.model, "compute_loss"):
+            return self.model.compute_loss(outputs, targets)
+        else:
+            return self.ctc_loss(outputs, targets[0], targets[1])
+
+    def compute_error(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> torch.Tensor:
+        if hasattr(self.model, "compute_error"):
+            return self.model.compute_error(outputs, targets)
+        else:
+            return self.ctc_error(outputs, targets)
+
+    def ctc_loss(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> torch.Tensor:
         assert len(targets) == len(outputs)
         targets, tlens = textmodels.pack_for_ctc(targets)
         b, d, L = outputs.size()
@@ -122,7 +134,7 @@ class TextLightning(pl.LightningModule):
         assert tlens.sum() == targets.size(0)
         return self.ctc_loss(outputs.cpu(), targets.cpu(), olens.cpu(), tlens.cpu())
 
-    def compute_error(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> float:
+    def ctc_error(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> float:
         probs = outputs.detach().cpu().softmax(1)
         targets = [[int(x) for x in t] for t in targets]
         total = sum(len(t) for t in targets)
