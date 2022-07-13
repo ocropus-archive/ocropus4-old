@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torchmore import combos, flex, layers
+import torch.nn.functional as F
 
 from . import utils
 from .utils import model
@@ -8,7 +9,7 @@ from .utils import model
 ninput = 3
 
 
-def update_stats(stats, x, l:float=0.99):
+def update_stats(stats, x, l: float = 0.99):
     assert x.ndim == 4
     stats[0] += len(x)
     stats[1] = l * stats[1] + (1 - l) * len(x)
@@ -81,12 +82,91 @@ def segmentation_model_220113(noutput=4, shape=(1, ninput, 512, 512), size=32, d
     model = nn.Sequential(
         layers.ModPadded(
             64,
-            combos.make_unet(sizes, sub=nn.Sequential(*combos.conv2d_block(sizes[-1], 3, repeat=2)), dropout=dropout),
+            combos.make_unet(
+                sizes, sub=nn.Sequential(*combos.conv2d_block(sizes[-1], 3, repeat=2)), dropout=dropout
+            ),
         ),
         *combos.conv2d_block(48, 3, repeat=2),
         flex.Conv2d(noutput, 3, padding=1),
     )
     flex.shape_inference(model, shape)
+    return model
+
+
+class Bypass(nn.Module):
+    def __init__(self, *args, mode=None):
+        self.sub = nn.Sequential(*args)
+        self.mode = mode
+
+    def forward(self, x):
+        y = self.sub(x)
+        if self.mode is not None:
+            x = F.interpolate(x, y.shape[2:])
+        assert y.shape[2:] == x.shape[2:], (y.shape, x.shape, self.mode)
+        return x + y
+
+
+class Level(nn.Module):
+    def __init__(self, down, up, lower=None):
+        self.down = down
+        self.up = up
+        self.lower = lower
+
+    def forward(self, x):
+        y = self.sub(x)
+        assert y.shape == x.shape
+        if self.lower is not None:
+            y = y + self.lower(y)
+        result = self.up(x + y)
+        assert result.shape == x.shape
+        return result
+
+
+@model
+def segmentation_linknet_220428(noutput=4, shape=(1, ninput, 512, 512), size=32, dropout=0.0):
+    """Page segmentation using U-net and LSTM combos."""
+
+    def encoder(n, stride=2):
+        return [
+            Bypass(
+                flex.Conv2d(n, 3, padding=1, stride=2),
+                flex.BatchNorm2d(),
+                nn.ReLU(),
+                flex.Conv2d(n, 3, padding=1),
+                flex.BatchNorm2d(),
+                nn.ReLU(),
+                mode="nearest",
+            ),
+            Bypass(
+                flex.Conv2d(n, 3, padding=1),
+                flex.BatchNorm2d(),
+                nn.ReLU(),
+                flex.Conv2d(n, 3, padding=1),
+                flex.BatchNorm2d(),
+                nn.ReLU(),
+            ),
+        ]
+
+    def decoder(n):
+        return [
+            flex.Conv2d(n, 1),
+            flex.BatchNorm2d(),
+            nn.ReLU(),
+            flex.ConvTranspose2d(n, 3, stride=2, padding=1),
+            flex.BatchNorm2d(),
+            nn.ReLU(),
+            flex.Conv2d(2 * n, 1),
+            flex.BatchNorm2d(),
+            nn.ReLU(),
+        ]
+
+    def makemodel(sizes):
+        n = sizes[0]
+        if len(sizes) == 1:
+            return Level(encoder(n), decoder(n), None)
+        else:
+            return Level(encoder(n), decoder(n), makemodel(sizes[1:]))
+
     return model
 
 
