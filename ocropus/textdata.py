@@ -459,6 +459,7 @@ class SwordTextDataLoader(TextDataLoader):
     def make_mix(self):
         sources = []
         bb = "/home/tmb/gs/nvdata-ocropus-swords/"
+        assert os.path.isdir(bb), f"{bb} not found; maybe symlink to ~/gs/nvdata-ocropus-swords"
         sources.append(self.make_reader("bin-ia1-{000000..000159}-swords.tar", bucket=bb))
         sources.append(self.make_reader("bin-gsub-{000000..000080}-swords.tar", bucket=bb))
         sources.append(self.make_reader("cdipsub-{000000..000085}-swords.tar", bucket=bb))
@@ -471,9 +472,23 @@ class SwordTextDataLoader(TextDataLoader):
         return ds
 
 
+class TestTextDataLoader(TextDataLoader):
+    def make_mix(self):
+        sources = []
+        bb = "./testfont/"
+        assert os.path.isdir(bb), f"{bb} not found; maybe symlink to ./gs/testfont"
+        sources.append(self.make_reader("testfont-{000000..000021}.tar", bucket=bb))
+        probs = [1.0]
+        assert len(sources) == len(probs)
+        ds = wds.FluidWrapper(wds.RandomMix(sources, probs))
+        return ds
+
+
 def make_dataloader(**kw) -> TextDataLoader:
     if kw["datamode"] == "sword":
         return SwordTextDataLoader(**kw)
+    elif kw["datamode"] == "test":
+        return TestTextDataLoader(**kw)
     else:
         return TextDataLoader(**kw)
 

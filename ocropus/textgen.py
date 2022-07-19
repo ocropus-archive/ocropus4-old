@@ -173,6 +173,8 @@ def generate(
         fonts = [s for s in fonts if "webdings" not in s.lower()]
         print(f"got {len(fonts)} ms fonts")
         assert len(fonts) > 0
+    elif fontlist == "test":
+        fonts = ["./google-fonts/ofl/spacemono/SpaceMono-Regular.ttf"]
     else:
         fonts = [s.strip() for s in open(fontlist).readlines()]
         fonts = [s for s in fonts if s[0] != "#"]

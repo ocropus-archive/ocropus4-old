@@ -15,6 +15,35 @@ ninput = 3
 app = typer.Typer()
 
 
+ctc_loss = nn.CTCLoss(zero_infinity=True)
+
+
+def pack_for_ctc(seqs: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Pack a list of tensors into tensors in the format required by CTC.
+
+    Args:
+        seqs (List[torch.Tensor]): list of tensors (integer sequences)
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: packed tensor
+    """
+    allseqs = torch.cat(seqs).long()
+    alllens = torch.tensor([len(s) for s in seqs]).long()
+    return (allseqs, alllens)
+
+
+def compute_ctc_loss(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> torch.Tensor:
+    assert len(targets) == len(outputs)
+    targets, tlens = pack_for_ctc(targets)
+    b, d, L = outputs.size()
+    olens = torch.full((b,), L, dtype=torch.long)
+    outputs = outputs.log_softmax(1)
+    outputs = layers.reorder(outputs, "BDL", "LBD")
+    assert tlens.size(0) == b
+    assert tlens.sum() == targets.size(0)
+    return self.ctc_loss(outputs.cpu(), targets.cpu(), olens.cpu(), tlens.cpu())
+
+
 def ctc_decode(
     probs: torch.Tensor, sigma: float = 1.0, threshold: float = 0.7, full: bool = False
 ) -> Union[List[int], Tuple[List[int], List[float]]]:
@@ -46,20 +75,6 @@ def ctc_decode(
         return [(r, c, probs[r, c]) for r, c in sorted(maxima)]
 
 
-def pack_for_ctc(seqs: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Pack a list of tensors into tensors in the format required by CTC.
-
-    Args:
-        seqs (List[torch.Tensor]): list of tensors (integer sequences)
-
-    Returns:
-        Tuple[torch.Tensor, torch.Tensor]: packed tensor
-    """
-    allseqs = torch.cat(seqs).long()
-    alllens = torch.tensor([len(s) for s in seqs]).long()
-    return (allseqs, alllens)
-
-
 def charset_ascii():
     return "".join([chr(c) for c in range(128)])
 
@@ -72,6 +87,7 @@ class TextModel(nn.Module):
     ):
         super().__init__()
         self.charset = utils.load_symbol(charset)()
+        self.mname = mname
         noutput = len(self.charset)
         factory = utils.load_symbol(mname, default_module="ocropus.textmodels")
         self.model = factory(noutput=noutput, **config)
@@ -209,7 +225,7 @@ def text_model_211215(
     if lstm_initial > 0:
         initial += flex.Lstm(lstm_initial)
     for i in range(depth):
-        initial += combos.conv2d_block(int(width * (growth ** depth)), fmp=(fmpy, fmpx), repeat=2)
+        initial += combos.conv2d_block(int(width * (growth**depth)), fmp=(fmpy, fmpx), repeat=2)
     model = nn.Sequential(
         layers.KeepSize(sub=nn.Sequential(*initial)),
         flex.Lstm2(lstm_2d),
@@ -240,11 +256,11 @@ def text_model_211221(
     lstm_final=300,
 ):
     """Text recognition model using 2D LSTM and convolutions."""
-    depths = [int(0.5 + 32 * (1.5 ** i)) for i in range(depth)]
+    depths = [int(0.5 + 32 * (1.5**i)) for i in range(depth)]
     model = nn.Sequential(
         ocrlayers.HeightTo(height),
         layers.ModPadded(
-            2 ** depth,
+            2**depth,
             combos.make_unet(depths, sub=flex.Lstm2d(depths[-1])),
         ),
         flex.Lstm2d(lstm_2d),
@@ -273,11 +289,11 @@ def ctext_model_211221(
     lstm_final=300,
 ):
     """Text recognition model using 2D LSTM and convolutions."""
-    depths = [int(0.5 + 32 * (1.5 ** i)) for i in range(depth)]
+    depths = [int(0.5 + 32 * (1.5**i)) for i in range(depth)]
     model = nn.Sequential(
         ocrlayers.HeightTo(height),
         layers.ModPadded(
-            2 ** depth,
+            2**depth,
             combos.make_unet(depths, sub=flex.Conv2d(depths[-1], 3, padding=1)),
         ),
         flex.Conv2d(depth * 4, 3, padding=1),
@@ -308,11 +324,11 @@ def local_text_model_211221(
     lstm_final=300,
 ):
     """Text recognition model with localization."""
-    depths = [int(0.5 + 32 * (1.5 ** i)) for i in range(depth)]
+    depths = [int(0.5 + 32 * (1.5**i)) for i in range(depth)]
     model = nn.Sequential(
         ocrlayers.HeightTo(height),
         layers.ModPadded(
-            2 ** depth,
+            2**depth,
             combos.make_unet(depths, sub=flex.Conv2d(depths[-1], 3, padding=1)),
         ),
         flex.Conv2d(depth * 4, 3, padding=1),
@@ -386,7 +402,7 @@ def ctext_model_220117(noutput=None, height=48, lsize=128, shape=(1, ninput, 48,
 def text_model_220204(noutput=None, height=48, shape=(1, ninput, 48, 300), complexity=1.0, dropout=0.5):
     """Text recognition model using 2D LSTM and convolutions."""
     depths = [32, 64, 96, 128]
-    depths = [int(x*complexity) for x in depths]
+    depths = [int(x * complexity) for x in depths]
     model = nn.Sequential(
         ocrlayers.HeightTo(height),
         layers.ModPadded(
@@ -415,6 +431,7 @@ def list():
         if "model" in name and callable(model):
             print(name)
 
+
 @app.command()
 def show(name: str):
     model = globals()[name]
@@ -422,6 +439,7 @@ def show(name: str):
         raise ValueError(f"{name} is not a model")
     model = model(noutput=128)
     print(model)
+
 
 if __name__ == "__main__":
     app()

@@ -34,7 +34,7 @@ from . import confparse, jittable, textdata, textmodels
 app = typer.Typer()
 
 ###
-### Text Recognition Models
+# Text Recognition Models
 ###
 
 
@@ -261,6 +261,7 @@ def train(
 ):
     if wandb != "":
         import wandb as wandb_lib
+
         wandb_lib.require("service")
         wandb_lib.setup()
     config = dict(locals())
