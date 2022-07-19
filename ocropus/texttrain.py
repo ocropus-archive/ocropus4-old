@@ -112,10 +112,11 @@ class TextLightning(pl.LightningModule):
         return loss
 
     def compute_loss(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> torch.Tensor:
-        if hasattr(self.model, "compute_loss"):
-            return self.model.compute_loss(outputs, targets)
-        else:
-            return self.compute_ctc_loss(outputs, targets)
+        return self.model.compute_loss(outputs, targets)
+        # if hasattr(self.model, "compute_loss"):
+        #     return self.model.compute_loss(outputs, targets)
+        # else:
+        #     return self.compute_ctc_loss(outputs, targets)
 
     def compute_error(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> torch.Tensor:
         if hasattr(self.model, "compute_error"):

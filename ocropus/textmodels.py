@@ -32,7 +32,8 @@ def pack_for_ctc(seqs: List[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
     return (allseqs, alllens)
 
 
-def compute_ctc_loss(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> torch.Tensor:
+def compute_ctc_loss(outputs: torch.Tensor, targets: List[torch.Tensor]) -> torch.Tensor:
+    global ctc_loss
     assert len(targets) == len(outputs)
     targets, tlens = pack_for_ctc(targets)
     b, d, L = outputs.size()
@@ -41,7 +42,7 @@ def compute_ctc_loss(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -
     outputs = layers.reorder(outputs, "BDL", "LBD")
     assert tlens.size(0) == b
     assert tlens.sum() == targets.size(0)
-    return self.ctc_loss(outputs.cpu(), targets.cpu(), olens.cpu(), tlens.cpu())
+    return ctc_loss(outputs.cpu(), targets.cpu(), olens.cpu(), tlens.cpu())
 
 
 def ctc_decode(
@@ -83,10 +84,11 @@ class TextModel(nn.Module):
     """Word-level text model."""
 
     def __init__(
-        self, mname, *, config={}, charset: str = "ocropus.textmodels.charset_ascii", unknown_char: int = 26
+        self, mname, *, config={}, charset: str = "ocropus.textmodels.charset_ascii", unknown_char: int = 26, no_ctc: bool = False
     ):
         super().__init__()
         self.charset = utils.load_symbol(charset)()
+        self.no_ctc = no_ctc
         self.mname = mname
         noutput = len(self.charset)
         factory = utils.load_symbol(mname, default_module="ocropus.textmodels")
@@ -121,6 +123,12 @@ class TextModel(nn.Module):
         assert result.shape[:2] == (b, len(self.charset))
         # assert result.shape[2] >= w - 32 and result.shape[2] <= w + 16, (images.shape, result.shape)
         return result
+
+    def compute_loss(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> torch.Tensor:
+        if self.mname.startswith("ttext_"):
+            raise NotImplementedError("transformer loss not implemented yet")
+        else:
+            return compute_ctc_loss(outputs, targets)
 
     @torch.jit.export
     def standardize(self, images: torch.Tensor) -> None:
