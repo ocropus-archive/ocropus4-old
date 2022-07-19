@@ -3,6 +3,7 @@
 import os
 import sys
 import time
+import glob
 import warnings
 import random, re
 import os.path
@@ -372,9 +373,10 @@ class TextDataLoader(pl.LightningDataModule):
 
     def make_reader(self, url, normalize=normalize_simple, select="[A-Za-z0-9]", bucket=None):
         bucket = self.hparams.bucket if bucket is None else bucket
+        sources = bucket + url if isinstance(url, str) else url
         return (
             wds.WebDataset(
-                bucket + url,
+                sources,
                 cache_size=float(self.hparams.cache_size),
                 cache_dir=self.hparams.cache_dir,
                 verbose=True,
@@ -474,10 +476,10 @@ class SwordTextDataLoader(TextDataLoader):
 
 class TestTextDataLoader(TextDataLoader):
     def make_mix(self):
-        sources = []
-        bb = "./testfont/"
-        assert os.path.isdir(bb), f"{bb} not found; maybe symlink to ./gs/testfont"
-        sources.append(self.make_reader("testfont-{000000..000021}.tar", bucket=bb))
+        bb = "./testtext/"
+        assert os.path.isdir(bb), f"{bb} not found; put any test data into ./testdata"
+        fnames = glob.glob(bb + "/*.tar")
+        sources = [self.make_reader(fnames, select=".")]
         probs = [1.0]
         assert len(sources) == len(probs)
         ds = wds.FluidWrapper(wds.RandomMix(sources, probs))

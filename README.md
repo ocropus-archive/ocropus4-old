@@ -80,3 +80,26 @@ Parameter Group 0
 35.833    Total estimated model params size (MB)
 ...
 ```
+
+# Other Useful Commands
+
+```Bash
+# display subcommands (works for most ocropus/*.py files)
+ocropus4 textdata --help
+
+# generate text for testing purposes
+mkdir testtext
+ocropus4 textgen generate --fontlist test --sizes 24,24 --shardsize 1000 --output testtext/testfont-%06d.tar --nwords 50000 --generator words^
+
+# display a dataset with preprocessing/augmentation in place
+ocropus4 textdata show --datamode test
+
+# list available models
+ocropus4 textmodels list
+ocropus4 textmodels show ctext_211221
+
+# train a convolutional model on the test data and watch training progress
+ocropus4 texttrain --datamode test --mname ctext_model_220117 --lr 0.1
+tensorboard --logdir _logs
+firefox http://localhost:6006
+```
