@@ -68,6 +68,7 @@ def generate_ascii(_):
         l = random.randint(3, 10)
         s = "".join([chr(random.randint(33, 126)) for _ in range(l)])
         return s
+
     return f
 
 
@@ -90,7 +91,9 @@ def generate_numbers(_):
             total = max(mant + 2, random.randint(0, 10))
             result = "%*.*f" % (total, mant, value)
             return result
+
     return f
+
 
 def read_dict(wordlist: str) -> List[str]:
     return [s.strip() for s in open(wordlist).readlines()]
@@ -190,7 +193,7 @@ def generate(
         if os.path.exists(output):
             print("output file exists, stopping")
             return
-        sink = wds.TarWriter(output+".temp")
+        sink = wds.TarWriter(output + ".temp")
         print(f"writing to {output}.temp")
     iw, ih = 1024, 1024
     for i in range(nwords):
@@ -226,33 +229,97 @@ def generate(
             print(i, end=" ", flush=True, file=sys.stderr)
     sink.close()
     if "%" not in output:
-        os.rename(output+".temp", output)
+        os.rename(output + ".temp", output)
     return 0
+
+
+@app.command()
+def testwords():
+    """Generate a small training set of words in ./testtext. You can use this with --datamode=test in texttrain."""
+    if not os.path.isdir("./testtext"):
+        os.mkdir("./testtext")
+    generate(
+        fontlist="test",
+        sizes="24,24",
+        shardsize=1000,
+        output="testtext/testfont-%06.tar",
+        nwords=5000,
+        generator=words,
+    )
 
 
 @ray.remote
 def generate_(*args, **kw):
     return generate(*args, **kw)
 
+
 @app.command()
-def all(num_cpus: int=4, prefix="./_"):
+def all(num_cpus: int = 4, prefix="./_"):
+    """Generate a large artificial training set using multiprocessing and ray."""
     nw = 50000
     nshards = 100
     ray.init(num_cpus=num_cpus)
     print("core words")
-    ray.get([generate_.remote(output=f"{prefix}core-words-{i:06d}.tar", nwords=nw, fontlist="core", generator="words") for i in range(nshards)])
+    ray.get(
+        [
+            generate_.remote(
+                output=f"{prefix}core-words-{i:06d}.tar", nwords=nw, fontlist="core", generator="words"
+            )
+            for i in range(nshards)
+        ]
+    )
     print("core text")
-    ray.get([generate_.remote(output=f"{prefix}core-text-{i:06d}.tar", nwords=nw, fontlist="core") for i in range(nshards)])
+    ray.get(
+        [
+            generate_.remote(output=f"{prefix}core-text-{i:06d}.tar", nwords=nw, fontlist="core")
+            for i in range(nshards)
+        ]
+    )
     print("core numbers")
-    ray.get([generate_.remote(output=f"{prefix}core-numbers-{i:06d}.tar", nwords=nw, fontlist="core", generator="numbers") for i in range(nshards)])
+    ray.get(
+        [
+            generate_.remote(
+                output=f"{prefix}core-numbers-{i:06d}.tar", nwords=nw, fontlist="core", generator="numbers"
+            )
+            for i in range(nshards)
+        ]
+    )
     print("core ascii")
-    ray.get([generate_.remote(output=f"{prefix}core-ascii-{i:06d}.tar", nwords=nw, fontlist="core", generator="ascii") for i in range(nshards)])
+    ray.get(
+        [
+            generate_.remote(
+                output=f"{prefix}core-ascii-{i:06d}.tar", nwords=nw, fontlist="core", generator="ascii"
+            )
+            for i in range(nshards)
+        ]
+    )
     print("google numbers")
-    ray.get([generate_.remote(output=f"{prefix}google-numbers-{i:06d}.tar", nwords=nw, fontlist="google", generator="numbers") for i in range(nshards)])
+    ray.get(
+        [
+            generate_.remote(
+                output=f"{prefix}google-numbers-{i:06d}.tar",
+                nwords=nw,
+                fontlist="google",
+                generator="numbers",
+            )
+            for i in range(nshards)
+        ]
+    )
     print("google text")
-    ray.get([generate_.remote(output=f"{prefix}google-text-{i:06d}.tar", nwords=nw, fontlist="google") for i in range(nshards)])
+    ray.get(
+        [
+            generate_.remote(output=f"{prefix}google-text-{i:06d}.tar", nwords=nw, fontlist="google")
+            for i in range(nshards)
+        ]
+    )
     print("italics text")
-    ray.get([generate_.remote(output=f"{prefix}italics-text-{i:06d}.tar", nwords=nw, fontlist="italics") for i in range(nshards)])
+    ray.get(
+        [
+            generate_.remote(output=f"{prefix}italics-text-{i:06d}.tar", nwords=nw, fontlist="italics")
+            for i in range(nshards)
+        ]
+    )
+
 
 if __name__ == "__main__":
     app()

@@ -90,6 +90,7 @@ ocropus4 textdata --help
 # generate text for testing purposes
 mkdir testtext
 ocropus4 textgen generate --fontlist test --sizes 24,24 --shardsize 1000 --output testtext/testfont-%06d.tar --nwords 50000 --generator words^
+ocropus4 textgen testwords  # shorthand for the above parameters
 
 # display a dataset with preprocessing/augmentation in place
 ocropus4 textdata show --datamode test
