@@ -1,8 +1,8 @@
 """Text recognition."""
 
-import io, json, sys
-from io import StringIO
-from typing import Any, Dict, List, Optional, Tuple, Union
+import io
+import sys
+from typing import Any, Dict, List, Optional
 
 import editdistance
 import re
@@ -11,16 +11,12 @@ import numpy as np
 import PIL
 import pytorch_lightning as pl
 import torch
-from torch.autograd.grad_mode import F
 import torch.jit
-import yaml
 from matplotlib import gridspec
-from numpy import amax, arange, newaxis, tile
 from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from scipy import ndimage as ndi
 from torch import nn
-from torch.optim.lr_scheduler import LambdaLR, ExponentialLR
+from torch.optim.lr_scheduler import LambdaLR
 import typer
 from torchmore import layers
 from pytorch_lightning.utilities import rank_zero_only
@@ -28,7 +24,7 @@ import wandb
 from pytorch_lightning.loggers import WandbLogger
 
 
-from . import confparse, jittable, textdata, textmodels
+from . import textdata, textmodels
 
 
 app = typer.Typer()
@@ -52,7 +48,7 @@ class TextLightning(pl.LightningModule):
         mname: Optional[str] = None,
         mopts: Dict[str, Any] = None,
         charset: Optional[str] = None,
-        display_freq: int = 1000,
+        display_freq: int = 100,
         lr: float = 3e-4,
         lr_scale: float = 1e-3,
         lr_steps: int = 1000,

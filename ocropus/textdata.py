@@ -57,8 +57,11 @@ def collate4ocr(samples: List[Tuple[torch.Tensor, str]]) -> Tuple[torch.Tensor, 
 
 
 @utils.useopt
-def augment_none(image: torch.Tensor) -> torch.Tensor:
+def augment_raw(image: torch.Tensor) -> torch.Tensor:
     """Perform no augmentation.
+
+    This passes raw tensors as provided by the input pipeline
+    to the training function.
 
     Args:
         image (torch.Tensor): input image
@@ -66,10 +69,30 @@ def augment_none(image: torch.Tensor) -> torch.Tensor:
     Returns:
         torch.Tensor: unaugmented output
     """
-    result = utils.as_torchimage(image)
-    if result.shape[0] == 1:
-        result = result.expand(3, -1, -1)
-    return result
+    return image
+
+
+@utils.useopt
+def augment_none(image: torch.Tensor) -> torch.Tensor:
+    """Perform no augmentation.
+
+    This still auto-inverts the image, scales it down to a height of less
+    than 80 pixels, and then auto-crops the image.
+
+    Args:
+        image (torch.Tensor): input image
+
+    Returns:
+        torch.Tensor: unaugmented output
+    """
+    if image.mean() > 0.5:
+        image = 1.0 - image
+    if image.shape[0] > 80.0:
+        image = utils.as_npimage(image)
+        image = ndi.zoom(image, 80.0 / image.shape[0], order=1)
+        image = utils.as_torchimage(image)
+    image = jittable.crop_image(image)
+    return image
 
 
 @utils.useopt
@@ -101,6 +124,7 @@ def augment_transform(
     if random.uniform(0, 1) < p:
         (image,) = degrade.random_transform_all(image, scale=(-0.3, 0))
         image = torch.tensor(image, dtype=torch.float32)
+        # FIXME: these should probably not be conditional
         image = jittable.crop_image(image)
         image = image.numpy()
     if random.uniform(0, 1) < pnoise:

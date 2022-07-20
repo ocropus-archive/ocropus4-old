@@ -296,7 +296,7 @@ def ctext_model_211221(
     lstm_2d=100,
     lstm_final=300,
 ):
-    """Text recognition model using 2D LSTM and convolutions."""
+    """Text recognition model using only convolutions."""
     depths = [int(0.5 + 32 * (1.5**i)) for i in range(depth)]
     model = nn.Sequential(
         ocrlayers.HeightTo(height),
@@ -426,6 +426,21 @@ def text_model_220204(noutput=None, height=48, shape=(1, ninput, 48, 300), compl
         flex.BatchNorm1d(),
         nn.ReLU(),
         *([nn.Dropout(dropout)] if dropout > 0.0 else []),
+        flex.Lstm1d(300, bidirectional=True),
+        flex.Conv1d(noutput, 1),
+    )
+    flex.shape_inference(model, shape)
+    return model
+
+
+@utils.model
+def text_model_small(noutput=None, shape=(1, ninput, 48, 300)):
+    """Text recognition model using 2D LSTM and convolutions."""
+    model = nn.Sequential(
+        flex.Conv2d(64, 3, padding=1),
+        nn.ReLU(),
+        flex.Lstm2(100),
+        ocrlayers.MaxReduce(2),
         flex.Lstm1d(300, bidirectional=True),
         flex.Conv1d(noutput, 1),
     )

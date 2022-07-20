@@ -100,7 +100,7 @@ ocropus4 textmodels list
 ocropus4 textmodels show ctext_211221
 
 # train a convolutional model on the test data and watch training progress
-ocropus4 texttrain --datamode test --mname ctext_model_220117 --lr 0.1
+ocropus4 texttrain --datamode test --mname ctext_model_220117 --lr 0.1 --augment none
 tensorboard --logdir _logs
 firefox http://localhost:6006
 ```
