@@ -1,9 +1,14 @@
 """Text recognition."""
 
 import io
+import os
 import sys
+import pathlib
 from typing import Any, Dict, List, Optional
 
+from datetime import datetime
+
+from PIL import Image
 import editdistance
 import re
 import matplotlib.pyplot as plt
@@ -55,15 +60,22 @@ class TextLightning(pl.LightningModule):
         lr_halflife: int = 10,
     ):
         super().__init__()
+        self.charset = charset
         self.display_freq = display_freq
         self.lr = lr  # FIXME
         self.lr_halflife = lr_halflife  # FIXME
         self.ctc_loss = nn.CTCLoss(zero_infinity=True)
-        self.total = 0
+        self.total_steps = 0
         for k, v in mopts.items():
             setattr(self.hparams, k, v)
         self.save_hyperparameters()
-        self.model = textmodels.TextModel(mname, charset=charset, config=mopts)
+        if "ttext_model" in mname:
+            self.model = textmodels.TransformerTextModel(
+                mname, charset=charset, config=mopts
+            )
+        else:
+            self.model = textmodels.TextModel(mname, charset=charset, config=mopts)
+
         self.get_jit_model()
         print("model created and is JIT-able")
 
@@ -73,54 +85,93 @@ class TextLightning(pl.LightningModule):
         # torch.onnx.export(script, (torch.rand(1, 3, 48, 200),), "/dev/null", opset_version=11)
         return script
 
-    def forward(self, inputs):
+    def forward(self, inputs, encoded_targets=None):
         """Perform the forward step. This just calls the forward method of the model."""
-        return self.model.forward(inputs)
+        if self.model.is_transformer_model():
+            return self.model.forward(inputs, encoded_targets)
+        else:
+            return self.model.forward(inputs)
 
     def training_step(self, batch: torch.Tensor, index: int) -> torch.Tensor:
         """Perform a training step."""
         inputs, text_targets = batch
-        outputs = self.forward(inputs)
-        targets = [self.model.encode_str(s) for s in text_targets]
-        assert inputs.size(0) == outputs.size(0)
-        loss = self.compute_loss(outputs, targets)
-        # import os; print("DEBUG "*10); os.system("sleep 3600")
+
+        encoded_targets = [self.model.encode_str(s) for s in text_targets]
+
+        if self.model.is_transformer_model():
+            # TODO: variable-length target tensors (e.g. only with minimal padding)
+            encoded_targets = self.model.add_sos_eos_and_padding(encoded_targets)
+            encoded_targets_tensor = self.model.convert_target_batch_to_tensor(
+                encoded_targets
+            )
+            outputs = self.forward(
+                inputs, encoded_targets=encoded_targets_tensor[:-1, :]
+            )
+            #NOTE: wrapping target in a list to conform to expected format
+            loss = self.compute_loss(outputs, [encoded_targets_tensor[1:, :]])
+            err = self.compute_error(outputs, [encoded_targets_tensor[1:, :]])
+        else:
+            outputs = self.forward(inputs)
+            assert inputs.size(0) == outputs.size(0)
+            loss = self.compute_loss(outputs, encoded_targets)
+            err = self.compute_error(outputs, encoded_targets)
+
         self.log("train_loss", loss)
-        err = self.compute_error(outputs, targets)
         self.log("train_err", err, prog_bar=True)
         current_lr = self.optimizers().param_groups[0]["lr"]
         self.log("lr", current_lr, prog_bar=True, logger=False)
+
         if index % self.display_freq == 0:
-            self.log_results(index, inputs, targets, outputs)
-        self.total += len(inputs)
+            self.log_results(index, inputs, encoded_targets, outputs)
+        self.total_steps += len(inputs)
         return loss
 
     def validation_step(self, batch: torch.Tensor, index: int) -> torch.Tensor:
         """Perform a validation step."""
         inputs, text_targets = batch
-        outputs = self.forward(inputs)
-        targets = [self.model.encode_str(s) for s in text_targets]
-        assert inputs.size(0) == outputs.size(0)
-        loss = self.compute_loss(outputs, targets)
-        self.log("val_loss", loss)
-        err = self.compute_error(outputs, targets)
+        encoded_targets = [self.model.encode_str(s) for s in text_targets]
+
+        if self.model.is_transformer_model():
+            # TODO: variable-length target tensors (e.g. only with minimal padding)
+            encoded_targets = self.model.add_sos_eos_and_padding(encoded_targets)
+            encoded_targets_tensor = self.model.convert_target_batch_to_tensor(
+                encoded_targets
+            )
+            outputs = self.forward(
+                inputs, encoded_targets=encoded_targets_tensor[:-1, :]
+            )
+            #NOTE: wrapping target in a list to conform to expected format
+            loss = self.compute_loss(outputs, [encoded_targets_tensor[1:, :]])
+            err = self.compute_error(outputs, [encoded_targets_tensor[1:, :]])
+        else:
+            outputs = self.forward(inputs)
+            assert inputs.size(0) == outputs.size(0)
+            loss = self.compute_loss(outputs, encoded_targets)
+            err = self.compute_error(outputs, encoded_targets)
+
         self.log("val_err", err)
+        self.log("val_loss", loss)
         return loss
 
-    def compute_loss(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> torch.Tensor:
-        return self.model.compute_loss(outputs, targets)
-        # if hasattr(self.model, "compute_loss"):
-        #     return self.model.compute_loss(outputs, targets)
-        # else:
-        #     return self.compute_ctc_loss(outputs, targets)
+    def compute_loss(
+        self, outputs: torch.Tensor, targets: List[torch.Tensor]
+    ) -> torch.Tensor:
+        if hasattr(self.model, "compute_loss"):
+            return self.model.compute_loss(outputs, targets)
+        else:
+            return self.compute_ctc_loss(outputs, targets)
 
-    def compute_error(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> torch.Tensor:
+    def compute_error(
+        self, outputs: torch.Tensor, targets: List[torch.Tensor]
+    ) -> torch.Tensor:
         if hasattr(self.model, "compute_error"):
             return self.model.compute_error(outputs, targets)
         else:
             return self.compute_ctc_error(outputs, targets)
 
-    def compute_ctc_loss(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> torch.Tensor:
+    def compute_ctc_loss(
+        self, outputs: torch.Tensor, targets: List[torch.Tensor]
+    ) -> torch.Tensor:
         assert len(targets) == len(outputs)
         targets, tlens = textmodels.pack_for_ctc(targets)
         b, d, L = outputs.size()
@@ -131,7 +182,9 @@ class TextLightning(pl.LightningModule):
         assert tlens.sum() == targets.size(0)
         return self.ctc_loss(outputs.cpu(), targets.cpu(), olens.cpu(), tlens.cpu())
 
-    def compute_ctc_error(self, outputs: torch.Tensor, targets: List[torch.Tensor]) -> float:
+    def compute_ctc_error(
+        self, outputs: torch.Tensor, targets: List[torch.Tensor]
+    ) -> float:
         probs = outputs.detach().cpu().softmax(1)
         targets = [[int(x) for x in t] for t in targets]
         total = sum(len(t) for t in targets)
@@ -157,11 +210,25 @@ class TextLightning(pl.LightningModule):
         targets: torch.Tensor,
         outputs: torch.Tensor,
     ) -> None:
-        self.show_ocr_results(index, inputs, targets, outputs)
-        decoded = textmodels.ctc_decode(outputs.detach().cpu().softmax(1).numpy()[0])
-        t = self.model.decode_str(targets[0].cpu().numpy())
-        s = self.model.decode_str(decoded)
-        print(f"\n{t} : {s}")
+        if self.model.is_transformer_model():
+            outputs_argmaxed = torch.argmax(outputs, dim=2).cpu().numpy()
+            outputs_decoded = self.model.decode_transf_string(outputs_argmaxed[:, 0])
+            targets_decoded = self.model.decode_transf_string(
+                targets[0].cpu().numpy()[1:]
+            )
+            # TODO: debug text and output visualization in tensorboard
+            self.show_transformer_ocr_results(
+                index, inputs[0].cpu().numpy(), targets, outputs
+            )
+            print(f"\n GT - Pred:  \n{targets_decoded} - {outputs_decoded}")
+        else:
+            self.show_ocr_results(index, inputs, targets, outputs)
+            decoded = textmodels.ctc_decode(
+                outputs.detach().cpu().softmax(1).numpy()[0]
+            )
+            t = self.model.decode_str(targets[0].cpu().numpy())
+            s = self.model.decode_str(decoded)
+            print(f"\n{t} : {s}")
 
     def show_ocr_results(
         self,
@@ -183,11 +250,49 @@ class TextLightning(pl.LightningModule):
         ax = fig.add_subplot(gs[0, 0])
         ax.imshow(inputs[0], cmap=plt.cm.gray, interpolation="nearest")
         s_safe = re.sub(r"[}{$\\]", "?", s)
-        ax.set_title(f"'{s_safe}' @{self.total}", size=24)
+        ax.set_title(f"'{s_safe}' @{self.total_steps}", size=24)
         ax = fig.add_subplot(gs[0, 1])
+
         for row in outputs:
             ax.plot(row)
-        self.log_matplotlib_figure(fig, self.total, key="output", size=(1200, 600))
+        self.log_matplotlib_figure(
+            fig, self.total_steps, key="output", size=(1200, 600)
+        )
+        plt.close(fig)
+
+    def show_transformer_ocr_results(
+        self,
+        index: int,
+        inputs: torch.Tensor,
+        targets: torch.Tensor,
+        outputs: torch.Tensor,
+    ) -> None:
+        """Log the given inputs, targets, and outputs to the logger."""
+        outputs_argmaxed = torch.argmax(outputs, dim=2).cpu().numpy()
+        outputs_softmaxed = torch.softmax(outputs, dim=2).detach().cpu().numpy()
+        outputs_decoded = self.model.decode_transf_string(
+            outputs_argmaxed[:, 0], include_eos=False
+        )
+        targets_decoded = self.model.decode_transf_string(
+            targets[0].cpu().numpy()[1:], include_eos=False
+        )
+        s = targets_decoded
+        # log the OCR result for the first image in the batch
+        fig = plt.figure(figsize=(20, 10))
+        gs = gridspec.GridSpec(1, 2)
+        ax = fig.add_subplot(gs[0, 0])
+        inputs_hwc = inputs.transpose(1, 2, 0)
+        converted_image = Image.fromarray((inputs_hwc * 255).astype(np.uint8))
+        # cmap=plt.cm.gray
+        ax.imshow(converted_image, interpolation="nearest")
+        s_safe = re.sub(r"[}{$\\]", "?", s)
+        ax.set_title(f"'{s_safe}' @{self.total_steps}", size=24)
+        ax = fig.add_subplot(gs[0, 1])
+        for row in outputs_softmaxed[:, 0]:
+            ax.plot(row)
+        self.log_matplotlib_figure(
+            fig, self.total_steps, key="output", size=(1200, 600)
+        )
         plt.close(fig)
 
     def log_matplotlib_figure(self, fig, index, key="image", size=(600, 600)):
@@ -233,7 +338,7 @@ def train(
     augment: str = "distort",
     charset: str = "ocropus.textmodels.charset_ascii",
     checkpoint: int = 1,
-    default_root_dir: str = "./_logs",
+    default_root_dir: str = "./",
     display_freq: int = 20,
     dumpjit: str = "",
     gpus: str = "1",
@@ -319,9 +424,18 @@ def train(
         LearningRateMonitor(logging_interval="step"),
     )
 
-    mcheckpoint = ModelCheckpoint(
-        every_n_epochs=checkpoint,
+    current_timestamp = "{:%Y_%m_%d_%H_%M_%s}".format(datetime.now())
+    # datetime.now().timestamp()
+    checkpoint_dir_path = os.path.join(
+        default_root_dir,
+        "checkpoints",
+        mname.replace(".", "_") + f"_{datamode}_{current_timestamp}",
     )
+
+    mcheckpoint = ModelCheckpoint(
+        save_top_k=-1, every_n_epochs=checkpoint, dirpath=checkpoint_dir_path
+    )
+
     callbacks.append(mcheckpoint)
 
     kw = {}
@@ -333,12 +447,20 @@ def train(
     else:
         print("# logging locally")
 
+    training_log_root_dir = os.path.join(
+        default_root_dir,
+        "checkpoints",
+        mname.replace(".", "_") + f"_{datamode}_{current_timestamp}",
+        "logs",
+    )
+    pathlib.Path(training_log_root_dir).mkdir(parents=True, exist_ok=True)
+
     trainer = pl.Trainer(
         callbacks=callbacks,
         max_epochs=max_epochs,
         gpus=gpus,
         resume_from_checkpoint=resume,
-        default_root_dir=default_root_dir,
+        default_root_dir=training_log_root_dir,
         **kw,
     )
 
