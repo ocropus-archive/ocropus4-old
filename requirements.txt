@@ -11,8 +11,8 @@ tabulate
 kornia
 editdistance
 -e git+https://github.com/tmbdev/torchmore.git#egg=torchmore
--e git+https://github.com/tmbdev/webdataset.git#egg=webdataset
+webdataset
 pytorch-lightning
 wandb
-# -e git+https://github.com/PytorchLightning/pytorch-lightning.git@master#egg=pytorch_lightning
+click==8.0.4
 ray

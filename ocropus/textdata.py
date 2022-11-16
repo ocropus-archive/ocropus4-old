@@ -42,7 +42,9 @@ def datawarn(*args):
 min_w, min_h, max_w, max_h = 15, 15, 4000, 200
 
 
-def collate4ocr(samples: List[Tuple[torch.Tensor, str]]) -> Tuple[torch.Tensor, List[str]]:
+def collate4ocr(
+    samples: List[Tuple[torch.Tensor, str]]
+) -> Tuple[torch.Tensor, List[str]]:
     """Collate OCR images and text into tensor/list batch.
 
     Args:
@@ -164,7 +166,9 @@ def augment_distort(
     if image.shape[0] > maxh:
         image = ndi.zoom(image, float(maxh) / image.shape[0], order=1)
     if random.uniform(0, 1) < p:
-        (image,) = degrade.random_transform_all(image, scale=(-0.3, 0), aniso=(-0.2, 0.2))
+        (image,) = degrade.random_transform_all(
+            image, scale=(-0.3, 0), aniso=(-0.2, 0.2)
+        )
         image = torch.tensor(image, dtype=torch.float32)
         image = jittable.crop_image(image)
         image = image.numpy()
@@ -393,9 +397,13 @@ class TextDataLoader(pl.LightningDataModule):
         super().__init__()
         self.save_hyperparameters()
         self.augment = eval(f"augment_{augment}")
-        self.preprocessor = WordPreprocessor(height=height, max_width=max_width, augment=self.augment)
+        self.preprocessor = WordPreprocessor(
+            height=height, max_width=max_width, augment=self.augment
+        )
 
-    def make_reader(self, url, normalize=normalize_simple, select="[A-Za-z0-9]", bucket=None):
+    def make_reader(
+        self, url, normalize=normalize_simple, select="[A-Za-z0-9]", bucket=None
+    ):
         bucket = self.hparams.bucket if bucket is None else bucket
         sources = bucket + url if isinstance(url, str) else url
         return (
@@ -417,11 +425,19 @@ class TextDataLoader(pl.LightningDataModule):
     def make_mix(self):
         sources = []
         if self.hparams.datamode == "uw3":
-            sources.append(self.make_reader("uw3-word-{000000..000021}.tar", select="."))
+            sources.append(
+                self.make_reader("uw3-word-{000000..000021}.tar", select=".")
+            )
             probs = [1.0]
         else:
-            sources.append(self.make_reader("generated-{000000..000313}.tar", select="."))
-            sources.append(self.make_reader("uw3-word-{000000..000022}.tar", normalize=normalize_tex))
+            sources.append(
+                self.make_reader("generated-{000000..000313}.tar", select=".")
+            )
+            sources.append(
+                self.make_reader(
+                    "uw3-word-{000000..000022}.tar", normalize=normalize_tex
+                )
+            )
             sources.append(self.make_reader("ia1-{000000..000033}.tar"))
             sources.append(self.make_reader("gsub-{000000..000167}.tar"))
             sources.append(self.make_reader("cdipsub-{000000..000092}.tar"))
@@ -439,7 +455,11 @@ class TextDataLoader(pl.LightningDataModule):
     def train_dataloader(self) -> DataLoader:
         bs = self.hparams.train_bs
         ds = self.make_mix()
-        ds = ds.shuffle(self.shuffle).decode("torchrgb8", partial=True).to_tuple(self.extensions)
+        ds = (
+            ds.shuffle(self.shuffle)
+            .decode("torchrgb8", partial=True)
+            .to_tuple(self.extensions)
+        )
         ds = ds.map(self.preprocessor.preprocess)
         dl = wds.WebLoader(
             ds,
@@ -485,10 +505,18 @@ class SwordTextDataLoader(TextDataLoader):
     def make_mix(self):
         sources = []
         bb = "/home/tmb/gs/nvdata-ocropus-swords/"
-        assert os.path.isdir(bb), f"{bb} not found; maybe symlink to ~/gs/nvdata-ocropus-swords"
-        sources.append(self.make_reader("bin-ia1-{000000..000159}-swords.tar", bucket=bb))
-        sources.append(self.make_reader("bin-gsub-{000000..000080}-swords.tar", bucket=bb))
-        sources.append(self.make_reader("cdipsub-{000000..000085}-swords.tar", bucket=bb))
+        assert os.path.isdir(
+            bb
+        ), f"{bb} not found; maybe symlink to ~/gs/nvdata-ocropus-swords"
+        sources.append(
+            self.make_reader("bin-ia1-{000000..000159}-swords.tar", bucket=bb)
+        )
+        sources.append(
+            self.make_reader("bin-gsub-{000000..000080}-swords.tar", bucket=bb)
+        )
+        sources.append(
+            self.make_reader("cdipsub-{000000..000085}-swords.tar", bucket=bb)
+        )
         sources.append(self.make_reader("generated-{000000..000313}.tar", select="."))
         sources.append(self.make_reader("italic-{000000..000455}.tar", select="."))
         sources.append(self.make_reader("ascii-{000000..000422}.tar", select="."))
@@ -534,7 +562,9 @@ def show(
     fig = plt.figure(figsize=(10, 10))
     plt.ion()
     if val:
-        dl = make_dataloader(augment="none", val_bs=bs, num_workers=nw, datamode=datamode).val_dataloader()
+        dl = make_dataloader(
+            augment="none", val_bs=bs, num_workers=nw, datamode=datamode
+        ).val_dataloader()
     else:
         dl = make_dataloader(
             augment=augment, train_bs=bs, num_workers=nw, datamode=datamode
@@ -555,12 +585,20 @@ def show(
 
 
 @app.command()
-def bench(t: float = 60.0, augment: str = "distort", bs: int = 1, nw: int = 0, val: bool = False):
+def bench(
+    t: float = 60.0,
+    augment: str = "distort",
+    bs: int = 1,
+    nw: int = 0,
+    val: bool = False,
+):
     """Show a sample of the data."""
     if val:
         dl = make_dataloader(augment="none", val_bs=bs, num_workers=nw).val_dataloader()
     else:
-        dl = make_dataloader(augment=augment, train_bs=bs, num_workers=nw).train_dataloader()
+        dl = make_dataloader(
+            augment=augment, train_bs=bs, num_workers=nw
+        ).train_dataloader()
     total = 0
     start = time.time()
     for i, sample in enumerate(dl):

@@ -187,7 +187,7 @@ def generate(
     assert len(fonts) > 0
 
     sizes = eval(f"({sizes})")
-    if "%" in output:
+    if "%" or "{" in output:
         sink = wds.ShardWriter(output, maxcount=shardsize)
     else:
         if os.path.exists(output):
@@ -228,7 +228,8 @@ def generate(
         if i % 100 == 0:
             print(i, end=" ", flush=True, file=sys.stderr)
     sink.close()
-    if "%" not in output:
+    if "{" not in output:
+    #if "%" not in output:
         os.rename(output + ".temp", output)
     return 0
 
@@ -242,9 +243,9 @@ def testwords():
         fontlist="test",
         sizes="24,24",
         shardsize=1000,
-        output="testtext/testfont-%06.tar",
+        output="testtext/testfont-{:06d}.tar",
         nwords=5000,
-        generator=words,
+        generator="words",
     )
 
 
